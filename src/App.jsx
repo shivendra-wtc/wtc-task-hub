@@ -11,20 +11,29 @@ function App() {
   ];
 
   const team = [
-    { id: 1, name: 'Samanta', role: 'Social Media Exec & Design', avatar: 'SA' },
-    { id: 2, name: 'Charu', role: 'Social Media Exec & Design', avatar: 'CH' },
-    { id: 3, name: 'Saraswati', role: 'Social Media Exec & Design', avatar: 'SR' },
-    { id: 4, name: 'Khusi', role: 'Social Media Exec & Design', avatar: 'KH' },
-    { id: 5, name: 'Naman', role: 'Video Editor', avatar: 'NM' },
-    { id: 6, name: 'Karan', role: 'Video Editor', avatar: 'KR' },
-    { id: 7, name: 'Ajay', role: 'Video Editor', avatar: 'AJ' },
-    { id: 8, name: 'Sanjeevani', role: 'PR Manager', avatar: 'SJ' },
-    { id: 9, name: 'Pari', role: 'HR', avatar: 'PR' }
+    { id: 'samanta', name: 'Samanta', role: 'Social Media Exec & Design', avatar: 'SA' },
+    { id: 'charu', name: 'Charu', role: 'Social Media Exec & Design', avatar: 'CH' },
+    { id: 'saraswati', name: 'Saraswati', role: 'Social Media Exec & Design', avatar: 'SR' },
+    { id: 'khusi', name: 'Khusi', role: 'Social Media Exec & Design', avatar: 'KH' },
+    { id: 'naman', name: 'Naman', role: 'Video Editor', avatar: 'NM' },
+    { id: 'karan', name: 'Karan', role: 'Video Editor', avatar: 'KR' },
+    { id: 'ajay', name: 'Ajay', role: 'Video Editor', avatar: 'AJ' },
+    { id: 'sanjeevani', name: 'Sanjeevani', role: 'PR Manager', avatar: 'SJ' },
+    { id: 'pari', name: 'Pari', role: 'HR', avatar: 'PR' }
   ];
+
+  const getUserFromURL = () => {
+    const params = new URLSearchParams(window.location.search);
+    const user = params.get('user');
+    if (!user) return null;
+    if (user === 'manager') return 'manager';
+    const member = team.find(t => t.id === user.toLowerCase());
+    return member ? member.id : null;
+  };
 
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState('manager');
+  const [currentUser, setCurrentUser] = useState(getUserFromURL());
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterChannel, setFilterChannel] = useState('All');
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
@@ -37,6 +46,10 @@ function App() {
     dueDate: ''
   });
 
+  const isManager = currentUser === 'manager';
+  const isTeamMember = currentUser && currentUser !== 'manager';
+  const isInvalidUser = !currentUser;
+
   const statusColors = {
     'Not Started': '#3B6D11',
     'In Progress': '#BA7517',
@@ -46,8 +59,10 @@ function App() {
   };
 
   useEffect(() => {
-    loadTasks();
-  }, []);
+    if (currentUser) {
+      loadTasks();
+    }
+  }, [currentUser]);
 
   const loadTasks = async () => {
     try {
@@ -82,7 +97,7 @@ function App() {
   };
 
   const filteredTasks = tasks.filter(t => {
-    if (currentUser !== 'manager') {
+    if (isTeamMember) {
       const user = team.find(u => u.id === currentUser);
       if (t.assignee !== user?.name) return false;
     }
@@ -145,15 +160,68 @@ function App() {
   };
 
   const handleExportWhatsApp = (task) => {
-    const message = 'TASK UPDATE - WTC Management\n\nTask: ' + task.title + '\nAssignee: ' + task.assignee + '\nChannel: ' + task.channel + '\nStatus: ' + task.status + '\nPriority: ' + task.priority + '\nDue: ' + new Date(task.dueDate).toLocaleDateString() + '\n\nUpdate in Dashboard: https://wtc-task-hub.vercel.app';
+    const teamMember = team.find(t => t.name === task.assignee);
+    const personalURL = teamMember ? `https://wtc-task-hub.vercel.app/?user=${teamMember.id}` : 'https://wtc-task-hub.vercel.app';
+    const message = 'TASK ASSIGNED - WTC Management\n\nHi ' + task.assignee + ',\n\nTask: ' + task.title + '\nChannel: ' + task.channel + '\nStatus: ' + task.status + '\nPriority: ' + task.priority + '\nDue: ' + new Date(task.dueDate).toLocaleDateString() + '\n\nUpdate in YOUR Dashboard:\n' + personalURL + '\n\nPlease update status when you start working!';
     navigator.clipboard.writeText(message);
-    alert('Message copied to clipboard! Paste in WhatsApp.');
+    alert('Message copied to clipboard! Paste in WhatsApp to send to ' + task.assignee + '.');
   };
 
   const getUserName = (id) => {
     if (id === 'manager') return 'Manager Dashboard - All Tasks';
     return team.find(t => t.id === id)?.name || '';
   };
+
+  if (isInvalidUser) {
+    return (
+      <div className="app">
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          background: 'linear-gradient(135deg, #1a3a5c 0%, #2c5aa0 100%)'
+        }}>
+          <div style={{
+            background: 'white',
+            padding: '40px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            textAlign: 'center',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+          }}>
+            <div style={{
+              width: '70px',
+              height: '70px',
+              background: 'linear-gradient(135deg, #1a3a5c 0%, #2c5aa0 100%)',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: '32px',
+              fontWeight: '700',
+              margin: '0 auto 20px'
+            }}>W</div>
+            <h1 style={{fontSize: '24px', marginBottom: '10px', color: '#1a3a5c'}}>WTC's Management Hub</h1>
+            <p style={{color: '#666', marginBottom: '30px'}}>Welcome! Please use your personal dashboard link.</p>
+            <div style={{
+              background: '#fff4e8',
+              padding: '15px',
+              borderRadius: '8px',
+              color: '#854F0B',
+              fontSize: '14px',
+              textAlign: 'left'
+            }}>
+              <strong>📌 Need your link?</strong><br/>
+              Contact your manager to get your personal dashboard URL.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -162,16 +230,20 @@ function App() {
           <div className="logo-box">W</div>
           <div>
             <h1>WTC's Management Hub</h1>
-            <p className="user-label">{getUserName(currentUser)}</p>
+            <p className="user-label">
+              {isManager ? '👔 Manager Dashboard' : '👤 Welcome, ' + getUserName(currentUser)}
+            </p>
           </div>
         </div>
         <div style={{display: 'flex', gap: '10px'}}>
           <button className="btn-secondary" onClick={loadTasks} title="Refresh data">
             🔄 Refresh
           </button>
-          <button className="btn-primary" onClick={() => setShowNewTaskForm(!showNewTaskForm)}>
-            + New Task
-          </button>
+          {isManager && (
+            <button className="btn-primary" onClick={() => setShowNewTaskForm(!showNewTaskForm)}>
+              + New Task
+            </button>
+          )}
         </div>
       </header>
 
@@ -189,24 +261,26 @@ function App() {
 
       {!loading && (
         <>
-          <div className="user-switcher">
-            <button
-              className={currentUser === 'manager' ? 'active' : ''}
-              onClick={() => setCurrentUser('manager')}
-            >
-              All Tasks
-            </button>
-            {team.map(member => (
+          {isManager && (
+            <div className="user-switcher">
               <button
-                key={member.id}
-                className={currentUser === member.id ? 'active' : ''}
-                onClick={() => setCurrentUser(member.id)}
-                title={member.name}
+                className={currentUser === 'manager' ? 'active' : ''}
+                onClick={() => setCurrentUser('manager')}
               >
-                {member.avatar}
+                All Tasks
               </button>
-            ))}
-          </div>
+              {team.map(member => (
+                <button
+                  key={member.id}
+                  className={currentUser === member.id ? 'active' : ''}
+                  onClick={() => setCurrentUser(member.id)}
+                  title={member.name}
+                >
+                  {member.avatar}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="filters">
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
@@ -223,7 +297,7 @@ function App() {
             </select>
           </div>
 
-          {showNewTaskForm && (
+          {showNewTaskForm && isManager && (
             <div className="new-task-form">
               <h3>Create New Task</h3>
               <input
@@ -262,7 +336,7 @@ function App() {
           <div className="tasks-container">
             {filteredTasks.length === 0 ? (
               <div className="empty-state">
-                <p>No tasks to display</p>
+                <p>{isTeamMember ? 'You have no tasks assigned. Enjoy your day! 🎉' : 'No tasks to display'}</p>
               </div>
             ) : (
               <div className="tasks-grid">
@@ -298,9 +372,11 @@ function App() {
                           <option value="On Hold">On Hold</option>
                           <option value="Delayed">Delayed</option>
                         </select>
-                        <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)} title="Copy WhatsApp message">
-                          WA
-                        </button>
+                        {isManager && (
+                          <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)} title="Copy WhatsApp message">
+                            WA
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -312,7 +388,12 @@ function App() {
       )}
 
       <footer className="footer">
-        <p>Tip: Tasks are saved automatically to Google Sheets. Click 🔄 Refresh to see latest updates.</p>
+        <p>
+          {isManager 
+            ? 'Manager Dashboard - You can see all tasks and create new ones.' 
+            : 'Tip: Update your task status regularly. Manager will be notified of changes.'
+          }
+        </p>
       </footer>
     </div>
   )

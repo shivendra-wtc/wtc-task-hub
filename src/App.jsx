@@ -191,19 +191,13 @@ function App() {
             textAlign: 'center',
             boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
           }}>
-            <div style={{
-              width: '70px',
-              height: '70px',
-              background: 'linear-gradient(135deg, #1a3a5c 0%, #2c5aa0 100%)',
-              borderRadius: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '32px',
-              fontWeight: '700',
-              margin: '0 auto 20px'
-            }}>W</div>
+            <img src="/wtc-logo.png" alt="WTC Logo" style={{
+  width: '80px',
+  height: '80px',
+  objectFit: 'contain',
+  margin: '0 auto 20px',
+  display: 'block'
+}} />
             <h1 style={{fontSize: '24px', marginBottom: '10px', color: '#1a3a5c'}}>WTC's Management Hub</h1>
             <p style={{color: '#666', marginBottom: '30px'}}>Welcome! Please use your personal dashboard link.</p>
             <div style={{
@@ -227,7 +221,7 @@ function App() {
     <div className="app">
       <header className="header">
         <div className="header-left">
-          <div className="logo-box">W</div>
+          <img src="/wtc-logo.png" alt="WTC Logo" className="logo-img" />
           <div>
             <h1>WTC's Management Hub</h1>
             <p className="user-label">

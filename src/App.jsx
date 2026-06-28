@@ -279,6 +279,16 @@ function App() {
     }
   }, [currentUser]);
 
+  useEffect(() => {
+    if (isManager) {
+      const interval = setInterval(() => {
+        loadAttendance();
+        loadTasks();
+      }, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isManager]);
+
   const loadTasks = async () => {
     try {
       setLoading(true);
@@ -334,44 +344,76 @@ function App() {
   };
 
   const calculateWorkingTime = (log) => {
-    if (!log) return { working: '0h 0m', breaks: '0h 0m' };
+    if (!log || typeof log !== 'string') {
+      return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
+    }
     
-    const events = log.split('|').map(e => {
-      const [status, time] = e.split(':');
-      return { status, time: new Date(time + (time.includes('Z') ? '' : 'Z')) };
-    });
-    
-    let workingMs = 0;
-    let breakMs = 0;
-    
-    for (let i = 0; i < events.length - 1; i++) {
-      const current = events[i];
-      const next = events[i + 1];
-      const duration = next.time - current.time;
+    try {
+      const events = log.split('|').map(e => {
+        const parts = e.split(':');
+        if (parts.length < 2) return null;
+        
+        const status = parts[0];
+        const timeStr = parts.slice(1).join(':');
+        const time = new Date(timeStr);
+        
+        if (isNaN(time.getTime())) return null;
+        
+        return { status, time };
+      }).filter(e => e !== null);
       
-      if (current.status === 'Working') workingMs += duration;
-      else if (current.status === 'Tea Break' || current.status === 'Lunch Break' || current.status === 'Meeting') {
-        breakMs += duration;
+      if (events.length === 0) {
+        return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
       }
+      
+      let workingMs = 0;
+      let breakMs = 0;
+      
+      for (let i = 0; i < events.length - 1; i++) {
+        const current = events[i];
+        const next = events[i + 1];
+        const duration = next.time - current.time;
+        
+        if (duration < 0) continue;
+        
+        if (current.status === 'Working') {
+          workingMs += duration;
+        } else if (current.status === 'Tea Break' || current.status === 'Lunch Break' || current.status === 'Meeting') {
+          breakMs += duration;
+        }
+      }
+      
+      const lastEvent = events[events.length - 1];
+      if (lastEvent && lastEvent.status !== 'Signed Out') {
+        const now = new Date();
+        const duration = now - lastEvent.time;
+        
+        if (duration > 0) {
+          if (lastEvent.status === 'Working') {
+            workingMs += duration;
+          } else if (lastEvent.status === 'Tea Break' || lastEvent.status === 'Lunch Break' || lastEvent.status === 'Meeting') {
+            breakMs += duration;
+          }
+        }
+      }
+      
+      const workingHours = Math.floor(workingMs / (1000 * 60 * 60));
+      const workingMins = Math.floor((workingMs % (1000 * 60 * 60)) / (1000 * 60));
+      const breakHours = Math.floor(breakMs / (1000 * 60 * 60));
+      const breakMins = Math.floor((breakMs % (1000 * 60 * 60)) / (1000 * 60));
+      
+      const totalMs = workingMs + breakMs;
+      const productivity = totalMs > 0 ? Math.round((workingMs / totalMs) * 100) : 0;
+      
+      return {
+        working: `${workingHours}h ${workingMins}m`,
+        breaks: `${breakHours}h ${breakMins}m`,
+        productivity: productivity
+      };
+    } catch (error) {
+      console.error('Error calculating time:', error);
+      return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
     }
-    
-    const lastEvent = events[events.length - 1];
-    if (lastEvent && lastEvent.status === 'Working') {
-      workingMs += (new Date() - lastEvent.time);
-    } else if (lastEvent && (lastEvent.status === 'Tea Break' || lastEvent.status === 'Lunch Break' || lastEvent.status === 'Meeting')) {
-      breakMs += (new Date() - lastEvent.time);
-    }
-    
-    const workingHours = Math.floor(workingMs / (1000 * 60 * 60));
-    const workingMins = Math.floor((workingMs % (1000 * 60 * 60)) / (1000 * 60));
-    const breakHours = Math.floor(breakMs / (1000 * 60 * 60));
-    const breakMins = Math.floor((breakMs % (1000 * 60 * 60)) / (1000 * 60));
-    
-    return {
-      working: `${workingHours}h ${workingMins}m`,
-      breaks: `${breakHours}h ${breakMins}m`,
-      productivity: workingMs + breakMs > 0 ? Math.round((workingMs / (workingMs + breakMs)) * 100) : 0
-    };
   };
 
   const getTaskAlert = (lastUpdated, status, dueDate) => {
@@ -516,7 +558,6 @@ function App() {
 
       {!loading && (
         <>
-          {/* TEAM MEMBER: Their Attendance Card */}
           {isTeamMember && (
             <div className="attendance-card">
               <h3>⏰ Your Attendance Today</h3>
@@ -576,7 +617,6 @@ function App() {
             </div>
           )}
 
-          {/* MANAGER: Team Status Overview */}
           {isManager && (
             <div className="team-status-section">
               <div className="section-header" onClick={() => setShowAttendance(!showAttendance)}>
@@ -606,7 +646,6 @@ function App() {
             </div>
           )}
 
-          {/* MANAGER: Navigation */}
           {isManager && (
             <div className="manager-nav">
               <div className="nav-label">{managerView === 'all' ? '👥 Quick Switch:' : '📂 Currently Viewing:'}</div>
@@ -632,14 +671,12 @@ function App() {
             </div>
           )}
 
-          {/* View Title */}
           {isManager && (
             <div className="view-title">
               <h2>📋 {getViewTitle()}</h2>
             </div>
           )}
 
-          {/* Filters */}
           <div className="filters">
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
               <option>All Status</option>
@@ -655,7 +692,6 @@ function App() {
             </select>
           </div>
 
-          {/* New Task Form */}
           {showNewTaskForm && isManager && (
             <div className="new-task-form">
               <h3>Create New Task</h3>
@@ -687,7 +723,6 @@ function App() {
             </div>
           )}
 
-          {/* Tasks Grid */}
           <div className="tasks-container">
             {filteredTasks.length === 0 ? (
               <div className="empty-state">

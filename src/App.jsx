@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -25,16 +25,48 @@ const QUOTES = {
     "Quality is not an act, it is a habit. - Aristotle",
     "Leaders don't create followers, they create more leaders.",
     "The way to get started is to quit talking and begin doing. - Walt Disney",
-    "अनुशासन से सब कुछ संभव है। (Everything is possible with discipline)",
-    "Strategy without tactics is the slowest route to victory. - Sun Tzu",
-    "Success usually comes to those who are too busy to be looking for it. - Henry David Thoreau",
-    "Coming together is a beginning, staying together is progress, working together is success. - Henry Ford",
-    "If your actions inspire others to dream more, learn more, do more, you are a leader. - John Quincy Adams",
-    "Leadership is the capacity to translate vision into reality. - Warren Bennis",
-    "Be the change that you wish to see in the world. - Mahatma Gandhi",
-    "Hire character. Train skill. - Peter Schutz",
-    "Effective leadership is putting first things first. - Stephen Covey",
-    "A goal without a plan is just a wish. - Antoine de Saint-Exupery"
+    "A goal without a plan is just a wish. - Antoine de Saint-Exupery",
+    "The best time to plant a tree was 20 years ago. The second best time is now.",
+    "Success is not the key to happiness. Happiness is the key to success.",
+    "Do what you can with all you have, wherever you are.",
+    "The future depends on what you do today. - Mahatma Gandhi",
+    "Great things never come from comfort zones.",
+    "Dream it. Wish it. Do it.",
+    "Success doesn't just find you. You have to go out and get it.",
+    "The harder you work, the luckier you get.",
+    "Believe you can and you're halfway there."
+  ],
+  ceo: [
+    "As CEO, my job is to enable my people to think strategically. - Praveen mode",
+    "The role of a CEO is not to have all the answers, but to ask the right questions.",
+    "A CEO's job is to build a company that lasts. - Warren Buffett",
+    "Chase the vision, not the money. - Tony Hsieh",
+    "Your most unhappy customers are your greatest source of learning. - Bill Gates",
+    "Innovation is saying no to a thousand things. - Steve Jobs",
+    "Culture eats strategy for breakfast. - Peter Drucker",
+    "The way to get started is to quit talking and begin doing. - Walt Disney",
+    "Don't be afraid to give up the good to go for the great. - John D. Rockefeller",
+    "Success is walking from failure to failure with no loss of enthusiasm. - Winston Churchill",
+    "जो लीडर बनना चाहे, वो सेवक बने। (Who wants to lead, must serve)",
+    "व्यापार में विश्वास सबसे बड़ी पूंजी है। (Trust is the biggest capital in business)",
+    "In the middle of every difficulty lies opportunity. - Albert Einstein",
+    "The customer's perception is your reality. - Kate Zabriskie",
+    "You don't build a business, you build people, then people build the business. - Zig Ziglar",
+    "Success in business requires training, discipline, and hard work.",
+    "Business opportunities are like buses, there's always another one coming. - Richard Branson",
+    "The best way to predict the future is to create it.",
+    "A brand for a company is like a reputation for a person. - Jeff Bezos",
+    "If you're not embarrassed by the first version of your product, you launched too late. - Reid Hoffman",
+    "Move fast and break things. - Mark Zuckerberg",
+    "Your work is going to fill a large part of your life, and the only way to do great work is to love what you do. - Steve Jobs",
+    "The value of an idea lies in the using of it. - Thomas Edison",
+    "Wonder what your customer really wants? Ask. Don't tell. - Lisa Stone",
+    "Timing, perseverance, and ten years of trying will eventually make you look like an overnight success. - Biz Stone",
+    "Ideas are commodities. Execution of them is not. - Michael Dell",
+    "Every problem is a gift—without problems we would not grow. - Anthony Robbins",
+    "The successful warrior is the average man, with laser-like focus. - Bruce Lee",
+    "Whether you think you can or think you can't, you're right. - Henry Ford",
+    "Do what you feel in your heart to be right. - Eleanor Roosevelt"
   ],
   social_media: [
     "Content is king, but engagement is queen. - Mari Smith",
@@ -81,7 +113,7 @@ const QUOTES = {
     "Sound design is half of the experience.",
     "एक अच्छा एडिटर वह है जो कहानी सुनाए। (A good editor tells a story)",
     "धैर्य ही एडिटिंग की कुंजी है। (Patience is the key to editing)",
-    "Coffee + Creativity = Magic ☕✨",
+    "Coffee + Creativity = Magic",
     "The frame is your canvas. Paint emotions.",
     "Don't just edit - elevate.",
     "Color tells the story words cannot.",
@@ -168,28 +200,30 @@ const QUOTES = {
 
 function App() {
   const channels = [
-    'AG Insta', 'AG YT', 'The Fact-Tree Insta', 'The Fact-Tree YT',
-    'Poorvaj Insta', 'Poorvaj YT', 'Devastram Insta', 'Devastram YT',
-    'Histree YT', 'Histree Insta', 'Other'
+    'AG Insta', 'AG YT', 'The Fact-Tree YT', 'The Fact-Tree Insta',
+    'HisTree YT', 'HisTree Insta', 'AG.books Insta', 'Other'
   ];
 
   const team = [
+    { id: 'praveen', name: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
+    { id: 'manager', name: 'Shivendra Tomar', role: 'Sr. Manager - Social Media & Content', avatar: 'ST', quoteType: 'manager', isAdmin: true },
     { id: 'samanta', name: 'Samanta', role: 'Social Media Exec & Design', avatar: 'SA', quoteType: 'social_media' },
     { id: 'charu', name: 'Charu', role: 'Social Media Exec & Design', avatar: 'CH', quoteType: 'social_media' },
     { id: 'saraswati', name: 'Saraswati', role: 'Social Media Exec & Design', avatar: 'SR', quoteType: 'social_media' },
-    { id: 'khusi', name: 'Khusi', role: 'Social Media Exec & Design', avatar: 'KH', quoteType: 'social_media' },
+    { id: 'intern', name: 'Intern', role: 'Intern - Social Media', avatar: 'IN', quoteType: 'social_media' },
     { id: 'naman', name: 'Naman', role: 'Video Editor', avatar: 'NM', quoteType: 'video_editor' },
     { id: 'karan', name: 'Karan', role: 'Video Editor', avatar: 'KR', quoteType: 'video_editor' },
-    { id: 'ajay', name: 'Ajay', role: 'Video Editor', avatar: 'AJ', quoteType: 'video_editor' },
     { id: 'sanjeevani', name: 'Sanjeevani', role: 'PR Manager', avatar: 'SJ', quoteType: 'pr' },
-    { id: 'pari', name: 'Pari', role: 'HR', avatar: 'PR', quoteType: 'hr' }
+    { id: 'pari', name: 'Pari', role: 'HR', avatar: 'PR', quoteType: 'hr' },
+    { id: 'nidhi', name: 'Nidhi', role: 'Poorvaj - Kids Brand', avatar: 'ND', quoteType: 'social_media' },
+    { id: 'muskan', name: 'Muskan', role: 'Devastram - Ethnic Wear', avatar: 'MK', quoteType: 'social_media' },
+    { id: 'deeksha', name: 'Deeksha', role: 'Content Creator', avatar: 'DK', quoteType: 'social_media' }
   ];
 
   const getUserFromURL = () => {
     const params = new URLSearchParams(window.location.search);
     const user = params.get('user');
     if (!user) return null;
-    if (user === 'manager') return 'manager';
     const member = team.find(t => t.id === user.toLowerCase());
     return member ? member.id : null;
   };
@@ -211,9 +245,6 @@ function App() {
 
   const getTodayQuote = (userId) => {
     const day = getDayOfYear();
-    if (userId === 'manager') {
-      return QUOTES.manager[day % QUOTES.manager.length];
-    }
     const member = team.find(t => t.id === userId);
     if (member) {
       return QUOTES[member.quoteType][day % QUOTES[member.quoteType].length];
@@ -239,18 +270,20 @@ function App() {
   const [attendance, setAttendance] = useState([]);
   const [myStatus, setMyStatus] = useState('Not Signed In');
   const [showAttendance, setShowAttendance] = useState(false);
+  const [taskViewMode, setTaskViewMode] = useState('assigned'); // 'assigned' or 'own'
   const [newTask, setNewTask] = useState({
-    title: '',
-    assignee: '',
-    channel: '',
+    assignedTo: '',
+    taskDetails: '',
+    remarks: '',
     priority: 'Medium',
-    dueDate: ''
+    targetDate: '',
+    channel: ''
   });
 
-  const isManager = currentUser === 'manager';
-  const isTeamMember = currentUser && currentUser !== 'manager';
+  const currentUserInfo = team.find(t => t.id === currentUser);
+  const isAdmin = currentUserInfo?.isAdmin || false;
   const isInvalidUser = !currentUser;
-  const userName = isManager ? 'Shivendra' : (team.find(t => t.id === currentUser)?.name || '');
+  const userName = currentUserInfo?.name || '';
   const greeting = userName ? getTimeBasedGreeting(userName) : '';
   const todayQuote = currentUser ? getTodayQuote(currentUser) : '';
   const formattedDate = getFormattedDate();
@@ -279,15 +312,16 @@ function App() {
     }
   }, [currentUser]);
 
+  // SMOOTH BACKGROUND REFRESH - No flickering
   useEffect(() => {
-    if (isManager) {
+    if (currentUser) {
       const interval = setInterval(() => {
-        loadAttendance();
-        loadTasks();
+        loadTasksBackground();
+        loadAttendanceBackground();
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [isManager]);
+  }, [currentUser]);
 
   const loadTasks = async () => {
     try {
@@ -302,13 +336,24 @@ function App() {
     }
   };
 
+  // Background load - no loading state (no flickering)
+  const loadTasksBackground = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getTasks');
+      const data = await response.json();
+      if (data.status === 'ok') setTasks(data.tasks);
+    } catch (error) {
+      console.error('Background task load error:', error);
+    }
+  };
+
   const loadAttendance = async () => {
     try {
       const response = await fetch(API_URL + '?action=getAttendance');
       const data = await response.json();
       if (data.status === 'ok') {
         setAttendance(data.attendance);
-        if (isTeamMember) {
+        if (!isAdmin) {
           const myRecord = data.attendance.find(a => a.userId === currentUser);
           if (myRecord) setMyStatus(myRecord.status);
         }
@@ -318,10 +363,26 @@ function App() {
     }
   };
 
+  // Background attendance load
+  const loadAttendanceBackground = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getAttendance');
+      const data = await response.json();
+      if (data.status === 'ok') {
+        setAttendance(data.attendance);
+        if (!isAdmin) {
+          const myRecord = data.attendance.find(a => a.userId === currentUser);
+          if (myRecord) setMyStatus(myRecord.status);
+        }
+      }
+    } catch (error) {
+      console.error('Background attendance error:', error);
+    }
+  };
+
   const updateMyStatus = async (newStatus) => {
-    if (!isTeamMember) return;
-    const userInfo = team.find(t => t.id === currentUser);
-    if (!userInfo) return;
+    if (isAdmin) return;
+    if (!currentUserInfo) return;
     
     setMyStatus(newStatus);
     
@@ -333,11 +394,11 @@ function App() {
         body: JSON.stringify({
           action: 'updateAttendance',
           userId: currentUser,
-          userName: userInfo.name,
+          userName: currentUserInfo.name,
           status: newStatus
         })
       });
-      setTimeout(() => loadAttendance(), 1500);
+      setTimeout(() => loadAttendanceBackground(), 1500);
     } catch (error) {
       console.error('Error updating attendance:', error);
     }
@@ -352,48 +413,31 @@ function App() {
       const events = log.split('|').map(e => {
         const parts = e.split(':');
         if (parts.length < 2) return null;
-        
         const status = parts[0];
         const timeStr = parts.slice(1).join(':');
         const time = new Date(timeStr);
-        
         if (isNaN(time.getTime())) return null;
-        
         return { status, time };
       }).filter(e => e !== null);
       
-      if (events.length === 0) {
-        return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
-      }
+      if (events.length === 0) return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
       
       let workingMs = 0;
       let breakMs = 0;
       
       for (let i = 0; i < events.length - 1; i++) {
-        const current = events[i];
-        const next = events[i + 1];
-        const duration = next.time - current.time;
-        
+        const duration = events[i + 1].time - events[i].time;
         if (duration < 0) continue;
-        
-        if (current.status === 'Working') {
-          workingMs += duration;
-        } else if (current.status === 'Tea Break' || current.status === 'Lunch Break' || current.status === 'Meeting') {
-          breakMs += duration;
-        }
+        if (events[i].status === 'Working') workingMs += duration;
+        else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(events[i].status)) breakMs += duration;
       }
       
       const lastEvent = events[events.length - 1];
       if (lastEvent && lastEvent.status !== 'Signed Out') {
-        const now = new Date();
-        const duration = now - lastEvent.time;
-        
+        const duration = new Date() - lastEvent.time;
         if (duration > 0) {
-          if (lastEvent.status === 'Working') {
-            workingMs += duration;
-          } else if (lastEvent.status === 'Tea Break' || lastEvent.status === 'Lunch Break' || lastEvent.status === 'Meeting') {
-            breakMs += duration;
-          }
+          if (lastEvent.status === 'Working') workingMs += duration;
+          else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(lastEvent.status)) breakMs += duration;
         }
       }
       
@@ -401,7 +445,6 @@ function App() {
       const workingMins = Math.floor((workingMs % (1000 * 60 * 60)) / (1000 * 60));
       const breakHours = Math.floor(breakMs / (1000 * 60 * 60));
       const breakMins = Math.floor((breakMs % (1000 * 60 * 60)) / (1000 * 60));
-      
       const totalMs = workingMs + breakMs;
       const productivity = totalMs > 0 ? Math.round((workingMs / totalMs) * 100) : 0;
       
@@ -411,52 +454,62 @@ function App() {
         productivity: productivity
       };
     } catch (error) {
-      console.error('Error calculating time:', error);
       return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
     }
   };
 
-  const getTaskAlert = (lastUpdated, status, dueDate) => {
-    if (status === 'Completed') return null;
-    const now = new Date();
-    const updatedTime = new Date(lastUpdated);
-    const hoursSince = (now - updatedTime) / (1000 * 60 * 60);
-    const dueTime = new Date(dueDate);
-    const isOverdue = now > dueTime;
-    if (hoursSince >= 24) return { type: 'escalation', message: 'No update for ' + Math.round(hoursSince) + 'h' };
-    if (isOverdue) return { type: 'overdue', message: 'OVERDUE' };
-    return null;
-  };
-
+  // Filter tasks based on user role and view mode
   const filteredTasks = tasks.filter(t => {
-    if (isTeamMember) {
-      const user = team.find(u => u.id === currentUser);
-      if (t.assignee !== user?.name) return false;
-    } else if (isManager && managerView !== 'all') {
-      const user = team.find(u => u.id === managerView);
-      if (t.assignee !== user?.name) return false;
+    // Hide completed tasks older than 24 hours
+    if (t.status === 'Completed' && t.completionDate) {
+      const completedTime = new Date(t.completionDate);
+      const hoursSince = (new Date() - completedTime) / (1000 * 60 * 60);
+      if (hoursSince > 24) return false;
     }
+    
+    if (isAdmin) {
+      // Admin can see all or filter by team member
+      if (managerView !== 'all') {
+        const user = team.find(u => u.id === managerView);
+        if (t.assignedTo !== user?.name) return false;
+      }
+    } else {
+      // Regular team member
+      if (taskViewMode === 'assigned') {
+        // Show tasks assigned TO me
+        if (t.assignedTo !== currentUserInfo.name) return false;
+      } else if (taskViewMode === 'own') {
+        // Show tasks I created (assigned by me)
+        if (t.assignedBy !== currentUserInfo.name) return false;
+      }
+    }
+    
     if (filterStatus !== 'All' && t.status !== filterStatus) return false;
     if (filterChannel !== 'All' && t.channel !== filterChannel) return false;
     return true;
   });
 
   const handleAddTask = async () => {
-    if (!newTask.title || !newTask.assignee || !newTask.channel || !newTask.dueDate) {
-      alert('Please fill all fields!');
+    if (!newTask.assignedTo || !newTask.taskDetails || !newTask.targetDate || !newTask.channel) {
+      alert('Please fill all required fields!');
       return;
     }
     try {
       setSaving(true);
+      const taskData = {
+        ...newTask,
+        assignedBy: currentUserInfo.name,
+        status: 'Not Started'
+      };
       await fetch(API_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'addTask', task: newTask })
+        body: JSON.stringify({ action: 'addTask', task: taskData })
       });
-      setNewTask({ title: '', assignee: '', channel: '', priority: 'Medium', dueDate: '' });
+      setNewTask({ assignedTo: '', taskDetails: '', remarks: '', priority: 'Medium', targetDate: '', channel: '' });
       setShowNewTaskForm(false);
-      setTimeout(() => { loadTasks(); setSaving(false); }, 1500);
+      setTimeout(() => { loadTasksBackground(); setSaving(false); }, 1500);
     } catch (error) {
       console.error('Error:', error);
       setSaving(false);
@@ -464,7 +517,7 @@ function App() {
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
-    setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus, lastUpdated: new Date().toISOString() } : t));
+    setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     try {
       await fetch(API_URL, {
         method: 'POST',
@@ -472,26 +525,28 @@ function App() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'updateStatus', taskId: taskId, status: newStatus })
       });
+      setTimeout(() => loadTasksBackground(), 1500);
     } catch (error) {
       console.error('Error:', error);
     }
   };
 
   const handleExportWhatsApp = (task) => {
-    const teamMember = team.find(t => t.name === task.assignee);
+    const teamMember = team.find(t => t.name === task.assignedTo);
     const personalURL = teamMember ? `https://wtc-task-hub.vercel.app/?user=${teamMember.id}` : 'https://wtc-task-hub.vercel.app';
-    const message = 'TASK ASSIGNED - WTC Management\n\nHi ' + task.assignee + ',\n\nTask: ' + task.title + '\nChannel: ' + task.channel + '\nStatus: ' + task.status + '\nPriority: ' + task.priority + '\nDue: ' + new Date(task.dueDate).toLocaleDateString() + '\n\nUpdate in YOUR Dashboard:\n' + personalURL + '\n\nPlease update status when you start working!';
+    const message = `📋 TASK ASSIGNED - WTC Management\n\nHi ${task.assignedTo},\n\n📝 Task: ${task.taskDetails}\n💬 Remarks: ${task.remarks || 'N/A'}\n📢 Channel: ${task.channel}\n⚡ Priority: ${task.priority}\n📅 Target Date: ${new Date(task.targetDate).toLocaleDateString()}\n👤 Assigned By: ${task.assignedBy}\n\n🔗 Update in YOUR Dashboard:\n${personalURL}\n\nPlease update status when you start working!`;
     navigator.clipboard.writeText(message);
-    alert('Message copied to clipboard! Paste in WhatsApp to send to ' + task.assignee + '.');
+    alert('Message copied! Paste in WhatsApp to send to ' + task.assignedTo);
   };
 
   const getViewTitle = () => {
-    if (isManager && managerView === 'all') return 'Manager Dashboard - All Tasks';
-    if (isManager && managerView !== 'all') {
+    if (isAdmin && managerView === 'all') return '📊 All Team Tasks';
+    if (isAdmin && managerView !== 'all') {
       const member = team.find(t => t.id === managerView);
-      return "Viewing: " + member?.name + "'s Tasks";
+      return `📋 ${member?.name}'s Tasks`;
     }
-    return '';
+    if (taskViewMode === 'assigned') return '📥 Tasks Assigned to Me';
+    return '📝 My Own Tasks';
   };
 
   if (isInvalidUser) {
@@ -504,7 +559,7 @@ function App() {
             <p className="welcome-text">Welcome! Please use your personal dashboard link.</p>
             <div className="welcome-info">
               <strong>📌 Need your link?</strong><br/>
-              Contact your manager to get your personal dashboard URL.
+              Contact Shivendra to get your personal dashboard URL.
             </div>
           </div>
         </div>
@@ -521,26 +576,24 @@ function App() {
         <div className="header-left">
           <img src="/wtc-logo.png" alt="WTC Logo" className="logo-img" />
           <div className="header-info">
-            <h1>{isManager ? "WTC's Management Hub" : "WTC Task Hub"}</h1>
+            <h1>{isAdmin ? "WTC's Management Hub" : "WTC Task Hub"}</h1>
             <p className="greeting">{greeting}</p>
             <p className="date-display">📅 {formattedDate}</p>
             <p className="quote-display">💭 {todayQuote}</p>
           </div>
         </div>
         <div className="header-actions">
-          {isManager && managerView !== 'all' && (
-            <button className="btn-home" onClick={() => setManagerView('all')} title="Back to All Tasks">
+          {isAdmin && managerView !== 'all' && (
+            <button className="btn-home" onClick={() => setManagerView('all')}>
               🏠 Home
             </button>
           )}
-          <button className="btn-secondary" onClick={() => { loadTasks(); loadAttendance(); }} title="Refresh data">
+          <button className="btn-secondary" onClick={() => { loadTasks(); loadAttendance(); }}>
             🔄 Refresh
           </button>
-          {isManager && (
-            <button className="btn-primary" onClick={() => setShowNewTaskForm(!showNewTaskForm)}>
-              + New Task
-            </button>
-          )}
+          <button className="btn-primary" onClick={() => setShowNewTaskForm(!showNewTaskForm)}>
+            + New Task
+          </button>
         </div>
       </header>
 
@@ -558,7 +611,8 @@ function App() {
 
       {!loading && (
         <>
-          {isTeamMember && (
+          {/* Team member attendance card */}
+          {!isAdmin && (
             <div className="attendance-card">
               <h3>⏰ Your Attendance Today</h3>
               <div className="attendance-info">
@@ -568,8 +622,7 @@ function App() {
                 {attendance.find(a => a.userId === currentUser) && (
                   <div className="time-info">
                     {(() => {
-                      const myRecord = attendance.find(a => a.userId === currentUser);
-                      const times = calculateWorkingTime(myRecord?.log);
+                      const times = calculateWorkingTime(attendance.find(a => a.userId === currentUser)?.log);
                       return (
                         <>
                           <div>⏱️ Working: <strong>{times.working}</strong></div>
@@ -583,56 +636,35 @@ function App() {
               </div>
               <div className="attendance-buttons">
                 {myStatus === 'Not Signed In' || myStatus === 'Signed Out' ? (
-                  <button className="btn-signin" onClick={() => updateMyStatus('Working')}>
-                    🟢 Sign In
-                  </button>
+                  <button className="btn-signin" onClick={() => updateMyStatus('Working')}>🟢 Sign In</button>
                 ) : (
                   <>
-                    {myStatus !== 'Working' && (
-                      <button className="btn-resume" onClick={() => updateMyStatus('Working')}>
-                        🟢 Back to Work
-                      </button>
-                    )}
-                    {myStatus !== 'Tea Break' && (
-                      <button className="btn-tea" onClick={() => updateMyStatus('Tea Break')}>
-                        ☕ Tea Break
-                      </button>
-                    )}
-                    {myStatus !== 'Lunch Break' && (
-                      <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')}>
-                        🍽️ Lunch
-                      </button>
-                    )}
-                    {myStatus !== 'Meeting' && (
-                      <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')}>
-                        🤝 Meeting
-                      </button>
-                    )}
-                    <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')}>
-                      🚪 Sign Out
-                    </button>
+                    {myStatus !== 'Working' && <button className="btn-resume" onClick={() => updateMyStatus('Working')}>🟢 Back to Work</button>}
+                    {myStatus !== 'Tea Break' && <button className="btn-tea" onClick={() => updateMyStatus('Tea Break')}>☕ Tea Break</button>}
+                    {myStatus !== 'Lunch Break' && <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')}>🍽️ Lunch</button>}
+                    {myStatus !== 'Meeting' && <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')}>🤝 Meeting</button>}
+                    <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')}>🚪 Sign Out</button>
                   </>
                 )}
               </div>
             </div>
           )}
 
-          {isManager && (
+          {/* Admin: Team Status */}
+          {isAdmin && (
             <div className="team-status-section">
               <div className="section-header" onClick={() => setShowAttendance(!showAttendance)}>
                 <h3>📊 Team Status Today {showAttendance ? '▼' : '▶'}</h3>
               </div>
               {showAttendance && (
                 <div className="team-status-grid">
-                  {team.map(member => {
+                  {team.filter(m => !m.isAdmin).map(member => {
                     const memberAttendance = attendance.find(a => a.userId === member.id);
                     const status = memberAttendance?.status || 'Not Signed In';
                     const times = memberAttendance ? calculateWorkingTime(memberAttendance.log) : { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
                     return (
                       <div key={member.id} className="status-card">
-                        <div className="status-avatar" style={{background: attendanceColors[status]}}>
-                          {member.avatar}
-                        </div>
+                        <div className="status-avatar" style={{background: attendanceColors[status]}}>{member.avatar}</div>
                         <div className="status-details">
                           <strong>{member.name}</strong>
                           <span className="status-text" style={{color: attendanceColors[status]}}>{status}</span>
@@ -646,14 +678,13 @@ function App() {
             </div>
           )}
 
-          {isManager && (
+          {/* Admin: Team Switcher */}
+          {isAdmin && (
             <div className="manager-nav">
               <div className="nav-label">{managerView === 'all' ? '👥 Quick Switch:' : '📂 Currently Viewing:'}</div>
               <div className="user-switcher">
-                <button className={managerView === 'all' ? 'active' : ''} onClick={() => setManagerView('all')}>
-                  🏠 All Tasks
-                </button>
-                {team.map(member => (
+                <button className={managerView === 'all' ? 'active' : ''} onClick={() => setManagerView('all')}>🏠 All Tasks</button>
+                {team.filter(m => !m.isAdmin).map(member => (
                   <button key={member.id} className={managerView === member.id ? 'active' : ''} onClick={() => setManagerView(member.id)} title={member.name}>
                     {member.avatar}
                   </button>
@@ -662,20 +693,27 @@ function App() {
             </div>
           )}
 
-          {isManager && managerView !== 'all' && (
-            <div className="breadcrumb">
-              <button className="breadcrumb-link" onClick={() => setManagerView('all')}>
-                ← Back to All Tasks
+          {/* Team Member: Task View Toggle */}
+          {!isAdmin && (
+            <div className="task-view-toggle">
+              <button 
+                className={taskViewMode === 'assigned' ? 'active' : ''} 
+                onClick={() => setTaskViewMode('assigned')}
+              >
+                📥 Assigned to Me
               </button>
-              <span className="breadcrumb-current">Viewing: {team.find(t => t.id === managerView)?.name}</span>
+              <button 
+                className={taskViewMode === 'own' ? 'active' : ''} 
+                onClick={() => setTaskViewMode('own')}
+              >
+                📝 My Own Tasks
+              </button>
             </div>
           )}
 
-          {isManager && (
-            <div className="view-title">
-              <h2>📋 {getViewTitle()}</h2>
-            </div>
-          )}
+          <div className="view-title">
+            <h2>{getViewTitle()}</h2>
+          </div>
 
           <div className="filters">
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
@@ -692,27 +730,28 @@ function App() {
             </select>
           </div>
 
-          {showNewTaskForm && isManager && (
+          {showNewTaskForm && (
             <div className="new-task-form">
               <h3>Create New Task</h3>
-              <input type="text" placeholder="Task title" value={newTask.title} onChange={(e) => setNewTask({ ...newTask, title: e.target.value })} />
               <div className="form-row">
-                <select value={newTask.assignee} onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}>
-                  <option value="">Assign to...</option>
-                  {team.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                <select value={newTask.assignedTo} onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}>
+                  <option value="">Assign to... *</option>
+                  {team.map(t => <option key={t.id} value={t.name}>{t.name} ({t.role})</option>)}
                 </select>
                 <select value={newTask.channel} onChange={(e) => setNewTask({ ...newTask, channel: e.target.value })}>
-                  <option value="">Select channel...</option>
+                  <option value="">Select channel... *</option>
                   {channels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
                 </select>
               </div>
+              <input type="text" placeholder="Task Details *" value={newTask.taskDetails} onChange={(e) => setNewTask({ ...newTask, taskDetails: e.target.value })} />
+              <input type="text" placeholder="Remarks / Notes (optional)" value={newTask.remarks} onChange={(e) => setNewTask({ ...newTask, remarks: e.target.value })} />
               <div className="form-row">
                 <select value={newTask.priority} onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}>
                   <option>Low</option>
                   <option>Medium</option>
                   <option>High</option>
                 </select>
-                <input type="date" value={newTask.dueDate} onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })} />
+                <input type="date" value={newTask.targetDate} onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} />
               </div>
               <div className="form-actions">
                 <button className="btn-success" onClick={handleAddTask} disabled={saving}>
@@ -726,46 +765,43 @@ function App() {
           <div className="tasks-container">
             {filteredTasks.length === 0 ? (
               <div className="empty-state">
-                <p>{isTeamMember ? 'You have no tasks assigned. Enjoy your day! 🎉' : 'No tasks to display'}</p>
+                <p>{isAdmin ? 'No tasks to display' : (taskViewMode === 'assigned' ? '🎉 No tasks assigned to you. Enjoy!' : '📝 You have not created any tasks yet.')}</p>
               </div>
             ) : (
               <div className="tasks-grid">
-                {filteredTasks.map(task => {
-                  const alert = getTaskAlert(task.lastUpdated, task.status, task.dueDate);
-                  return (
-                    <div key={task.id} className={`task-card ${alert?.type || ''}`}>
-                      {alert && <div className="alert-banner">{alert.message}</div>}
-                      <div className="task-header">
-                        <h3>{task.title}</h3>
-                        <div className="badges">
-                          <span className="badge-channel">{task.channel}</span>
-                          <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
-                        </div>
+                {filteredTasks.map(task => (
+                  <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''}`}>
+                    {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
+                    <div className="task-header">
+                      <h3>{task.taskDetails}</h3>
+                      <div className="badges">
+                        <span className="badge-channel">{task.channel}</span>
+                        <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
                       </div>
-                      <div className="task-meta">
-                        <div className="avatar">{task.assignee.substring(0, 2)}</div>
-                        <div className="meta-info">
-                          <p className="assignee">{task.assignee}</p>
-                          <p className="due-date">Due: {new Date(task.dueDate).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      <div className="task-footer">
-                        <select value={task.status} onChange={(e) => handleStatusChange(task.id, e.target.value)} className="status-select" style={{ color: statusColors[task.status] }}>
-                          <option value="Not Started">Not Started</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Completed">Completed</option>
-                          <option value="On Hold">On Hold</option>
-                          <option value="Delayed">Delayed</option>
-                        </select>
-                        {isManager && (
-                          <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)} title="Copy WhatsApp message">
-                            WA
-                          </button>
-                        )}
+                      {task.remarks && <p className="task-remarks">💬 {task.remarks}</p>}
+                    </div>
+                    <div className="task-meta">
+                      <div className="avatar">{task.assignedTo.substring(0, 2).toUpperCase()}</div>
+                      <div className="meta-info">
+                        <p className="assignee">👤 {task.assignedTo}</p>
+                        <p className="assigned-by">📌 Assigned by: <strong>{task.assignedBy}</strong></p>
+                        <p className="due-date">📅 Target: {new Date(task.targetDate).toLocaleDateString()}</p>
                       </div>
                     </div>
-                  );
-                })}
+                    <div className="task-footer">
+                      <select value={task.status} onChange={(e) => handleStatusChange(task.id, e.target.value)} className="status-select" style={{ color: statusColors[task.status] }}>
+                        <option value="Not Started">Not Started</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                        <option value="On Hold">On Hold</option>
+                        <option value="Delayed">Delayed</option>
+                      </select>
+                      <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)} title="Copy WhatsApp message">
+                        WA
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

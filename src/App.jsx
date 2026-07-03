@@ -31,9 +31,9 @@ const QUOTES = {
     "Chase the vision, not the money. — Tony Hsieh",
     "Innovation is saying no to a thousand things. — Steve Jobs",
     "Culture eats strategy for breakfast. — Peter Drucker",
-    "जो लीडर बनना चाहे, वो सेवक बने।",
-    "व्यापार में विश्वास सबसे बड़ी पूंजी है।",
-    "The best way to predict the future is to create it.",
+    "Ideas are commodities. Execution is not.",
+    "The successful warrior has laser-like focus.",
+     "The best way to predict the future is to create it.",
     "A brand for a company is like a reputation for a person.",
     "Move fast and break things.",
     "Ideas are commodities. Execution is not.",
@@ -145,7 +145,7 @@ function App() {
   ];
 
   const team = [
-    { id: 'pcwtc', name: 'PC', displayName: 'PC sir', fullName: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
+    { id: 'pcwtc', name: 'PC', displayName: 'PC', fullName: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
     { id: 'shivendrawtc', name: 'Shivendra Singh', displayName: 'Shivendra Singh', fullName: 'Shivendra Singh Tomar', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true },
     { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', fullName: 'Deeksha Jalodiya', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media' },
     { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', fullName: 'Nidhi Vaishnav', role: 'Poorvaj', avatar: 'NV', quoteType: 'social_media' },

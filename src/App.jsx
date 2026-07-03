@@ -145,7 +145,7 @@ function App() {
   ];
 
   const team = [
-    { id: 'pcwtc', name: 'PC', displayName: 'PC sir', fullName: 'Praveen Chilhate', role: 'CEO - SEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
+    { id: 'pcwtc', name: 'PC', displayName: 'PC sir', fullName: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
     { id: 'shivendrawtc', name: 'Shivendra Singh', displayName: 'Shivendra Singh', fullName: 'Shivendra Singh Tomar', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true },
     { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', fullName: 'Deeksha Jalodiya', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media' },
     { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', fullName: 'Nidhi Vaishnav', role: 'Poorvaj', avatar: 'NV', quoteType: 'social_media' },

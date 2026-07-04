@@ -7,81 +7,108 @@ const QUOTES = {
   manager: [
     "Great leaders create more leaders, not followers. — Tom Peters",
     "Vision without execution is hallucination. — Thomas Edison",
-    "A leader is one who knows the way, goes the way, and shows the way.",
+    "A leader is one who knows the way, goes the way, and shows the way. — John C. Maxwell",
     "Management is doing things right; leadership is doing the right things. — Peter Drucker",
     "Innovation distinguishes between a leader and a follower. — Steve Jobs",
-    "Lead by example, not by command.",
-    "कर्म ही पूजा है। (Work is worship)",
-    "Success is not final, failure is not fatal.",
-    "Discipline is the bridge between goals and accomplishment.",
-    "The way to get started is to quit talking and begin doing.",
-    "A goal without a plan is just a wish.",
-    "Great things never come from comfort zones.",
-    "Dream it. Wish it. Do it.",
-    "The harder you work, the luckier you get.",
-    "Believe you can and you're halfway there.",
-    "Coming together is a beginning, staying together is progress.",
-    "Effective leadership is putting first things first.",
-    "The function of leadership is to produce more leaders.",
-    "Success usually comes to those who are too busy to be looking for it.",
-    "Quality is not an act, it is a habit."
+    "The best executive is the one who has sense enough to pick good people. — Theodore Roosevelt",
+    "Leadership is not about being in charge. It's about taking care of those in your charge. — Simon Sinek",
+    "Don't tell people how to do things, tell them what to do and let them surprise you. — George Patton",
+    "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
+    "Discipline is the bridge between goals and accomplishment. — Jim Rohn",
+    "The way to get started is to quit talking and begin doing. — Walt Disney",
+    "A goal without a plan is just a wish. — Antoine de Saint-Exupery",
+    "Great things never come from comfort zones. — Neil Strauss",
+    "Dream big, work hard, stay focused. — Anonymous",
+    "The harder you work, the luckier you get. — Gary Player",
+    "Believe you can and you're halfway there. — Theodore Roosevelt",
+    "Coming together is a beginning, staying together is progress, working together is success. — Henry Ford",
+    "Effective leadership is putting first things first. — Stephen Covey",
+    "The function of leadership is to produce more leaders, not more followers. — Ralph Nader",
+    "Quality is not an act, it is a habit. — Aristotle",
+    "Excellence is never an accident. It's a choice. — Aristotle",
+    "If your actions inspire others, you are a leader. — John Quincy Adams",
+    "Leaders think and talk about the solutions. Followers think and talk about the problems. — Brian Tracy",
+    "A leader takes people where they ought to be. — Rosalynn Carter",
+    "The leader adjusts the sails. — John Maxwell",
+    "Lead from the front. — Anonymous",
+    "The greatest leader gets people to do the greatest things. — Ronald Reagan",
+    "Do what you can, with what you have, where you are. — Theodore Roosevelt",
+    "Success comes to those too busy to look for it. — Henry David Thoreau",
+    "The only way to do great work is to love what you do. — Steve Jobs"
   ],
   ceo: [
-    "The role of a CEO is to ask the right questions, not have all the answers.",
+    "The role of a CEO is to ask the right questions, not have all the answers. — Ken Blanchard",
     "Chase the vision, not the money. — Tony Hsieh",
     "Innovation is saying no to a thousand things. — Steve Jobs",
     "Culture eats strategy for breakfast. — Peter Drucker",
-    "Ideas are commodities. Execution is not.",
-    "The successful warrior has laser-like focus.",
-     "The best way to predict the future is to create it.",
-    "A brand for a company is like a reputation for a person.",
-    "Move fast and break things.",
-    "Ideas are commodities. Execution is not.",
-    "The successful warrior has laser-like focus.",
-    "Whether you think you can or think you can't, you're right.",
-    "Business opportunities are like buses, there's always another one coming.",
-    "Don't be afraid to give up the good to go for the great.",
-    "Success is walking from failure to failure with no loss of enthusiasm.",
-    "In the middle of every difficulty lies opportunity.",
-    "The value of an idea lies in the using of it.",
-    "Every problem is a gift—without problems we would not grow.",
-    "Do what you feel in your heart to be right.",
-    "The greatest glory lies not in never falling, but in rising every time we fall."
+    "Your most unhappy customers are your greatest source of learning. — Bill Gates",
+    "The best way to predict the future is to create it. — Peter Drucker",
+    "A brand for a company is like a reputation for a person. — Jeff Bezos",
+    "Move fast and break things. — Mark Zuckerberg",
+    "Ideas are commodities. Execution of them is not. — Michael Dell",
+    "The successful warrior has laser-like focus. — Bruce Lee",
+    "Whether you think you can or think you can't, you're right. — Henry Ford",
+    "Business opportunities are like buses, there's always another one coming. — Richard Branson",
+    "Don't be afraid to give up the good to go for the great. — John D. Rockefeller",
+    "Success is walking from failure to failure with no loss of enthusiasm. — Winston Churchill",
+    "In the middle of every difficulty lies opportunity. — Albert Einstein",
+    "The value of an idea lies in the using of it. — Thomas Edison",
+    "Every problem is a gift. — Anthony Robbins",
+    "Do what you feel in your heart to be right. — Eleanor Roosevelt",
+    "The greatest glory lies in rising every time we fall. — Nelson Mandela",
+    "Your work will fill a large part of your life. Do great work. — Steve Jobs",
+    "Perseverance makes overnight success. — Biz Stone",
+    "Get big quietly. — Chris Dixon",
+    "It's about making ideas happen. — Scott Belsky",
+    "Ask what your customer really wants. — Lisa Stone",
+    "Business is more exciting than any game. — Lord Beaverbrook",
+    "Quit talking and begin doing. — Walt Disney",
+    "If not embarrassed by first version, you launched too late. — Reid Hoffman",
+    "Self-education will make you a fortune. — Jim Rohn",
+    "Go where there is no path. — Ralph Waldo Emerson",
+    "Try to become a person of value. — Albert Einstein"
   ],
   social_media: [
-    "Content is king, but engagement is queen.",
-    "Social media is about sociology and psychology more than technology.",
-    "Your brand is what people say about you when you're not in the room.",
-    "Create content that doesn't just sell, but tells.",
-    "Be authentic. Be original. Be you.",
-    "रचनात्मकता की कोई सीमा नहीं।",
-    "हर पोस्ट एक कहानी है।",
-    "Design is thinking made visual.",
-    "Creativity takes courage.",
-    "Content is fire, social media is gasoline.",
-    "Be so good they can't ignore you.",
-    "Creativity is intelligence having fun.",
-    "Pixels and stories - that's all you need.",
-    "Make it simple. Make it memorable.",
-    "Aesthetic matters. First impressions count.",
-    "Engagement is the new ROI.",
-    "Every great design begins with an even better story.",
-    "Good design is good business.",
-    "The best marketing doesn't feel like marketing.",
-    "Storytelling is the most powerful way to put ideas into the world."
+    "Content is king, but engagement is queen. — Mari Smith",
+    "Your brand is what people say when you're not in the room. — Jeff Bezos",
+    "Design is thinking made visual. — Saul Bass",
+    "Creativity takes courage. — Henri Matisse",
+    "Content is fire, social media is gasoline. — Jay Baer",
+    "Be so good they can't ignore you. — Steve Martin",
+    "Creativity is intelligence having fun. — Albert Einstein",
+    "Every great design begins with an even better story. — Lorinda Mamo",
+    "Good design is good business. — Thomas Watson Jr.",
+    "The best marketing doesn't feel like marketing. — Tom Fishburne",
+    "Storytelling is the most powerful way to put ideas into the world. — Robert McKee",
+    "Make it simple. Make it memorable. — Leo Burnett",
+    "Aesthetic matters. First impressions count. — Anonymous",
+    "Engagement is the new ROI. — Anonymous",
+    "The technology inspires the art. — John Lasseter",
+    "Design is intelligence made visible. — Alina Wheeler",
+    "Marketing is about the stories you tell. — Seth Godin",
+    "Create content that tells. — Beth Comstock",
+    "Don't be afraid to get creative. — Mike Volpe",
+    "Behind every great brand is a great story. — Anonymous",
+    "Simplicity is the ultimate sophistication. — Leonardo da Vinci",
+    "Design is how it works. — Steve Jobs",
+    "The details make the design. — Charles Eames",
+    "Everything is designed. — Brian Reed",
+    "Content is the atomic particle of marketing. — Rebecca Lieb",
+    "Every post is an opportunity. — Anonymous",
+    "Not to be different is virtually suicidal. — Bill Bernbach",
+    "Social media is about the people. — Matt Goulart",
+    "Focus on how to be social. — Jay Baer",
+    "Great design speaks louder than words. — Anonymous"
   ],
   video_editor: [
     "Editing is where stories truly come alive.",
-    "Cut to the emotion, not the action.",
+    "Cut to the emotion, not the action. — Walter Murch",
     "The best edit is the one you don't notice.",
     "Every cut tells a story.",
     "Master the rhythm, master the edit.",
-    "एक अच्छा एडिटर वह है जो कहानी सुनाए।",
-    "धैर्य ही एडिटिंग की कुंजी है।",
-    "Coffee + Creativity = Magic",
     "The frame is your canvas. Paint emotions.",
     "Color tells the story words cannot.",
-    "Great editing is invisible.",
+    "Great editing is invisible. Bad editing is unforgettable.",
     "Timing is everything in video editing.",
     "Less is more - especially in editing.",
     "The magic happens in post-production.",
@@ -90,20 +117,32 @@ const QUOTES = {
     "B-roll is the bridge between great shots.",
     "Make every second count.",
     "Transition with purpose, cut with reason.",
-    "Editing is the soul of storytelling."
+    "Editing is the strongest manipulator of cinema. — Walter Murch",
+    "Cinema is what's in the frame and what's out. — Martin Scorsese",
+    "A film is a petrified fountain of thought. — Jean Cocteau",
+    "Editing is making good shots better.",
+    "Style is knowing who you are. — Orson Welles",
+    "Cinema is a mirror. — Alejandro Iñárritu",
+    "Directors are storytellers. — Kathryn Bigelow",
+    "The camera is a paintbrush. — Peter Weir",
+    "Film is a mosaic of time. — Andrei Tarkovsky",
+    "Video editing is 90% creativity.",
+    "Sound design is half the experience.",
+    "Every project teaches something new.",
+    "Patience in editing equals perfection.",
+    "The soul of storytelling lies in the edit."
   ],
   pr: [
-    "PR is the result of what you do and what others say about you.",
+    "PR is what you do, say, and what others say about you.",
     "Build relationships, not just contacts.",
-    "Reputation takes years to build, minutes to destroy.",
+    "Reputation takes years to build, minutes to destroy. — Warren Buffett",
     "Trust is the foundation of all communication.",
-    "रिश्ते बनाओ, सौदे नहीं।",
     "Your story is your strongest asset.",
     "Make news, don't chase it.",
     "The right pitch at the right time changes everything.",
     "Press releases tell, stories sell.",
     "Be quotable. Be memorable. Be authentic.",
-    "Listen first, speak second.",
+    "Listen first, speak second. — Stephen Covey",
     "PR is a marathon, not a sprint.",
     "Relationships are the currency of PR.",
     "Tell the truth, but tell it well.",
@@ -111,30 +150,51 @@ const QUOTES = {
     "Empathy is the secret weapon of PR.",
     "Authenticity wins in PR.",
     "Your media list is your goldmine.",
-    "Communication works for those who work at it.",
-    "The best PR is great work."
+    "Communication works for those who work at it. — John Powell",
+    "The best PR is great work.",
+    "Publicity is the nuclear weapon of business. — Al Ries",
+    "PR is analyzing trends.",
+    "Great communicators build relationships.",
+    "Words have power to build or destroy.",
+    "It's what others say about you.",
+    "In PR, silence is not golden.",
+    "Guard your reputation with your life.",
+    "Perception is reality in PR.",
+    "Great PR is invisible but effective.",
+    "PR: Making the truth interesting.",
+    "The best press releases tell stories."
   ],
   hr: [
     "HR is about the business, not just HR.",
-    "Take care of your employees and they'll take care of your business.",
-    "People may forget what you said, but they'll never forget how you made them feel.",
-    "Culture eats strategy for breakfast.",
-    "Hire character. Train skill.",
-    "Talent wins games, teamwork wins championships.",
-    "लोगों की देखभाल करो, वे आपकी देखभाल करेंगे।",
-    "इंसानियत सबसे बड़ी संपत्ति है।",
+    "Take care of your employees and they'll take care of your business. — Richard Branson",
+    "People never forget how you made them feel. — Maya Angelou",
+    "Culture eats strategy for breakfast. — Peter Drucker",
+    "Hire character. Train skill. — Peter Schutz",
+    "Talent wins games, teamwork wins championships. — Michael Jordan",
     "Happy employees lead to happy customers.",
     "Empathy is the greatest leadership skill.",
     "Recruit for attitude, train for skill.",
     "Engagement starts with empathy.",
     "Your culture is your competitive advantage.",
     "HR is the heart of every organization.",
-    "People work for purpose, not paychecks alone.",
-    "The strength of the team is each individual member.",
-    "Great vision without great people is irrelevant.",
+    "People work for purpose, not paychecks.",
+    "The strength of the team is each member. — Phil Jackson",
+    "Great vision without great people is irrelevant. — Jim Collins",
     "Be the leader you wish you had.",
     "Compassion in leadership is courage.",
-    "Workplace happiness is not a perk, it's a foundation."
+    "Workplace happiness is a foundation.",
+    "Employees are your most valuable asset.",
+    "Train them well so they can leave, treat them well so they don't want to. — Richard Branson",
+    "How employees feel is how customers feel. — Sybil F. Stershic",
+    "The greatest asset is people. — Jorge Paulo Lemann",
+    "Motivation comes from working on things we care about. — Sheryl Sandberg",
+    "Leadership is taking care of those in your charge. — Simon Sinek",
+    "A great employee is hard to find. — Tammy Cohen",
+    "Working together is success. — Henry Ford",
+    "Engagement is emotional commitment. — Kevin Kruse",
+    "Build people, then people build the business. — Zig Ziglar",
+    "The best HR is invisible.",
+    "People don't leave companies, they leave managers."
   ]
 };
 
@@ -145,8 +205,8 @@ function App() {
   ];
 
   const team = [
-    { id: 'pcwtc', name: 'PC', displayName: 'PC', fullName: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
-    { id: 'shivendrawtc', name: 'Shivendra Singh', displayName: 'Shivendra Singh', fullName: 'Shivendra Singh Tomar', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true },
+    { id: 'pcwtc45', name: 'PC', displayName: 'PC', fullName: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
+    { id: 'shivendrawtc77', name: 'Shivendra Singh', displayName: 'Shivendra Singh', fullName: 'Shivendra Singh Tomar', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true },
     { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', fullName: 'Deeksha Jalodiya', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media' },
     { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', fullName: 'Nidhi Vaishnav', role: 'Poorvaj', avatar: 'NV', quoteType: 'social_media' },
     { id: 'samanta', name: 'Samanta', displayName: 'Samanta', fullName: 'Samanta Pradhan', role: 'Social Media Exec & Design', avatar: 'SP', quoteType: 'social_media' },
@@ -232,7 +292,6 @@ function App() {
     endDate: ''
   });
 
-  const audioRef = useRef(null);
   const currentUserInfo = team.find(t => t.id === currentUser);
   const isAdmin = currentUserInfo?.isAdmin || false;
   const isHR = currentUserInfo?.isHR || false;
@@ -259,13 +318,12 @@ function App() {
     'Not Signed In': '#94a3b8'
   };
 
-  // Notification sound
   const playNotifSound = () => {
     try {
       const audio = new Audio('data:audio/wav;base64,UklGRlwFAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YTgFAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGnt/yv2wiBTGH0PLTgjMGHm7A7+OZURE');
       audio.volume = 0.5;
-      audio.play().catch(e => console.log('Sound blocked'));
-    } catch(e) { console.log(e); }
+      audio.play().catch(e => {});
+    } catch(e) {}
   };
 
   useEffect(() => {
@@ -291,14 +349,13 @@ function App() {
     if (currentUser && !isAdmin) setTaskViewMode('assigned');
   }, [currentUser, isAdmin]);
 
-  // Detect new inbox notifications
   useEffect(() => {
     const unreadCount = inbox.filter(i => i.read === 'No').length;
     if (unreadCount > prevInboxCount && prevInboxCount > 0) {
       const newestUnread = inbox.find(i => i.read === 'No');
       if (newestUnread) {
         playNotifSound();
-        setNotifMessage(`📩 New task from ${newestUnread.from}: ${newestUnread.title}`);
+        setNotifMessage(`New task from ${newestUnread.from}: ${newestUnread.title}`);
         setShowNotifPopup(true);
         setTimeout(() => setShowNotifPopup(false), 5000);
       }
@@ -321,7 +378,7 @@ function App() {
       const response = await fetch(API_URL + '?action=getTasks');
       const data = await response.json();
       if (data.status === 'ok') setTasks(data.tasks);
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const loadArchive = async () => {
@@ -329,7 +386,7 @@ function App() {
       const response = await fetch(API_URL + '?action=getArchive');
       const data = await response.json();
       if (data.status === 'ok') setArchivedTasks(data.tasks);
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const loadInbox = async () => {
@@ -338,7 +395,7 @@ function App() {
       const response = await fetch(API_URL + '?action=getInbox&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
       if (data.status === 'ok') setInbox(data.inbox);
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const loadInboxBackground = async () => {
@@ -347,7 +404,7 @@ function App() {
       const response = await fetch(API_URL + '?action=getInbox&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
       if (data.status === 'ok') setInbox(data.inbox);
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const loadAttendance = async () => {
@@ -361,7 +418,7 @@ function App() {
           if (myRecord) setMyStatus(myRecord.status);
         }
       }
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const loadAttendanceBackground = async () => {
@@ -375,7 +432,7 @@ function App() {
           if (myRecord) setMyStatus(myRecord.status);
         }
       }
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const updateMyStatus = async (newStatus) => {
@@ -383,7 +440,7 @@ function App() {
     if (!currentUserInfo) return;
     setMyStatus(newStatus);
     try {
-      await fetch(API_URL, {
+      fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
@@ -393,8 +450,7 @@ function App() {
           status: newStatus
         })
       });
-      setTimeout(() => loadAttendanceBackground(), 1500);
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const calculateWorkingTime = (log) => {
@@ -484,7 +540,7 @@ function App() {
       return;
     }
     if (newTask.taskType === 'Routine' && !newTask.startDate) {
-      alert('Please select start date for routine task!');
+      alert('Please select start date!');
       return;
     }
     try {
@@ -496,18 +552,29 @@ function App() {
         status: 'Not Started',
         targetDate: newTask.taskType === 'Routine' ? newTask.startDate : newTask.targetDate
       };
-      await fetch(API_URL, {
+      
+      // Optimistic update
+      const tempTask = {
+        id: Date.now(),
+        ...taskData,
+        delayDays: 0
+      };
+      setTasks([...tasks, tempTask]);
+      
+      fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addTask', task: taskData })
       });
+      
       setNewTask({
         taskDetails: '', remarks: '', priority: 'Medium', targetDate: '',
         channel: '', taskType: 'General', frequency: 'Daily', startDate: '', endDate: ''
       });
       setSelectedAssignees([]);
       setShowNewTaskForm(false);
-      setTimeout(() => { loadTasksBackground(); setSaving(false); }, 1500);
+      setSaving(false);
+      setTimeout(() => loadTasksBackground(), 2000);
     } catch (error) { setSaving(false); }
   };
 
@@ -515,25 +582,24 @@ function App() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     if (task.status === 'Completed' && !isAdmin) {
-      alert('🔒 Only Shivendra Singh or PC sir can change completed tasks!');
+      alert('Only Shivendra Singh or PC can change completed tasks!');
       return;
     }
     setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     try {
-      await fetch(API_URL, {
+      fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'updateStatus', taskId, status: newStatus, userName: currentUserInfo.name })
       });
-      setTimeout(() => loadTasksBackground(), 1500);
-    } catch (error) { console.error(error); }
+    } catch (error) {}
   };
 
   const handleExportWhatsApp = (task) => {
     const assignees = String(task.assignedTo).split(',').map(a => a.trim());
     const firstAssignee = team.find(t => t.name === assignees[0]);
     const personalURL = firstAssignee ? `https://wtc-task-hub.vercel.app/?user=${firstAssignee.id}` : 'https://wtc-task-hub.vercel.app';
-    const message = `📋 TASK ASSIGNED - WTC\n\n👥 To: ${task.assignedTo}\n📝 ${task.taskDetails}\n💬 ${task.remarks || 'N/A'}\n📢 ${task.channel}\n⚡ ${task.priority}\n📅 Target: ${new Date(task.targetDate).toLocaleDateString()}\n👤 By: ${task.assignedBy}\n\n🔗 ${personalURL}`;
+    const message = `TASK ASSIGNED - WTC\n\nTo: ${task.assignedTo}\nTask: ${task.taskDetails}\nRemarks: ${task.remarks || 'N/A'}\nChannel: ${task.channel}\nPriority: ${task.priority}\nTarget: ${new Date(task.targetDate).toLocaleDateString()}\nBy: ${task.assignedBy}\n\nDashboard: ${personalURL}`;
     navigator.clipboard.writeText(message);
     alert('Message copied!');
   };
@@ -549,14 +615,14 @@ function App() {
   const markAllInboxRead = async () => {
     for (const item of inbox.filter(i => i.read === 'No')) {
       try {
-        await fetch(API_URL, {
+        fetch(API_URL, {
           method: 'POST', mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
         });
       } catch(e) {}
     }
-    setTimeout(() => loadInboxBackground(), 1500);
+    setInbox(inbox.map(i => ({ ...i, read: 'Yes' })));
   };
 
   const openInbox = () => {
@@ -603,7 +669,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Notification Popup */}
       {showNotifPopup && (
         <div className="notif-popup">
           <div className="notif-icon">🔔</div>
@@ -672,7 +737,6 @@ function App() {
       )}
 
       {loading && <div className="loading-state"><p>Loading...</p></div>}
-      {saving && <div className="saving-state"><p>💾 Saving...</p></div>}
 
       {!loading && (
         <>
@@ -890,7 +954,7 @@ function App() {
                           <div className="task-meta">
                             <div className="meta-info">
                               <p className="assignee">👥 {task.assignedTo}</p>
-                              <p className="assigned-by">📌 By: <strong>{task.assignedBy === 'PC' ? 'PC sir' : task.assignedBy}</strong></p>
+                              <p className="assigned-by">📌 By: <strong>{task.assignedBy}</strong></p>
                               <p className="due-date">📅 {new Date(task.targetDate).toLocaleDateString()}</p>
                             </div>
                           </div>
@@ -933,18 +997,10 @@ function App() {
                 <div className="form-group">
                   <label>Task Type</label>
                   <div className="task-type-toggle">
-                    <button 
-                      className={newTask.taskType === 'General' ? 'active' : ''}
-                      onClick={() => setNewTask({...newTask, taskType: 'General'})}
-                      type="button"
-                    >
+                    <button className={newTask.taskType === 'General' ? 'active' : ''} onClick={() => setNewTask({...newTask, taskType: 'General'})} type="button">
                       📋 General Task
                     </button>
-                    <button 
-                      className={newTask.taskType === 'Routine' ? 'active' : ''}
-                      onClick={() => setNewTask({...newTask, taskType: 'Routine'})}
-                      type="button"
-                    >
+                    <button className={newTask.taskType === 'Routine' ? 'active' : ''} onClick={() => setNewTask({...newTask, taskType: 'Routine'})} type="button">
                       🔄 Routine Task
                     </button>
                   </div>
@@ -956,12 +1012,8 @@ function App() {
                 <div className="assignee-list">
                   {allAssignees.map(name => (
                     <label key={name} className={`assignee-item ${selectedAssignees.includes(name) ? 'checked' : ''}`}>
-                      <input 
-                        type="checkbox" 
-                        checked={selectedAssignees.includes(name)}
-                        onChange={() => toggleAssignee(name)}
-                      />
-                      <span className="assignee-name">{name === 'PC' ? 'PC sir' : name}</span>
+                      <input type="checkbox" checked={selectedAssignees.includes(name)} onChange={() => toggleAssignee(name)} />
+                      <span className="assignee-name">{name}</span>
                     </label>
                   ))}
                 </div>
@@ -1001,13 +1053,7 @@ function App() {
               {newTask.taskType === 'General' ? (
                 <div className="form-group">
                   <label>Target Date *</label>
-                  <input 
-                    type="date" 
-                    min="2025-01-01" 
-                    max="2030-12-31" 
-                    value={newTask.targetDate} 
-                    onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} 
-                  />
+                  <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.targetDate} onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} />
                 </div>
               ) : (
                 <>

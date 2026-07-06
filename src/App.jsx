@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -18,7 +18,7 @@ const QUOTES = {
     "The way to get started is to quit talking and begin doing. — Walt Disney",
     "A goal without a plan is just a wish. — Antoine de Saint-Exupery",
     "Great things never come from comfort zones. — Neil Strauss",
-    "Dream big, work hard, stay focused. — Anonymous",
+    "Dream big, work hard, stay focused.",
     "The harder you work, the luckier you get. — Gary Player",
     "Believe you can and you're halfway there. — Theodore Roosevelt",
     "Coming together is a beginning, staying together is progress, working together is success. — Henry Ford",
@@ -30,7 +30,7 @@ const QUOTES = {
     "Leaders think and talk about the solutions. Followers think and talk about the problems. — Brian Tracy",
     "A leader takes people where they ought to be. — Rosalynn Carter",
     "The leader adjusts the sails. — John Maxwell",
-    "Lead from the front. — Anonymous",
+    "Lead from the front.",
     "The greatest leader gets people to do the greatest things. — Ronald Reagan",
     "Do what you can, with what you have, where you are. — Theodore Roosevelt",
     "Success comes to those too busy to look for it. — Henry David Thoreau",
@@ -81,24 +81,24 @@ const QUOTES = {
     "The best marketing doesn't feel like marketing. — Tom Fishburne",
     "Storytelling is the most powerful way to put ideas into the world. — Robert McKee",
     "Make it simple. Make it memorable. — Leo Burnett",
-    "Aesthetic matters. First impressions count. — Anonymous",
-    "Engagement is the new ROI. — Anonymous",
+    "Aesthetic matters. First impressions count.",
+    "Engagement is the new ROI.",
     "The technology inspires the art. — John Lasseter",
     "Design is intelligence made visible. — Alina Wheeler",
     "Marketing is about the stories you tell. — Seth Godin",
     "Create content that tells. — Beth Comstock",
     "Don't be afraid to get creative. — Mike Volpe",
-    "Behind every great brand is a great story. — Anonymous",
+    "Behind every great brand is a great story.",
     "Simplicity is the ultimate sophistication. — Leonardo da Vinci",
     "Design is how it works. — Steve Jobs",
     "The details make the design. — Charles Eames",
     "Everything is designed. — Brian Reed",
     "Content is the atomic particle of marketing. — Rebecca Lieb",
-    "Every post is an opportunity. — Anonymous",
+    "Every post is an opportunity.",
     "Not to be different is virtually suicidal. — Bill Bernbach",
     "Social media is about the people. — Matt Goulart",
     "Focus on how to be social. — Jay Baer",
-    "Great design speaks louder than words. — Anonymous"
+    "Great design speaks louder than words."
   ],
   video_editor: [
     "Editing is where stories truly come alive.",
@@ -280,6 +280,7 @@ function App() {
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [notifMessage, setNotifMessage] = useState('');
+  const [, setTick] = useState(0); // For real-time updates
   const [newTask, setNewTask] = useState({
     taskDetails: '',
     remarks: '',
@@ -344,6 +345,14 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [currentUser]);
+
+  // Force re-render every 30 seconds to update time displays
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (currentUser && !isAdmin) setTaskViewMode('assigned');
@@ -450,43 +459,67 @@ function App() {
           status: newStatus
         })
       });
+      setTimeout(() => loadAttendanceBackground(), 1500);
     } catch (error) {}
   };
 
+  // FIXED TIME CALCULATION - Works with even 1 entry
   const calculateWorkingTime = (log) => {
     if (!log || typeof log !== 'string') return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
     try {
       const events = log.split('|').map(e => {
         const parts = e.split(':');
         if (parts.length < 2) return null;
-        const time = new Date(parts.slice(1).join(':'));
+        const status = parts[0];
+        const timeStr = parts.slice(1).join(':');
+        const time = new Date(timeStr);
         if (isNaN(time.getTime())) return null;
-        return { status: parts[0], time };
+        return { status, time };
       }).filter(e => e !== null);
+      
       if (events.length === 0) return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
-      let workingMs = 0, breakMs = 0;
+      
+      let workingMs = 0;
+      let breakMs = 0;
+      const now = new Date();
+      
+      // Calculate duration between consecutive events
       for (let i = 0; i < events.length - 1; i++) {
         const duration = events[i + 1].time - events[i].time;
         if (duration < 0) continue;
-        if (events[i].status === 'Working') workingMs += duration;
-        else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(events[i].status)) breakMs += duration;
-      }
-      const lastEvent = events[events.length - 1];
-      if (lastEvent && lastEvent.status !== 'Signed Out') {
-        const duration = new Date() - lastEvent.time;
-        if (duration > 0) {
-          if (lastEvent.status === 'Working') workingMs += duration;
-          else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(lastEvent.status)) breakMs += duration;
+        if (events[i].status === 'Working') {
+          workingMs += duration;
+        } else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(events[i].status)) {
+          breakMs += duration;
         }
       }
-      const wh = Math.floor(workingMs / 3600000);
-      const wm = Math.floor((workingMs % 3600000) / 60000);
-      const bh = Math.floor(breakMs / 3600000);
-      const bm = Math.floor((breakMs % 3600000) / 60000);
+      
+      // Calculate time from LAST event to NOW (if not signed out)
+      const lastEvent = events[events.length - 1];
+      if (lastEvent && lastEvent.status !== 'Signed Out') {
+        const duration = now - lastEvent.time;
+        if (duration > 0) {
+          if (lastEvent.status === 'Working') {
+            workingMs += duration;
+          } else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(lastEvent.status)) {
+            breakMs += duration;
+          }
+        }
+      }
+      
+      const workingHours = Math.floor(workingMs / (1000 * 60 * 60));
+      const workingMins = Math.floor((workingMs % (1000 * 60 * 60)) / (1000 * 60));
+      const breakHours = Math.floor(breakMs / (1000 * 60 * 60));
+      const breakMins = Math.floor((breakMs % (1000 * 60 * 60)) / (1000 * 60));
       const totalMs = workingMs + breakMs;
       const productivity = totalMs > 0 ? Math.round((workingMs / totalMs) * 100) : 0;
-      return { working: `${wh}h ${wm}m`, breaks: `${bh}h ${bm}m`, productivity };
-    } catch (e) {
+      
+      return {
+        working: `${workingHours}h ${workingMins}m`,
+        breaks: `${breakHours}h ${breakMins}m`,
+        productivity: productivity
+      };
+    } catch (error) {
       return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
     }
   };
@@ -553,7 +586,6 @@ function App() {
         targetDate: newTask.taskType === 'Routine' ? newTask.startDate : newTask.targetDate
       };
       
-      // Optimistic update
       const tempTask = {
         id: Date.now(),
         ...taskData,
@@ -740,6 +772,7 @@ function App() {
 
       {!loading && (
         <>
+          {/* Personal Attendance Card - Team members + HR */}
           {(!isAdmin || isHR) && (
             <div className="attendance-card-premium">
               <h3>⏰ Your Attendance Today</h3>
@@ -778,6 +811,7 @@ function App() {
             </div>
           )}
 
+          {/* Team Status - Admin AND HR can see */}
           {(isAdmin || isHR) && (
             <div className="team-status-section">
               <div className="section-header" onClick={() => setShowAttendance(!showAttendance)}>

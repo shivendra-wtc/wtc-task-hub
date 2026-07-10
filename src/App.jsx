@@ -7,66 +7,46 @@ const QUOTES = {
   manager: [
     "Great leaders create more leaders, not followers. — Tom Peters",
     "Vision without execution is hallucination. — Thomas Edison",
-    "A leader is one who knows the way, goes the way, and shows the way. — John C. Maxwell",
     "Management is doing things right; leadership is doing the right things. — Peter Drucker",
     "Innovation distinguishes between a leader and a follower. — Steve Jobs",
-    "The best executive is the one who has sense enough to pick good people. — Theodore Roosevelt",
     "Leadership is not about being in charge. It's about taking care of those in your charge. — Simon Sinek",
-    "Don't tell people how to do things, tell them what to do and let them surprise you. — George Patton",
-    "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
+    "Success is not final, failure is not fatal. — Winston Churchill",
     "Discipline is the bridge between goals and accomplishment. — Jim Rohn",
     "The way to get started is to quit talking and begin doing. — Walt Disney",
     "A goal without a plan is just a wish. — Antoine de Saint-Exupery",
-    "Great things never come from comfort zones. — Neil Strauss",
-    "Dream big, work hard, stay focused.",
+    "Great things never come from comfort zones.",
     "The harder you work, the luckier you get. — Gary Player",
     "Believe you can and you're halfway there. — Theodore Roosevelt",
-    "Coming together is a beginning, staying together is progress, working together is success. — Henry Ford",
     "Effective leadership is putting first things first. — Stephen Covey",
-    "The function of leadership is to produce more leaders, not more followers. — Ralph Nader",
     "Quality is not an act, it is a habit. — Aristotle",
-    "Excellence is never an accident. It's a choice. — Aristotle",
-    "If your actions inspire others, you are a leader. — John Quincy Adams",
-    "Leaders think and talk about the solutions. Followers think and talk about the problems. — Brian Tracy",
-    "A leader takes people where they ought to be. — Rosalynn Carter",
-    "The leader adjusts the sails. — John Maxwell",
-    "Lead from the front.",
-    "The greatest leader gets people to do the greatest things. — Ronald Reagan",
+    "Excellence is never an accident. — Aristotle",
     "Do what you can, with what you have, where you are. — Theodore Roosevelt",
+    "The only way to do great work is to love what you do. — Steve Jobs",
     "Success comes to those too busy to look for it. — Henry David Thoreau",
-    "The only way to do great work is to love what you do. — Steve Jobs"
+    "Coming together is a beginning, staying together is success. — Henry Ford",
+    "Lead by example, not by command."
   ],
   ceo: [
-    "The role of a CEO is to ask the right questions, not have all the answers. — Ken Blanchard",
+    "The role of a CEO is to ask the right questions. — Ken Blanchard",
     "Chase the vision, not the money. — Tony Hsieh",
     "Innovation is saying no to a thousand things. — Steve Jobs",
     "Culture eats strategy for breakfast. — Peter Drucker",
-    "Your most unhappy customers are your greatest source of learning. — Bill Gates",
     "The best way to predict the future is to create it. — Peter Drucker",
-    "A brand for a company is like a reputation for a person. — Jeff Bezos",
+    "A brand is like a reputation for a person. — Jeff Bezos",
     "Move fast and break things. — Mark Zuckerberg",
-    "Ideas are commodities. Execution of them is not. — Michael Dell",
-    "The successful warrior has laser-like focus. — Bruce Lee",
-    "Whether you think you can or think you can't, you're right. — Henry Ford",
-    "Business opportunities are like buses, there's always another one coming. — Richard Branson",
-    "Don't be afraid to give up the good to go for the great. — John D. Rockefeller",
-    "Success is walking from failure to failure with no loss of enthusiasm. — Winston Churchill",
-    "In the middle of every difficulty lies opportunity. — Albert Einstein",
-    "The value of an idea lies in the using of it. — Thomas Edison",
-    "Every problem is a gift. — Anthony Robbins",
-    "Do what you feel in your heart to be right. — Eleanor Roosevelt",
-    "The greatest glory lies in rising every time we fall. — Nelson Mandela",
-    "Your work will fill a large part of your life. Do great work. — Steve Jobs",
-    "Perseverance makes overnight success. — Biz Stone",
+    "Ideas are commodities. Execution is not. — Michael Dell",
+    "Whether you think you can or can't, you're right. — Henry Ford",
+    "Business opportunities are like buses. — Richard Branson",
+    "Success is walking from failure to failure with no loss of enthusiasm. — Churchill",
+    "In the middle of every difficulty lies opportunity. — Einstein",
+    "The greatest glory lies in rising every time we fall. — Mandela",
     "Get big quietly. — Chris Dixon",
     "It's about making ideas happen. — Scott Belsky",
-    "Ask what your customer really wants. — Lisa Stone",
-    "Business is more exciting than any game. — Lord Beaverbrook",
     "Quit talking and begin doing. — Walt Disney",
-    "If not embarrassed by first version, you launched too late. — Reid Hoffman",
+    "Try to become a person of value. — Einstein",
+    "Do what you feel in your heart to be right. — Eleanor Roosevelt",
     "Self-education will make you a fortune. — Jim Rohn",
-    "Go where there is no path. — Ralph Waldo Emerson",
-    "Try to become a person of value. — Albert Einstein"
+    "Go where there is no path. — Ralph Waldo Emerson"
   ],
   social_media: [
     "Content is king, but engagement is queen. — Mari Smith",
@@ -75,29 +55,19 @@ const QUOTES = {
     "Creativity takes courage. — Henri Matisse",
     "Content is fire, social media is gasoline. — Jay Baer",
     "Be so good they can't ignore you. — Steve Martin",
-    "Creativity is intelligence having fun. — Albert Einstein",
-    "Every great design begins with an even better story. — Lorinda Mamo",
-    "Good design is good business. — Thomas Watson Jr.",
-    "The best marketing doesn't feel like marketing. — Tom Fishburne",
-    "Storytelling is the most powerful way to put ideas into the world. — Robert McKee",
+    "Creativity is intelligence having fun. — Einstein",
+    "Every great design begins with an even better story.",
+    "Good design is good business.",
+    "The best marketing doesn't feel like marketing.",
+    "Storytelling is the most powerful way to put ideas into the world.",
     "Make it simple. Make it memorable. — Leo Burnett",
-    "Aesthetic matters. First impressions count.",
-    "Engagement is the new ROI.",
-    "The technology inspires the art. — John Lasseter",
-    "Design is intelligence made visible. — Alina Wheeler",
     "Marketing is about the stories you tell. — Seth Godin",
-    "Create content that tells. — Beth Comstock",
-    "Don't be afraid to get creative. — Mike Volpe",
-    "Behind every great brand is a great story.",
-    "Simplicity is the ultimate sophistication. — Leonardo da Vinci",
+    "Simplicity is the ultimate sophistication. — Da Vinci",
     "Design is how it works. — Steve Jobs",
     "The details make the design. — Charles Eames",
-    "Everything is designed. — Brian Reed",
-    "Content is the atomic particle of marketing. — Rebecca Lieb",
-    "Every post is an opportunity.",
-    "Not to be different is virtually suicidal. — Bill Bernbach",
-    "Social media is about the people. — Matt Goulart",
     "Focus on how to be social. — Jay Baer",
+    "Social media is about the people.",
+    "Not to be different is virtually suicidal.",
     "Great design speaks louder than words."
   ],
   video_editor: [
@@ -108,38 +78,27 @@ const QUOTES = {
     "Master the rhythm, master the edit.",
     "The frame is your canvas. Paint emotions.",
     "Color tells the story words cannot.",
-    "Great editing is invisible. Bad editing is unforgettable.",
+    "Great editing is invisible.",
     "Timing is everything in video editing.",
-    "Less is more - especially in editing.",
+    "Less is more in editing.",
     "The magic happens in post-production.",
-    "You don't edit videos, you craft experiences.",
-    "Render. Review. Refine. Repeat.",
+    "You craft experiences, not just videos.",
     "B-roll is the bridge between great shots.",
     "Make every second count.",
     "Transition with purpose, cut with reason.",
-    "Editing is the strongest manipulator of cinema. — Walter Murch",
-    "Cinema is what's in the frame and what's out. — Martin Scorsese",
-    "A film is a petrified fountain of thought. — Jean Cocteau",
-    "Editing is making good shots better.",
-    "Style is knowing who you are. — Orson Welles",
-    "Cinema is a mirror. — Alejandro Iñárritu",
-    "Directors are storytellers. — Kathryn Bigelow",
-    "The camera is a paintbrush. — Peter Weir",
-    "Film is a mosaic of time. — Andrei Tarkovsky",
-    "Video editing is 90% creativity.",
+    "Cinema is what's in the frame. — Scorsese",
     "Sound design is half the experience.",
-    "Every project teaches something new.",
     "Patience in editing equals perfection.",
-    "The soul of storytelling lies in the edit."
+    "The soul of storytelling lies in the edit.",
+    "Render. Review. Refine. Repeat."
   ],
   pr: [
-    "PR is what you do, say, and what others say about you.",
+    "PR is what others say about you.",
     "Build relationships, not just contacts.",
     "Reputation takes years to build, minutes to destroy. — Warren Buffett",
     "Trust is the foundation of all communication.",
     "Your story is your strongest asset.",
     "Make news, don't chase it.",
-    "The right pitch at the right time changes everything.",
     "Press releases tell, stories sell.",
     "Be quotable. Be memorable. Be authentic.",
     "Listen first, speak second. — Stephen Covey",
@@ -150,23 +109,14 @@ const QUOTES = {
     "Empathy is the secret weapon of PR.",
     "Authenticity wins in PR.",
     "Your media list is your goldmine.",
-    "Communication works for those who work at it. — John Powell",
     "The best PR is great work.",
-    "Publicity is the nuclear weapon of business. — Al Ries",
-    "PR is analyzing trends.",
-    "Great communicators build relationships.",
-    "Words have power to build or destroy.",
-    "It's what others say about you.",
-    "In PR, silence is not golden.",
-    "Guard your reputation with your life.",
     "Perception is reality in PR.",
-    "Great PR is invisible but effective.",
-    "PR: Making the truth interesting.",
-    "The best press releases tell stories."
+    "Great communicators build relationships.",
+    "Words have power to build or destroy."
   ],
   hr: [
-    "HR is about the business, not just HR.",
-    "Take care of your employees and they'll take care of your business. — Richard Branson",
+    "HR is about the business.",
+    "Take care of your employees. — Richard Branson",
     "People never forget how you made them feel. — Maya Angelou",
     "Culture eats strategy for breakfast. — Peter Drucker",
     "Hire character. Train skill. — Peter Schutz",
@@ -178,22 +128,12 @@ const QUOTES = {
     "Your culture is your competitive advantage.",
     "HR is the heart of every organization.",
     "People work for purpose, not paychecks.",
-    "The strength of the team is each member. — Phil Jackson",
-    "Great vision without great people is irrelevant. — Jim Collins",
+    "The strength of the team is each member.",
+    "Great vision without great people is irrelevant.",
     "Be the leader you wish you had.",
-    "Compassion in leadership is courage.",
-    "Workplace happiness is a foundation.",
     "Employees are your most valuable asset.",
-    "Train them well so they can leave, treat them well so they don't want to. — Richard Branson",
-    "How employees feel is how customers feel. — Sybil F. Stershic",
-    "The greatest asset is people. — Jorge Paulo Lemann",
-    "Motivation comes from working on things we care about. — Sheryl Sandberg",
-    "Leadership is taking care of those in your charge. — Simon Sinek",
-    "A great employee is hard to find. — Tammy Cohen",
-    "Working together is success. — Henry Ford",
-    "Engagement is emotional commitment. — Kevin Kruse",
-    "Build people, then people build the business. — Zig Ziglar",
-    "The best HR is invisible.",
+    "How employees feel is how customers feel.",
+    "Motivation comes from working on things we care about.",
     "People don't leave companies, they leave managers."
   ]
 };
@@ -201,7 +141,15 @@ const QUOTES = {
 function App() {
   const channels = [
     'AG Insta', 'AG YT', 'The Fact-Tree YT', 'The Fact-Tree Insta',
-    'HisTree YT', 'HisTree Insta', 'AG.books Insta', 'Other'
+    'HisTree YT', 'HisTree Insta', 'AG.books Insta',
+    "The 7c's YT", 'Spotify', 'LinkedIn', 'Twitter',
+    'Poorvaj Insta', 'Devastram Insta', 'Other'
+  ];
+
+  const categories = [
+    'Social Media', 'Banking', 'Software/Automation', 'Mails',
+    'Special Tasks', 'General', 'Legal', 'Staff',
+    'Business', 'Other', 'Calls', 'Meeting', 'Shri Mandir'
   ];
 
   const team = [
@@ -217,11 +165,20 @@ function App() {
     { id: 'saraswati', name: 'Saraswati', displayName: 'Saraswati', fullName: 'Saraswati Rai', role: 'Social Media Exec & Design', avatar: 'SR', quoteType: 'social_media' },
     { id: 'charu', name: 'Charu', displayName: 'Charu', fullName: 'Charu Nagdawani', role: 'Social Media Exec & Design', avatar: 'CN', quoteType: 'social_media' },
     { id: 'naman', name: 'Naman', displayName: 'Naman', fullName: 'Naman Jain', role: 'Video Editor', avatar: 'NJ', quoteType: 'video_editor' },
-    { id: 'karan', name: 'Karan', displayName: 'Karan', fullName: 'Karan', role: 'Video Editor', avatar: 'KR', quoteType: 'video_editor' }
+    { id: 'karan', name: 'Karan', displayName: 'Karan', fullName: 'Karan', role: 'Video Editor', avatar: 'KR', quoteType: 'video_editor' },
+    { id: 'jagdish', name: 'Jagdish', displayName: 'Jagdish', fullName: 'Jagdish Sahu', role: 'Team Member', avatar: 'JS', quoteType: 'social_media' }
   ];
 
-  const extraAssignees = ['Jagdish Sahu'];
+  const extraAssignees = ['AG', 'BG'];
   const allAssignees = [...team.map(t => t.name), ...extraAssignees];
+
+  const getAvatarForName = (name) => {
+    const member = team.find(t => t.name === name);
+    if (member) return member.avatar;
+    if (name === 'AG') return 'AG';
+    if (name === 'BG') return 'BG';
+    return name.substring(0, 2).toUpperCase();
+  };
 
   const getUserFromURL = () => {
     const params = new URLSearchParams(window.location.search);
@@ -262,12 +219,15 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [inbox, setInbox] = useState([]);
+  const [chats, setChats] = useState([]);
   const [prevInboxCount, setPrevInboxCount] = useState(0);
+  const [prevChatCount, setPrevChatCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(getUserFromURL());
   const [managerView, setManagerView] = useState('all');
   const [filterStatus, setFilterStatus] = useState('All');
   const [filterChannel, setFilterChannel] = useState('All');
+  const [filterCategory, setFilterCategory] = useState('All');
   const [filterTaskType, setFilterTaskType] = useState('All');
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -276,18 +236,22 @@ function App() {
   const [showAttendance, setShowAttendance] = useState(false);
   const [taskViewMode, setTaskViewMode] = useState('all');
   const [showInbox, setShowInbox] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [selectedAssignees, setSelectedAssignees] = useState([]);
+  const [selectedChannels, setSelectedChannels] = useState([]);
   const [showNotifPopup, setShowNotifPopup] = useState(false);
   const [notifMessage, setNotifMessage] = useState('');
-  const [, setTick] = useState(0); // For real-time updates
+  const [, setTick] = useState(0);
+  const [chatWith, setChatWith] = useState(null);
+  const [newMessage, setNewMessage] = useState('');
   const [newTask, setNewTask] = useState({
     taskDetails: '',
     remarks: '',
     priority: 'Medium',
     targetDate: '',
-    channel: '',
     taskType: 'General',
+    category: '',
     frequency: 'Daily',
     startDate: '',
     endDate: ''
@@ -332,6 +296,7 @@ function App() {
       loadTasks();
       loadAttendance();
       loadInbox();
+      loadChats();
     }
   }, [currentUser]);
 
@@ -341,16 +306,17 @@ function App() {
         loadTasksBackground();
         loadAttendanceBackground();
         loadInboxBackground();
-      }, 30000);
+        loadChatsBackground();
+      }, 15000);
       return () => clearInterval(interval);
     }
   }, [currentUser]);
 
-  // Force re-render every 30 seconds to update time displays
+  // Real-time timer update every SECOND
   useEffect(() => {
     const timer = setInterval(() => {
       setTick(t => t + 1);
-    }, 30000);
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -372,14 +338,27 @@ function App() {
     setPrevInboxCount(unreadCount);
   }, [inbox]);
 
+  useEffect(() => {
+    const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
+    if (unreadChats > prevChatCount && prevChatCount > 0) {
+      const newestChat = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).pop();
+      if (newestChat) {
+        playNotifSound();
+        setNotifMessage(`💬 New message from ${newestChat.from}`);
+        setShowNotifPopup(true);
+        setTimeout(() => setShowNotifPopup(false), 5000);
+      }
+    }
+    setPrevChatCount(unreadChats);
+  }, [chats]);
+
   const loadTasks = async () => {
     try {
       setLoading(true);
       const response = await fetch(API_URL + '?action=getTasks');
       const data = await response.json();
       if (data.status === 'ok') setTasks(data.tasks);
-    } catch (error) { console.error(error); }
-    finally { setLoading(false); }
+    } catch (error) {} finally { setLoading(false); }
   };
 
   const loadTasksBackground = async () => {
@@ -413,6 +392,24 @@ function App() {
       const response = await fetch(API_URL + '?action=getInbox&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
       if (data.status === 'ok') setInbox(data.inbox);
+    } catch (error) {}
+  };
+
+  const loadChats = async () => {
+    if (!currentUserInfo) return;
+    try {
+      const response = await fetch(API_URL + '?action=getChats&userName=' + encodeURIComponent(currentUserInfo.name));
+      const data = await response.json();
+      if (data.status === 'ok') setChats(data.chats);
+    } catch (error) {}
+  };
+
+  const loadChatsBackground = async () => {
+    if (!currentUserInfo) return;
+    try {
+      const response = await fetch(API_URL + '?action=getChats&userName=' + encodeURIComponent(currentUserInfo.name));
+      const data = await response.json();
+      if (data.status === 'ok') setChats(data.chats);
     } catch (error) {}
   };
 
@@ -463,64 +460,54 @@ function App() {
     } catch (error) {}
   };
 
-  // FIXED TIME CALCULATION - Works with even 1 entry
   const calculateWorkingTime = (log) => {
-    if (!log || typeof log !== 'string') return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
+    if (!log || typeof log !== 'string') return { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
     try {
-      const events = log.split('|').map(e => {
-        const parts = e.split(':');
-        if (parts.length < 2) return null;
-        const status = parts[0];
-        const timeStr = parts.slice(1).join(':');
+      const eventStrings = log.split('||EVT||');
+      const events = [];
+      for (const eventStr of eventStrings) {
+        const parts = eventStr.split('|SEP|');
+        if (parts.length !== 2) continue;
+        const status = parts[0].trim();
+        const timeStr = parts[1].trim();
+        if (!status || !timeStr) continue;
         const time = new Date(timeStr);
-        if (isNaN(time.getTime())) return null;
-        return { status, time };
-      }).filter(e => e !== null);
-      
-      if (events.length === 0) return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
-      
+        if (isNaN(time.getTime())) continue;
+        events.push({ status, time });
+      }
+      if (events.length === 0) return { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
       let workingMs = 0;
       let breakMs = 0;
       const now = new Date();
-      
-      // Calculate duration between consecutive events
       for (let i = 0; i < events.length - 1; i++) {
         const duration = events[i + 1].time - events[i].time;
         if (duration < 0) continue;
-        if (events[i].status === 'Working') {
-          workingMs += duration;
-        } else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(events[i].status)) {
-          breakMs += duration;
-        }
+        if (events[i].status === 'Working') workingMs += duration;
+        else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(events[i].status)) breakMs += duration;
       }
-      
-      // Calculate time from LAST event to NOW (if not signed out)
       const lastEvent = events[events.length - 1];
       if (lastEvent && lastEvent.status !== 'Signed Out') {
         const duration = now - lastEvent.time;
         if (duration > 0) {
-          if (lastEvent.status === 'Working') {
-            workingMs += duration;
-          } else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(lastEvent.status)) {
-            breakMs += duration;
-          }
+          if (lastEvent.status === 'Working') workingMs += duration;
+          else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(lastEvent.status)) breakMs += duration;
         }
       }
-      
-      const workingHours = Math.floor(workingMs / (1000 * 60 * 60));
-      const workingMins = Math.floor((workingMs % (1000 * 60 * 60)) / (1000 * 60));
-      const breakHours = Math.floor(breakMs / (1000 * 60 * 60));
-      const breakMins = Math.floor((breakMs % (1000 * 60 * 60)) / (1000 * 60));
+      const workingH = Math.floor(workingMs / 3600000);
+      const workingM = Math.floor((workingMs % 3600000) / 60000);
+      const workingS = Math.floor((workingMs % 60000) / 1000);
+      const breakH = Math.floor(breakMs / 3600000);
+      const breakM = Math.floor((breakMs % 3600000) / 60000);
+      const breakS = Math.floor((breakMs % 60000) / 1000);
       const totalMs = workingMs + breakMs;
       const productivity = totalMs > 0 ? Math.round((workingMs / totalMs) * 100) : 0;
-      
       return {
-        working: `${workingHours}h ${workingMins}m`,
-        breaks: `${breakHours}h ${breakMins}m`,
+        working: `${workingH}h ${workingM}m ${workingS}s`,
+        breaks: `${breakH}h ${breakM}m ${breakS}s`,
         productivity: productivity
       };
     } catch (error) {
-      return { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
+      return { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
     }
   };
 
@@ -546,6 +533,9 @@ function App() {
         }
       }
     } else {
+      // Hide routine tasks from non-admin users
+      if (t.taskType === 'Routine' || t.taskType === 'Routine Instance') return false;
+      
       if (taskViewMode === 'assigned') {
         if (!isTaskAssignedToMe(t)) return false;
       } else if (taskViewMode === 'by_me') {
@@ -555,7 +545,8 @@ function App() {
       }
     }
     if (filterStatus !== 'All' && t.status !== filterStatus) return false;
-    if (filterChannel !== 'All' && t.channel !== filterChannel) return false;
+    if (filterChannel !== 'All' && !String(t.channel).split(',').map(c => c.trim()).includes(filterChannel)) return false;
+    if (filterCategory !== 'All' && t.category !== filterCategory) return false;
     if (filterTaskType !== 'All') {
       if (filterTaskType === 'General' && t.taskType !== 'General') return false;
       if (filterTaskType === 'Routine' && !['Routine', 'Routine Instance'].includes(t.taskType)) return false;
@@ -564,8 +555,8 @@ function App() {
   });
 
   const handleAddTask = async () => {
-    if (selectedAssignees.length === 0 || !newTask.taskDetails || !newTask.channel) {
-      alert('Please fill required fields and select assignee!');
+    if (selectedAssignees.length === 0 || !newTask.taskDetails) {
+      alert('Please fill Task Details and select at least one assignee!');
       return;
     }
     if (newTask.taskType === 'General' && !newTask.targetDate) {
@@ -581,29 +572,24 @@ function App() {
       const taskData = {
         ...newTask,
         assignedTo: selectedAssignees.join(', '),
+        channel: selectedChannels.length > 0 ? selectedChannels.join(', ') : 'Other',
         assignedBy: currentUserInfo.name,
         status: 'Not Started',
         targetDate: newTask.taskType === 'Routine' ? newTask.startDate : newTask.targetDate
       };
-      
-      const tempTask = {
-        id: Date.now(),
-        ...taskData,
-        delayDays: 0
-      };
+      const tempTask = { id: Date.now(), ...taskData, delayDays: 0 };
       setTasks([...tasks, tempTask]);
-      
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addTask', task: taskData })
       });
-      
       setNewTask({
         taskDetails: '', remarks: '', priority: 'Medium', targetDate: '',
-        channel: '', taskType: 'General', frequency: 'Daily', startDate: '', endDate: ''
+        taskType: 'General', category: '', frequency: 'Daily', startDate: '', endDate: ''
       });
       setSelectedAssignees([]);
+      setSelectedChannels([]);
       setShowNewTaskForm(false);
       setSaving(false);
       setTimeout(() => loadTasksBackground(), 2000);
@@ -644,6 +630,14 @@ function App() {
     }
   };
 
+  const toggleChannel = (channel) => {
+    if (selectedChannels.includes(channel)) {
+      setSelectedChannels(selectedChannels.filter(c => c !== channel));
+    } else {
+      setSelectedChannels([...selectedChannels, channel]);
+    }
+  };
+
   const markAllInboxRead = async () => {
     for (const item of inbox.filter(i => i.read === 'No')) {
       try {
@@ -664,6 +658,76 @@ function App() {
     }
   };
 
+  const openChat = () => {
+    setShowChat(!showChat);
+    if (showChat) setChatWith(null);
+  };
+
+  const openChatWith = (person) => {
+    setChatWith(person);
+    // Mark chats as read
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'markChatRead', from: person, to: currentUserInfo.name })
+    });
+    setChats(chats.map(c => (c.from === person && c.to === currentUserInfo.name) ? { ...c, read: 'Yes' } : c));
+  };
+
+  const sendMessage = () => {
+    if (!newMessage.trim() || !chatWith) return;
+    const message = newMessage.trim();
+    // Optimistic update
+    const tempChat = {
+      id: Date.now(),
+      from: currentUserInfo.name,
+      to: chatWith,
+      message: message,
+      timestamp: new Date().toISOString(),
+      read: 'No',
+      type: 'message'
+    };
+    setChats([...chats, tempChat]);
+    setNewMessage('');
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'sendChat',
+        from: currentUserInfo.name,
+        to: chatWith,
+        message: message
+      })
+    });
+    setTimeout(() => loadChatsBackground(), 1500);
+  };
+
+  const getConversationList = () => {
+    const conversations = {};
+    chats.forEach(chat => {
+      const otherPerson = chat.from === currentUserInfo?.name ? chat.to : chat.from;
+      if (!conversations[otherPerson]) {
+        conversations[otherPerson] = { lastMessage: chat, unreadCount: 0 };
+      }
+      if (new Date(chat.timestamp) > new Date(conversations[otherPerson].lastMessage.timestamp)) {
+        conversations[otherPerson].lastMessage = chat;
+      }
+      if (chat.to === currentUserInfo?.name && chat.read === 'No') {
+        conversations[otherPerson].unreadCount++;
+      }
+    });
+    return Object.entries(conversations).map(([person, data]) => ({ person, ...data }))
+      .sort((a, b) => new Date(b.lastMessage.timestamp) - new Date(a.lastMessage.timestamp));
+  };
+
+  const getConversationMessages = () => {
+    if (!chatWith) return [];
+    return chats.filter(c => 
+      (c.from === currentUserInfo?.name && c.to === chatWith) ||
+      (c.from === chatWith && c.to === currentUserInfo?.name)
+    ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  };
+
   const getViewTitle = () => {
     if (isAdmin && taskViewMode === 'all' && managerView === 'all') return 'All Team Tasks';
     if (isAdmin && taskViewMode === 'all' && managerView !== 'all') {
@@ -677,6 +741,7 @@ function App() {
   };
 
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
+  const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
 
   if (isInvalidUser) {
     return (
@@ -726,11 +791,15 @@ function App() {
           </div>
           
           <div className="header-actions-premium">
+            <button className="icon-btn" onClick={openChat} title="Chat">
+              💬
+              {unreadChats > 0 && <span className="badge-count">{unreadChats}</span>}
+            </button>
             <button className="icon-btn" onClick={openInbox} title="Inbox">
               🔔
               {unreadInbox > 0 && <span className="badge-count">{unreadInbox}</span>}
             </button>
-            <button className="icon-btn" onClick={() => { loadTasks(); loadAttendance(); loadInbox(); }} title="Refresh">
+            <button className="icon-btn" onClick={() => { loadTasks(); loadAttendance(); loadInbox(); loadChats(); }} title="Refresh">
               🔄
             </button>
             {!showArchive && (
@@ -743,12 +812,12 @@ function App() {
       </header>
 
       {showInbox && (
-        <div className="inbox-panel">
-          <div className="inbox-header">
+        <div className="side-panel">
+          <div className="panel-header">
             <h3>📥 Your Inbox ({inbox.length})</h3>
             <button className="close-btn" onClick={() => setShowInbox(false)}>✕</button>
           </div>
-          <div className="inbox-body">
+          <div className="panel-body">
             {inbox.length === 0 ? (
               <p className="empty-text">No notifications yet</p>
             ) : (
@@ -768,11 +837,83 @@ function App() {
         </div>
       )}
 
+      {showChat && (
+        <div className="side-panel chat-panel">
+          <div className="panel-header">
+            {chatWith ? (
+              <>
+                <button className="back-btn" onClick={() => setChatWith(null)}>←</button>
+                <h3>💬 {chatWith}</h3>
+              </>
+            ) : (
+              <h3>💬 Team Chat</h3>
+            )}
+            <button className="close-btn" onClick={openChat}>✕</button>
+          </div>
+          {!chatWith ? (
+            <div className="panel-body">
+              <div className="chat-search">
+                <p className="section-title">Start new chat:</p>
+                <div className="team-list">
+                  {team.filter(m => m.id !== currentUser).map(member => (
+                    <div key={member.id} className="team-chat-item" onClick={() => openChatWith(member.name)}>
+                      <div className="chat-avatar">{member.avatar}</div>
+                      <div className="chat-info">
+                        <strong>{member.displayName}</strong>
+                        <span>{member.role}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {getConversationList().length > 0 && (
+                  <>
+                    <p className="section-title" style={{marginTop: '20px'}}>Recent conversations:</p>
+                    {getConversationList().map(conv => {
+                      const member = team.find(t => t.name === conv.person);
+                      return (
+                        <div key={conv.person} className="team-chat-item" onClick={() => openChatWith(conv.person)}>
+                          <div className="chat-avatar">{member?.avatar || conv.person.substring(0, 2)}</div>
+                          <div className="chat-info">
+                            <strong>{conv.person}</strong>
+                            <span className="last-msg">{conv.lastMessage.message.substring(0, 40)}</span>
+                          </div>
+                          {conv.unreadCount > 0 && <span className="unread-badge">{conv.unreadCount}</span>}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="chat-messages">
+                {getConversationMessages().map(msg => (
+                  <div key={msg.id} className={`chat-bubble ${msg.from === currentUserInfo.name ? 'sent' : 'received'}`}>
+                    <div className="chat-text">{msg.message}</div>
+                    <div className="chat-time">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="chat-input">
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                />
+                <button onClick={sendMessage}>➤</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {loading && <div className="loading-state"><p>Loading...</p></div>}
 
       {!loading && (
         <>
-          {/* Personal Attendance Card - Team members + HR */}
           {(!isAdmin || isHR) && (
             <div className="attendance-card-premium">
               <h3>⏰ Your Attendance Today</h3>
@@ -811,7 +952,6 @@ function App() {
             </div>
           )}
 
-          {/* Team Status - Admin AND HR can see */}
           {(isAdmin || isHR) && (
             <div className="team-status-section">
               <div className="section-header" onClick={() => setShowAttendance(!showAttendance)}>
@@ -822,7 +962,7 @@ function App() {
                   {team.filter(m => !m.isAdmin && !m.isHR).map(member => {
                     const memberAttendance = attendance.find(a => a.userId === member.id);
                     const status = memberAttendance?.status || 'Not Signed In';
-                    const times = memberAttendance ? calculateWorkingTime(memberAttendance.log) : { working: '0h 0m', breaks: '0h 0m', productivity: 0 };
+                    const times = memberAttendance ? calculateWorkingTime(memberAttendance.log) : { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
                     return (
                       <div key={member.id} className="status-card">
                         <div className="status-avatar" style={{background: attendanceColors[status]}}>{member.avatar}</div>
@@ -855,13 +995,15 @@ function App() {
               <button className={taskViewMode === 'own' ? 'active' : ''} onClick={() => setTaskViewMode('own')}>
                 📝 My Own Tasks
               </button>
-              <button className="btn-archive" onClick={() => { setShowArchive(true); loadArchive(); }}>
-                📁 View Archive
-              </button>
+              {isAdmin && (
+                <button className="btn-archive" onClick={() => { setShowArchive(true); loadArchive(); }}>
+                  📁 View Archive
+                </button>
+              )}
             </div>
           )}
 
-          {showArchive && (
+          {showArchive && isAdmin && (
             <div className="archive-view">
               <div className="archive-header">
                 <h2>📁 Completed Tasks Archive</h2>
@@ -891,8 +1033,8 @@ function App() {
                         const assignees = String(t.assignedTo).split(',').map(a => a.trim());
                         assignees.forEach(a => { counts[a] = (counts[a] || 0) + 1; });
                       });
-                      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-                      return top ? top[0] : '-';
+                      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+                      return sorted.length > 0 ? sorted[0][0] : '-';
                     })()}
                   </div>
                   <div className="stat-label">🏆 Top Performer</div>
@@ -954,11 +1096,17 @@ function App() {
                   <option>All Channels</option>
                   {channels.map(ch => <option key={ch}>{ch}</option>)}
                 </select>
-                <select value={filterTaskType} onChange={(e) => setFilterTaskType(e.target.value)}>
-                  <option value="All">All Types</option>
-                  <option value="General">📋 General</option>
-                  <option value="Routine">🔄 Routine</option>
+                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                  <option>All Categories</option>
+                  {categories.map(cat => <option key={cat}>{cat}</option>)}
                 </select>
+                {isAdmin && (
+                  <select value={filterTaskType} onChange={(e) => setFilterTaskType(e.target.value)}>
+                    <option value="All">All Types</option>
+                    <option value="General">📋 General</option>
+                    <option value="Routine">🔄 Routine</option>
+                  </select>
+                )}
               </div>
 
               <div className="tasks-container">
@@ -972,6 +1120,7 @@ function App() {
                       const isCompleted = task.status === 'Completed';
                       const canChangeStatus = isAdmin || !isCompleted;
                       const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
+                      const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
                       return (
                         <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''}`}>
                           <div className={`priority-strip ${task.priority.toLowerCase()}`}></div>
@@ -980,16 +1129,24 @@ function App() {
                           <div className="task-header">
                             <h3>{task.taskDetails}</h3>
                             <div className="badges">
-                              <span className="badge-channel">{task.channel}</span>
+                              {channelList.map(ch => <span key={ch} className="badge-channel">{ch}</span>)}
                               <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
+                              {task.category && <span className="badge-category">{task.category}</span>}
                             </div>
                             {task.remarks && <p className="task-remarks">💬 {task.remarks}</p>}
                           </div>
                           <div className="task-meta">
-                            <div className="meta-info">
-                              <p className="assignee">👥 {task.assignedTo}</p>
-                              <p className="assigned-by">📌 By: <strong>{task.assignedBy}</strong></p>
-                              <p className="due-date">📅 {new Date(task.targetDate).toLocaleDateString()}</p>
+                            <div className="assignee-row">
+                              <span className="meta-label">Assigned to:</span>
+                              <div className="assignee-avatars">
+                                {String(task.assignedTo).split(',').map(a => a.trim()).map(name => (
+                                  <span key={name} className="mini-avatar" title={name}>{getAvatarForName(name)}</span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="meta-row">
+                              <span>📌 By: <strong>{task.assignedBy}</strong></span>
+                              <span>📅 {new Date(task.targetDate).toLocaleDateString()}</span>
                             </div>
                           </div>
                           <div className="task-footer">
@@ -1021,39 +1178,40 @@ function App() {
 
       {showNewTaskForm && (
         <div className="modal-overlay" onClick={() => setShowNewTaskForm(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>➕ Create New Task</h3>
               <button className="modal-close" onClick={() => setShowNewTaskForm(false)}>✕</button>
             </div>
-            <div className="modal-body">
+            <div className="modal-body compact-body">
               {isAdmin && (
                 <div className="form-group">
                   <label>Task Type</label>
                   <div className="task-type-toggle">
                     <button className={newTask.taskType === 'General' ? 'active' : ''} onClick={() => setNewTask({...newTask, taskType: 'General'})} type="button">
-                      📋 General Task
+                      📋 General
                     </button>
                     <button className={newTask.taskType === 'Routine' ? 'active' : ''} onClick={() => setNewTask({...newTask, taskType: 'Routine'})} type="button">
-                      🔄 Routine Task
+                      🔄 Routine
                     </button>
                   </div>
                 </div>
               )}
 
               <div className="form-group">
-                <label>Assign to * (Select multiple)</label>
-                <div className="assignee-list">
+                <label>Assign to * ({selectedAssignees.length} selected)</label>
+                <div className="assignee-avatars-select">
                   {allAssignees.map(name => (
-                    <label key={name} className={`assignee-item ${selectedAssignees.includes(name) ? 'checked' : ''}`}>
-                      <input type="checkbox" checked={selectedAssignees.includes(name)} onChange={() => toggleAssignee(name)} />
-                      <span className="assignee-name">{name}</span>
-                    </label>
+                    <div 
+                      key={name} 
+                      className={`avatar-select ${selectedAssignees.includes(name) ? 'checked' : ''}`}
+                      onClick={() => toggleAssignee(name)}
+                      title={name}
+                    >
+                      {getAvatarForName(name)}
+                    </div>
                   ))}
                 </div>
-                {selectedAssignees.length > 0 && (
-                  <p className="selected-count">✓ {selectedAssignees.length} selected</p>
-                )}
               </div>
 
               <div className="form-group">
@@ -1062,18 +1220,11 @@ function App() {
               </div>
 
               <div className="form-group">
-                <label>Remarks / Notes</label>
-                <input type="text" placeholder="Additional instructions" value={newTask.remarks} onChange={(e) => setNewTask({ ...newTask, remarks: e.target.value })} />
+                <label>Remarks</label>
+                <input type="text" placeholder="Additional notes (optional)" value={newTask.remarks} onChange={(e) => setNewTask({ ...newTask, remarks: e.target.value })} />
               </div>
 
               <div className="form-row">
-                <div className="form-group">
-                  <label>Channel *</label>
-                  <select value={newTask.channel} onChange={(e) => setNewTask({ ...newTask, channel: e.target.value })}>
-                    <option value="">Select...</option>
-                    {channels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                  </select>
-                </div>
                 <div className="form-group">
                   <label>Priority</label>
                   <select value={newTask.priority} onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}>
@@ -1081,6 +1232,28 @@ function App() {
                     <option>Medium</option>
                     <option>High</option>
                   </select>
+                </div>
+                <div className="form-group">
+                  <label>Category</label>
+                  <select value={newTask.category} onChange={(e) => setNewTask({ ...newTask, category: e.target.value })}>
+                    <option value="">Select (optional)</option>
+                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>Channels ({selectedChannels.length} selected)</label>
+                <div className="channel-select-grid">
+                  {channels.map(ch => (
+                    <div 
+                      key={ch}
+                      className={`channel-chip ${selectedChannels.includes(ch) ? 'checked' : ''}`}
+                      onClick={() => toggleChannel(ch)}
+                    >
+                      {ch}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -1090,7 +1263,7 @@ function App() {
                   <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.targetDate} onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} />
                 </div>
               ) : (
-                <>
+                <div className="form-row-3">
                   <div className="form-group">
                     <label>Frequency</label>
                     <select value={newTask.frequency} onChange={(e) => setNewTask({ ...newTask, frequency: e.target.value })}>
@@ -1098,17 +1271,15 @@ function App() {
                       <option value="Weekly">Weekly</option>
                     </select>
                   </div>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Start Date *</label>
-                      <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.startDate} onChange={(e) => setNewTask({ ...newTask, startDate: e.target.value })} />
-                    </div>
-                    <div className="form-group">
-                      <label>End Date (Optional)</label>
-                      <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.endDate} onChange={(e) => setNewTask({ ...newTask, endDate: e.target.value })} />
-                    </div>
+                  <div className="form-group">
+                    <label>Start *</label>
+                    <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.startDate} onChange={(e) => setNewTask({ ...newTask, startDate: e.target.value })} />
                   </div>
-                </>
+                  <div className="form-group">
+                    <label>End</label>
+                    <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.endDate} onChange={(e) => setNewTask({ ...newTask, endDate: e.target.value })} />
+                  </div>
+                </div>
               )}
             </div>
             <div className="modal-footer">

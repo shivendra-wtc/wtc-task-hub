@@ -312,7 +312,6 @@ function App() {
     }
   }, [currentUser]);
 
-  // Real-time timer update every SECOND
   useEffect(() => {
     const timer = setInterval(() => {
       setTick(t => t + 1);
@@ -533,7 +532,6 @@ function App() {
         }
       }
     } else {
-      // Hide routine tasks from non-admin users
       if (t.taskType === 'Routine' || t.taskType === 'Routine Instance') return false;
       
       if (taskViewMode === 'assigned') {
@@ -665,7 +663,6 @@ function App() {
 
   const openChatWith = (person) => {
     setChatWith(person);
-    // Mark chats as read
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
@@ -677,7 +674,6 @@ function App() {
   const sendMessage = () => {
     if (!newMessage.trim() || !chatWith) return;
     const message = newMessage.trim();
-    // Optimistic update
     const tempChat = {
       id: Date.now(),
       from: currentUserInfo.name,
@@ -1268,7 +1264,8 @@ function App() {
                     <label>Frequency</label>
                     <select value={newTask.frequency} onChange={(e) => setNewTask({ ...newTask, frequency: e.target.value })}>
                       <option value="Daily">Daily</option>
-                      <option value="Weekly">Weekly</option>
+                      <option value="Weekly">Weekly (Same day)</option>
+                      <option value="Monthly">Monthly (Same date)</option>
                     </select>
                   </div>
                   <div className="form-group">

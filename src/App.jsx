@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -138,6 +138,25 @@ const QUOTES = {
   ]
 };
 
+// Fallback roster used only until the live TeamConfig sheet responds (or if it's ever unreachable).
+// Once getTeam() succeeds, this is fully replaced by live data — see loadTeam().
+const DEFAULT_TEAM = [
+  { id: 'pcwtc45', name: 'PC', displayName: 'PC', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true, active: true },
+  { id: 'shivendrawtc77', name: 'Shivendra Singh', displayName: 'Shivendra Singh', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true, active: true },
+  { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media', active: true },
+  { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', role: 'Poorvaj', avatar: 'NV', quoteType: 'social_media', active: true },
+  { id: 'samanta', name: 'Samanta', displayName: 'Samanta', role: 'Social Media Exec & Design', avatar: 'SP', quoteType: 'social_media', active: true },
+  { id: 'muskan', name: 'Muskan', displayName: 'Muskan', role: 'Devastram', avatar: 'MC', quoteType: 'social_media', active: true },
+  { id: 'sanjeevani', name: 'Sanjeevani', displayName: 'Sanjeevani', role: 'PR Manager', avatar: 'SJ', quoteType: 'pr', active: true },
+  { id: 'pari', name: 'Pari', displayName: 'Pari', role: 'HR', avatar: 'PA', quoteType: 'hr', isHR: true, active: true },
+  { id: 'khushi', name: 'Khushi', displayName: 'Khushi', role: 'Social Media Exec & Design', avatar: 'KJ', quoteType: 'social_media', active: true },
+  { id: 'saraswati', name: 'Saraswati', displayName: 'Saraswati', role: 'Social Media Exec & Design', avatar: 'SR', quoteType: 'social_media', active: true },
+  { id: 'charu', name: 'Charu', displayName: 'Charu', role: 'Social Media Exec & Design', avatar: 'CN', quoteType: 'social_media', active: true },
+  { id: 'naman', name: 'Naman', displayName: 'Naman', role: 'Video Editor', avatar: 'NJ', quoteType: 'video_editor', active: true },
+  { id: 'karan', name: 'Karan', displayName: 'Karan', role: 'Video Editor', avatar: 'KR', quoteType: 'video_editor', active: true },
+  { id: 'jagdish', name: 'Jagdish', displayName: 'Jagdish', role: 'Team Member', avatar: 'JS', quoteType: 'social_media', active: true }
+];
+
 function App() {
   const channels = [
     'AG Insta', 'AG YT', 'The Fact-Tree YT', 'The Fact-Tree Insta',
@@ -152,25 +171,12 @@ function App() {
     'Business', 'Other', 'Calls', 'Meeting', 'Shri Mandir'
   ];
 
-  const team = [
-    { id: 'pcwtc45', name: 'PC', displayName: 'PC', fullName: 'Praveen Chilhate', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true },
-    { id: 'shivendrawtc77', name: 'Shivendra Singh', displayName: 'Shivendra Singh', fullName: 'Shivendra Singh Tomar', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true },
-    { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', fullName: 'Deeksha Jalodiya', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media' },
-    { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', fullName: 'Nidhi Vaishnav', role: 'Poorvaj', avatar: 'NV', quoteType: 'social_media' },
-    { id: 'samanta', name: 'Samanta', displayName: 'Samanta', fullName: 'Samanta Pradhan', role: 'Social Media Exec & Design', avatar: 'SP', quoteType: 'social_media' },
-    { id: 'muskan', name: 'Muskan', displayName: 'Muskan', fullName: 'Muskan Chouhan', role: 'Devastram', avatar: 'MC', quoteType: 'social_media' },
-    { id: 'sanjeevani', name: 'Sanjeevani', displayName: 'Sanjeevani', fullName: 'Sanjeevani Saxena', role: 'PR Manager', avatar: 'SJ', quoteType: 'pr' },
-    { id: 'pari', name: 'Pari', displayName: 'Pari', fullName: 'Pari Raghuwanshi', role: 'HR', avatar: 'PA', quoteType: 'hr', isHR: true },
-    { id: 'khushi', name: 'Khushi', displayName: 'Khushi', fullName: 'Khushi Jain', role: 'Social Media Exec & Design', avatar: 'KJ', quoteType: 'social_media' },
-    { id: 'saraswati', name: 'Saraswati', displayName: 'Saraswati', fullName: 'Saraswati Rai', role: 'Social Media Exec & Design', avatar: 'SR', quoteType: 'social_media' },
-    { id: 'charu', name: 'Charu', displayName: 'Charu', fullName: 'Charu Nagdawani', role: 'Social Media Exec & Design', avatar: 'CN', quoteType: 'social_media' },
-    { id: 'naman', name: 'Naman', displayName: 'Naman', fullName: 'Naman Jain', role: 'Video Editor', avatar: 'NJ', quoteType: 'video_editor' },
-    { id: 'karan', name: 'Karan', displayName: 'Karan', fullName: 'Karan', role: 'Video Editor', avatar: 'KR', quoteType: 'video_editor' },
-    { id: 'jagdish', name: 'Jagdish', displayName: 'Jagdish', fullName: 'Jagdish Sahu', role: 'Team Member', avatar: 'JS', quoteType: 'social_media' }
-  ];
+  // ---- FIX #13: team is now live state, loaded from the backend TeamConfig sheet ----
+  const [team, setTeam] = useState(DEFAULT_TEAM);
 
   const extraAssignees = ['AG', 'BG'];
-  const allAssignees = [...team.map(t => t.name), ...extraAssignees];
+  const activeTeam = team.filter(t => t.active !== false);
+  const allAssignees = [...activeTeam.map(t => t.name), ...extraAssignees];
 
   const getAvatarForName = (name) => {
     const member = team.find(t => t.name === name);
@@ -184,8 +190,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const user = params.get('user');
     if (!user) return null;
-    const member = team.find(t => t.id === user.toLowerCase());
-    return member ? member.id : null;
+    return user.toLowerCase();
   };
 
   const getDayOfYear = () => {
@@ -205,7 +210,10 @@ function App() {
   const getTodayQuote = (userId) => {
     const day = getDayOfYear();
     const member = team.find(t => t.id === userId);
-    if (member) return QUOTES[member.quoteType][day % QUOTES[member.quoteType].length];
+    if (member) {
+      const list = QUOTES[member.quoteType] || QUOTES.social_media;
+      return list[day % list.length];
+    }
     return "";
   };
 
@@ -220,8 +228,6 @@ function App() {
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [inbox, setInbox] = useState([]);
   const [chats, setChats] = useState([]);
-  const [prevInboxCount, setPrevInboxCount] = useState(0);
-  const [prevChatCount, setPrevChatCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(getUserFromURL());
   const [managerView, setManagerView] = useState('all');
@@ -230,6 +236,7 @@ function App() {
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterTaskType, setFilterTaskType] = useState('All');
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
+  const [editingTask, setEditingTask] = useState(null); // FIX #6
   const [saving, setSaving] = useState(false);
   const [attendance, setAttendance] = useState([]);
   const [myStatus, setMyStatus] = useState('Not Signed In');
@@ -238,10 +245,13 @@ function App() {
   const [showInbox, setShowInbox] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
+  const [showTeamManager, setShowTeamManager] = useState(false); // FIX #13
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedChannels, setSelectedChannels] = useState([]);
-  const [showNotifPopup, setShowNotifPopup] = useState(false);
-  const [notifMessage, setNotifMessage] = useState('');
+  const [notifQueue, setNotifQueue] = useState([]); // FIX #7/#10 — queue instead of single popup
+  const [notifPermission, setNotifPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
   const [, setTick] = useState(0);
   const [chatWith, setChatWith] = useState(null);
   const [newMessage, setNewMessage] = useState('');
@@ -257,14 +267,23 @@ function App() {
     endDate: ''
   });
 
+  // Tracks which inbox IDs we've already alerted on, per-browser, so the popup/sound/
+  // desktop notification never fires twice and never gets skipped on first load. FIX #7.
+  const seenInboxIds = useRef(new Set());
+  const seenChatIds = useRef(new Set());
+  const firstInboxLoad = useRef(true);
+  const firstChatLoad = useRef(true);
+
   const currentUserInfo = team.find(t => t.id === currentUser);
   const isAdmin = currentUserInfo?.isAdmin || false;
   const isHR = currentUserInfo?.isHR || false;
-  const isInvalidUser = !currentUser;
+  const isInvalidUser = !currentUser || !currentUserInfo;
   const displayName = currentUserInfo?.displayName || '';
   const greeting = displayName ? getTimeBasedGreeting(displayName) : '';
   const todayQuote = currentUser ? getTodayQuote(currentUser) : '';
   const formattedDate = getFormattedDate();
+  // Only PC and Shivendra ever see the Team Management panel — checked by fixed login id, not by role text.
+  const canManageTeam = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
 
   const statusColors = {
     'Not Started': '#64748b',
@@ -274,14 +293,15 @@ function App() {
     'Delayed': '#dc2626'
   };
 
+  // FIX #4 — Tea Break removed. Only Working / Lunch / Meeting / Signed Out remain.
   const attendanceColors = {
     'Working': '#059669',
-    'Tea Break': '#d97706',
     'Lunch Break': '#dc2626',
     'Meeting': '#7c3aed',
     'Signed Out': '#64748b',
     'Not Signed In': '#94a3b8'
   };
+  const BREAK_STATUSES = ['Lunch Break', 'Meeting'];
 
   const playNotifSound = () => {
     try {
@@ -290,6 +310,36 @@ function App() {
       audio.play().catch(e => {});
     } catch(e) {}
   };
+
+  // FIX #9 — Desktop/browser notification (foreground or backgrounded tab, same browser session).
+  // Note: this cannot wake a fully closed browser — that would need a push server (service worker +
+  // VAPID keys) which is a bigger infra addition. This covers "tab open but not focused / minimized".
+  const fireDesktopNotification = (title, body) => {
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'granted') {
+      try {
+        const n = new Notification(title, { body, icon: '/wtc-logo.png' });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (e) {}
+    }
+  };
+
+  const requestNotifPermission = () => {
+    if (typeof Notification === 'undefined') return;
+    Notification.requestPermission().then(perm => setNotifPermission(perm));
+  };
+
+  const pushNotif = (message) => {
+    const notifId = Date.now() + Math.random();
+    setNotifQueue(q => [...q, { id: notifId, message }]);
+    setTimeout(() => {
+      setNotifQueue(q => q.filter(n => n.id !== notifId));
+    }, 5000); // FIX #10 — flashes in, auto-dismisses on its own
+  };
+
+  useEffect(() => {
+    loadTeam();
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -323,33 +373,13 @@ function App() {
     if (currentUser && !isAdmin) setTaskViewMode('assigned');
   }, [currentUser, isAdmin]);
 
-  useEffect(() => {
-    const unreadCount = inbox.filter(i => i.read === 'No').length;
-    if (unreadCount > prevInboxCount && prevInboxCount > 0) {
-      const newestUnread = inbox.find(i => i.read === 'No');
-      if (newestUnread) {
-        playNotifSound();
-        setNotifMessage(`New task from ${newestUnread.from}: ${newestUnread.title}`);
-        setShowNotifPopup(true);
-        setTimeout(() => setShowNotifPopup(false), 5000);
-      }
-    }
-    setPrevInboxCount(unreadCount);
-  }, [inbox]);
-
-  useEffect(() => {
-    const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
-    if (unreadChats > prevChatCount && prevChatCount > 0) {
-      const newestChat = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).pop();
-      if (newestChat) {
-        playNotifSound();
-        setNotifMessage(`💬 New message from ${newestChat.from}`);
-        setShowNotifPopup(true);
-        setTimeout(() => setShowNotifPopup(false), 5000);
-      }
-    }
-    setPrevChatCount(unreadChats);
-  }, [chats]);
+  const loadTeam = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getTeam');
+      const data = await response.json();
+      if (data.status === 'ok' && data.team.length > 0) setTeam(data.team);
+    } catch (error) {}
+  };
 
   const loadTasks = async () => {
     try {
@@ -376,12 +406,35 @@ function App() {
     } catch (error) {}
   };
 
+  // FIX #7 — Notification detection rewritten from a fragile "count went up" comparison
+  // to an explicit seen-ID ledger. Fires identically for General AND Routine tasks,
+  // handles multiple simultaneous assignments, and never misfires on first load.
+  const processInboxForNotifs = (items) => {
+    if (firstInboxLoad.current) {
+      items.forEach(i => seenInboxIds.current.add(i.id));
+      firstInboxLoad.current = false;
+      return;
+    }
+    const newOnes = items.filter(i => i.read === 'No' && !seenInboxIds.current.has(i.id));
+    newOnes.forEach(item => {
+      seenInboxIds.current.add(item.id);
+      const label = item.type === 'new_routine' ? '🔄 Routine task' : '📌 New task';
+      const msg = `${label} from ${item.from}: ${item.title}`;
+      playNotifSound();
+      pushNotif(msg);
+      fireDesktopNotification('WTC Task Hub', msg);
+    });
+  };
+
   const loadInbox = async () => {
     if (!currentUserInfo) return;
     try {
       const response = await fetch(API_URL + '?action=getInbox&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
-      if (data.status === 'ok') setInbox(data.inbox);
+      if (data.status === 'ok') {
+        processInboxForNotifs(data.inbox);
+        setInbox(data.inbox);
+      }
     } catch (error) {}
   };
 
@@ -390,8 +443,26 @@ function App() {
     try {
       const response = await fetch(API_URL + '?action=getInbox&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
-      if (data.status === 'ok') setInbox(data.inbox);
+      if (data.status === 'ok') {
+        processInboxForNotifs(data.inbox);
+        setInbox(data.inbox);
+      }
     } catch (error) {}
+  };
+
+  const processChatsForNotifs = (items) => {
+    if (firstChatLoad.current) {
+      items.forEach(c => seenChatIds.current.add(c.id));
+      firstChatLoad.current = false;
+      return;
+    }
+    const newOnes = items.filter(c => c.to === currentUserInfo?.name && c.read === 'No' && !seenChatIds.current.has(c.id));
+    newOnes.forEach(msg => {
+      seenChatIds.current.add(msg.id);
+      playNotifSound();
+      pushNotif(`💬 New message from ${msg.from}`);
+      fireDesktopNotification(`💬 ${msg.from}`, msg.message);
+    });
   };
 
   const loadChats = async () => {
@@ -399,7 +470,10 @@ function App() {
     try {
       const response = await fetch(API_URL + '?action=getChats&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
-      if (data.status === 'ok') setChats(data.chats);
+      if (data.status === 'ok') {
+        processChatsForNotifs(data.chats);
+        setChats(data.chats);
+      }
     } catch (error) {}
   };
 
@@ -408,7 +482,10 @@ function App() {
     try {
       const response = await fetch(API_URL + '?action=getChats&userName=' + encodeURIComponent(currentUserInfo.name));
       const data = await response.json();
-      if (data.status === 'ok') setChats(data.chats);
+      if (data.status === 'ok') {
+        processChatsForNotifs(data.chats);
+        setChats(data.chats);
+      }
     } catch (error) {}
   };
 
@@ -459,6 +536,11 @@ function App() {
     } catch (error) {}
   };
 
+  // FIX #1 + #5 — Real-time calculation. Backend now stores correct UTC timestamps
+  // (see Code.gs getIndiaTimeISO), so this math is finally trustworthy. Recomputed every
+  // render, and the 1-second `tick` state above forces a re-render every second, so this
+  // keeps counting up live instead of freezing. Break categories updated for FIX #4
+  // (Tea Break removed — only Lunch Break + Meeting count as breaks now).
   const calculateWorkingTime = (log) => {
     if (!log || typeof log !== 'string') return { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
     try {
@@ -482,14 +564,14 @@ function App() {
         const duration = events[i + 1].time - events[i].time;
         if (duration < 0) continue;
         if (events[i].status === 'Working') workingMs += duration;
-        else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(events[i].status)) breakMs += duration;
+        else if (BREAK_STATUSES.includes(events[i].status)) breakMs += duration;
       }
       const lastEvent = events[events.length - 1];
       if (lastEvent && lastEvent.status !== 'Signed Out') {
         const duration = now - lastEvent.time;
         if (duration > 0) {
           if (lastEvent.status === 'Working') workingMs += duration;
-          else if (['Tea Break', 'Lunch Break', 'Meeting'].includes(lastEvent.status)) breakMs += duration;
+          else if (BREAK_STATUSES.includes(lastEvent.status)) breakMs += duration;
         }
       }
       const workingH = Math.floor(workingMs / 3600000);
@@ -517,6 +599,9 @@ function App() {
   };
 
   const filteredTasks = tasks.filter(t => {
+    // FIX #2 — Removed the old blanket rule that hid every Routine/Routine Instance task
+    // from non-admin viewers on their OWN dashboard. Routine tasks now show up in
+    // "Assigned to Me" / "My Own Tasks" / "Assigned by Me" for everyone, same as General tasks.
     if (isAdmin) {
       if (taskViewMode === 'assigned') {
         if (!isTaskAssignedToMe(t)) return false;
@@ -532,8 +617,6 @@ function App() {
         }
       }
     } else {
-      if (t.taskType === 'Routine' || t.taskType === 'Routine Instance') return false;
-      
       if (taskViewMode === 'assigned') {
         if (!isTaskAssignedToMe(t)) return false;
       } else if (taskViewMode === 'by_me') {
@@ -592,6 +675,68 @@ function App() {
       setSaving(false);
       setTimeout(() => loadTasksBackground(), 2000);
     } catch (error) { setSaving(false); }
+  };
+
+  // FIX #6 — Task editing. Opens the same-styled modal pre-filled with the task's current data.
+  const openEditTask = (task) => {
+    if (task.status === 'Completed' && !isAdmin) {
+      alert('🔒 This task is completed. Only Shivendra Singh or PC can edit it further.');
+      return;
+    }
+    setEditingTask(task);
+    setSelectedAssignees(String(task.assignedTo).split(',').map(a => a.trim()));
+    setSelectedChannels(String(task.channel).split(',').map(c => c.trim()).filter(c => c));
+    setNewTask({
+      taskDetails: task.taskDetails,
+      remarks: task.remarks || '',
+      priority: task.priority,
+      targetDate: task.targetDate ? String(task.targetDate).slice(0, 10) : '',
+      taskType: task.taskType === 'Routine' || task.taskType === 'Routine Instance' ? 'Routine' : 'General',
+      category: task.category || '',
+      frequency: task.frequency || 'Daily',
+      startDate: task.startDate || '',
+      endDate: task.endDate || ''
+    });
+    setShowNewTaskForm(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (selectedAssignees.length === 0 || !newTask.taskDetails) {
+      alert('Please fill Task Details and select at least one assignee!');
+      return;
+    }
+    try {
+      setSaving(true);
+      const updates = {
+        assignedTo: selectedAssignees.join(', '),
+        taskDetails: newTask.taskDetails,
+        remarks: newTask.remarks,
+        priority: newTask.priority,
+        targetDate: newTask.targetDate,
+        channel: selectedChannels.length > 0 ? selectedChannels.join(', ') : 'Other',
+        category: newTask.category
+      };
+      setTasks(tasks.map(t => t.id === editingTask.id ? { ...t, ...updates } : t));
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'updateTask', taskId: editingTask.id, task: updates, userName: currentUserInfo.name })
+      });
+      closeTaskModal();
+      setSaving(false);
+      setTimeout(() => loadTasksBackground(), 2000);
+    } catch (error) { setSaving(false); }
+  };
+
+  const closeTaskModal = () => {
+    setShowNewTaskForm(false);
+    setEditingTask(null);
+    setNewTask({
+      taskDetails: '', remarks: '', priority: 'Medium', targetDate: '',
+      taskType: 'General', category: '', frequency: 'Daily', startDate: '', endDate: ''
+    });
+    setSelectedAssignees([]);
+    setSelectedChannels([]);
   };
 
   const handleStatusChange = async (taskId, newStatus) => {
@@ -683,6 +828,7 @@ function App() {
       read: 'No',
       type: 'message'
     };
+    seenChatIds.current.add(tempChat.id);
     setChats([...chats, tempChat]);
     setNewMessage('');
     fetch(API_URL, {
@@ -736,6 +882,70 @@ function App() {
     return '';
   };
 
+  // ---- FIX #13: Team Management panel actions (PC & Shivendra only) ----
+  const [tmForm, setTmForm] = useState({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' });
+  const [tmEditingId, setTmEditingId] = useState(null);
+
+  const handleTeamAdd = async () => {
+    if (!tmForm.name.trim()) { alert('Name is required'); return; }
+    const member = {
+      name: tmForm.name.trim(),
+      displayName: tmForm.displayName.trim() || tmForm.name.trim(),
+      role: tmForm.role.trim(),
+      avatar: (tmForm.avatar.trim() || tmForm.name.trim().substring(0, 2)).toUpperCase(),
+      quoteType: tmForm.quoteType
+    };
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'addTeamMember', member })
+      });
+      // no-cors would hide the response, so this call intentionally omits mode:'no-cors'
+      // and instead relies on Apps Script CORS defaults; if it errors in your browser console,
+      // switch to mode:'no-cors' and just reload the team list after a short delay instead.
+      setTmForm({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' });
+      setTimeout(() => loadTeam(), 1000);
+    } catch (e) {
+      setTimeout(() => loadTeam(), 1000);
+    }
+  };
+
+  const handleTeamEdit = (member) => {
+    setTmEditingId(member.id);
+    setTmForm({ name: member.name, displayName: member.displayName, role: member.role, avatar: member.avatar, quoteType: member.quoteType });
+  };
+
+  const handleTeamSaveEdit = async () => {
+    try {
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'updateTeamMember',
+          id: tmEditingId,
+          updates: { displayName: tmForm.displayName, role: tmForm.role, avatar: tmForm.avatar, quoteType: tmForm.quoteType }
+        })
+      });
+      setTmEditingId(null);
+      setTmForm({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' });
+      setTimeout(() => loadTeam(), 1000);
+    } catch (e) {}
+  };
+
+  const handleTeamToggleActive = async (member) => {
+    const nextActive = !(member.active !== false);
+    if (!confirm(`${nextActive ? 'Reactivate' : 'Deactivate'} ${member.displayName}?`)) return;
+    try {
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'setTeamActive', id: member.id, active: nextActive })
+      });
+      setTimeout(() => loadTeam(), 1000);
+    } catch (e) {}
+  };
+
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
 
@@ -762,13 +972,16 @@ function App() {
 
   return (
     <div className="app">
-      {showNotifPopup && (
-        <div className="notif-popup">
-          <div className="notif-icon">🔔</div>
-          <div className="notif-msg">{notifMessage}</div>
-          <button className="notif-close" onClick={() => setShowNotifPopup(false)}>✕</button>
-        </div>
-      )}
+      {/* FIX #7/#10 — notification queue: multiple can stack, each flashes in and auto-dismisses */}
+      <div className="notif-stack">
+        {notifQueue.map(n => (
+          <div key={n.id} className="notif-popup">
+            <div className="notif-icon">🔔</div>
+            <div className="notif-msg">{n.message}</div>
+            <button className="notif-close" onClick={() => setNotifQueue(q => q.filter(x => x.id !== n.id))}>✕</button>
+          </div>
+        ))}
+      </div>
 
       <header className="header-premium">
         <div className="header-container">
@@ -787,6 +1000,16 @@ function App() {
           </div>
           
           <div className="header-actions-premium">
+            {notifPermission === 'default' && (
+              <button className="icon-btn notif-ask-btn" onClick={requestNotifPermission} title="Enable desktop notifications">
+                🔕
+              </button>
+            )}
+            {canManageTeam && (
+              <button className="icon-btn" onClick={() => setShowTeamManager(true)} title="Manage Team">
+                👥
+              </button>
+            )}
             <button className="icon-btn" onClick={openChat} title="Chat">
               💬
               {unreadChats > 0 && <span className="badge-count">{unreadChats}</span>}
@@ -795,7 +1018,7 @@ function App() {
               🔔
               {unreadInbox > 0 && <span className="badge-count">{unreadInbox}</span>}
             </button>
-            <button className="icon-btn" onClick={() => { loadTasks(); loadAttendance(); loadInbox(); loadChats(); }} title="Refresh">
+            <button className="icon-btn" onClick={() => { loadTasks(); loadAttendance(); loadInbox(); loadChats(); loadTeam(); }} title="Refresh">
               🔄
             </button>
             {!showArchive && (
@@ -821,7 +1044,7 @@ function App() {
                 <div key={item.id} className={`inbox-item ${item.read === 'No' ? 'unread' : ''}`}>
                   <div className="inbox-icon">{item.type === 'new_routine' ? '🔄' : '📌'}</div>
                   <div className="inbox-content">
-                    <p className="inbox-title">New task from {item.from}</p>
+                    <p className="inbox-title">{item.type === 'new_routine' ? 'Routine task' : 'New task'} from {item.from}</p>
                     <p className="inbox-task">{item.title}</p>
                     <p className="inbox-time">{new Date(item.timestamp).toLocaleString()}</p>
                   </div>
@@ -833,13 +1056,15 @@ function App() {
         </div>
       )}
 
+      {/* FIX #12 — Chat redesigned to read like an email client: inbox-style conversation
+          rows on the left, a threaded message pane on the right, sender/timestamp headers per message. */}
       {showChat && (
-        <div className="side-panel chat-panel">
+        <div className="side-panel chat-panel-email">
           <div className="panel-header">
             {chatWith ? (
               <>
                 <button className="back-btn" onClick={() => setChatWith(null)}>←</button>
-                <h3>💬 {chatWith}</h3>
+                <h3>{chatWith}</h3>
               </>
             ) : (
               <h3>💬 Team Chat</h3>
@@ -847,62 +1072,141 @@ function App() {
             <button className="close-btn" onClick={openChat}>✕</button>
           </div>
           {!chatWith ? (
-            <div className="panel-body">
-              <div className="chat-search">
-                <p className="section-title">Start new chat:</p>
-                <div className="team-list">
-                  {team.filter(m => m.id !== currentUser).map(member => (
-                    <div key={member.id} className="team-chat-item" onClick={() => openChatWith(member.name)}>
-                      <div className="chat-avatar">{member.avatar}</div>
-                      <div className="chat-info">
-                        <strong>{member.displayName}</strong>
-                        <span>{member.role}</span>
+            <div className="panel-body email-list">
+              <p className="section-title">Team</p>
+              <div className="email-rows">
+                {activeTeam.filter(m => m.id !== currentUser).map(member => {
+                  const conv = getConversationList().find(c => c.person === member.name);
+                  return (
+                    <div key={member.id} className="email-row" onClick={() => openChatWith(member.name)}>
+                      <div className="email-avatar">{member.avatar}</div>
+                      <div className="email-row-body">
+                        <div className="email-row-top">
+                          <strong>{member.displayName}</strong>
+                          {conv && <span className="email-time">{new Date(conv.lastMessage.timestamp).toLocaleDateString([], { day: '2-digit', month: 'short' })}</span>}
+                        </div>
+                        <div className="email-row-bottom">
+                          <span className="email-preview">{conv ? conv.lastMessage.message : member.role}</span>
+                          {conv && conv.unreadCount > 0 && <span className="unread-badge">{conv.unreadCount}</span>}
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-                {getConversationList().length > 0 && (
-                  <>
-                    <p className="section-title" style={{marginTop: '20px'}}>Recent conversations:</p>
-                    {getConversationList().map(conv => {
-                      const member = team.find(t => t.name === conv.person);
-                      return (
-                        <div key={conv.person} className="team-chat-item" onClick={() => openChatWith(conv.person)}>
-                          <div className="chat-avatar">{member?.avatar || conv.person.substring(0, 2)}</div>
-                          <div className="chat-info">
-                            <strong>{conv.person}</strong>
-                            <span className="last-msg">{conv.lastMessage.message.substring(0, 40)}</span>
-                          </div>
-                          {conv.unreadCount > 0 && <span className="unread-badge">{conv.unreadCount}</span>}
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
+                  );
+                })}
               </div>
             </div>
           ) : (
             <>
-              <div className="chat-messages">
-                {getConversationMessages().map(msg => (
-                  <div key={msg.id} className={`chat-bubble ${msg.from === currentUserInfo.name ? 'sent' : 'received'}`}>
-                    <div className="chat-text">{msg.message}</div>
-                    <div className="chat-time">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</div>
-                  </div>
-                ))}
+              <div className="chat-messages-email">
+                {getConversationMessages().map((msg, idx, arr) => {
+                  const isMe = msg.from === currentUserInfo.name;
+                  const showHeader = idx === 0 || arr[idx - 1].from !== msg.from;
+                  return (
+                    <div key={msg.id} className={`email-msg ${isMe ? 'sent' : 'received'}`}>
+                      {showHeader && (
+                        <div className="email-msg-header">
+                          <span className="email-msg-from">{isMe ? 'You' : msg.from}</span>
+                          <span className="email-msg-time">{new Date(msg.timestamp).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      )}
+                      <div className="email-msg-body">{msg.message}</div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="chat-input">
                 <input
                   type="text"
-                  placeholder="Type a message..."
+                  placeholder="Write a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                 />
-                <button onClick={sendMessage}>➤</button>
+                <button onClick={sendMessage}>Send ➤</button>
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* FIX #13 — Team Management panel, PC & Shivendra only */}
+      {showTeamManager && canManageTeam && (
+        <div className="modal-overlay" onClick={() => setShowTeamManager(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>👥 Team Management</h3>
+              <button className="modal-close" onClick={() => setShowTeamManager(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <p className="tm-hint">Renaming here only changes what's <strong>displayed</strong> — it won't touch any existing task history. Deactivating hides someone from dashboards and new task assignment without deleting their past tasks.</p>
+
+              <div className="tm-form">
+                <div className="form-row-3">
+                  <div className="form-group">
+                    <label>{tmEditingId ? 'Display Name' : 'Full Name *'}</label>
+                    <input
+                      type="text"
+                      value={tmEditingId ? tmForm.displayName : tmForm.name}
+                      onChange={(e) => tmEditingId ? setTmForm({...tmForm, displayName: e.target.value}) : setTmForm({...tmForm, name: e.target.value})}
+                      placeholder="e.g. Rohit Sharma"
+                      disabled={!!tmEditingId ? false : false}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Role / Designation</label>
+                    <input type="text" value={tmForm.role} onChange={(e) => setTmForm({...tmForm, role: e.target.value})} placeholder="e.g. Video Editor" />
+                  </div>
+                  <div className="form-group">
+                    <label>Avatar (2 letters)</label>
+                    <input type="text" maxLength={3} value={tmForm.avatar} onChange={(e) => setTmForm({...tmForm, avatar: e.target.value})} placeholder="e.g. RS" />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Quote Style</label>
+                    <select value={tmForm.quoteType} onChange={(e) => setTmForm({...tmForm, quoteType: e.target.value})}>
+                      <option value="social_media">Social Media</option>
+                      <option value="video_editor">Video Editor</option>
+                      <option value="pr">PR</option>
+                      <option value="hr">HR</option>
+                      <option value="manager">Manager</option>
+                      <option value="ceo">CEO</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{display:'flex', alignItems:'flex-end', gap:'8px'}}>
+                    {tmEditingId ? (
+                      <>
+                        <button className="btn-success" onClick={handleTeamSaveEdit}>💾 Save Changes</button>
+                        <button className="btn-secondary" onClick={() => { setTmEditingId(null); setTmForm({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' }); }}>Cancel</button>
+                      </>
+                    ) : (
+                      <button className="btn-success" onClick={handleTeamAdd}>➕ Add New Team Member</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className="section-title" style={{marginTop: '20px'}}>Current Roster</p>
+              <div className="tm-list">
+                {team.map(member => (
+                  <div key={member.id} className={`tm-row ${member.active === false ? 'inactive' : ''}`}>
+                    <div className="chat-avatar">{member.avatar}</div>
+                    <div className="tm-row-info">
+                      <strong>{member.displayName}</strong>
+                      <span>{member.role} {member.isAdmin ? '• Admin' : ''} {member.isHR ? '• HR' : ''}</span>
+                      <span className="tm-url">?user={member.id}</span>
+                    </div>
+                    <div className="tm-row-actions">
+                      <button className="btn-secondary" onClick={() => handleTeamEdit(member)}>✏️ Edit</button>
+                      <button className="btn-secondary" onClick={() => handleTeamToggleActive(member)}>
+                        {member.active === false ? '✅ Reactivate' : '🚫 Deactivate'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -938,7 +1242,6 @@ function App() {
                 ) : (
                   <>
                     {myStatus !== 'Working' && <button className="btn-resume" onClick={() => updateMyStatus('Working')}>🟢 Back to Work</button>}
-                    {myStatus !== 'Tea Break' && <button className="btn-tea" onClick={() => updateMyStatus('Tea Break')}>☕ Tea Break</button>}
                     {myStatus !== 'Lunch Break' && <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')}>🍽️ Lunch</button>}
                     {myStatus !== 'Meeting' && <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')}>🤝 Meeting</button>}
                     <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')}>🚪 Sign Out</button>
@@ -955,7 +1258,8 @@ function App() {
               </div>
               {showAttendance && (
                 <div className="team-status-grid">
-                  {team.filter(m => !m.isAdmin && !m.isHR).map(member => {
+                  {/* FIX #3 — Pari (HR) now included alongside regular team members */}
+                  {activeTeam.filter(m => !m.isAdmin).map(member => {
                     const memberAttendance = attendance.find(a => a.userId === member.id);
                     const status = memberAttendance?.status || 'Not Signed In';
                     const times = memberAttendance ? calculateWorkingTime(memberAttendance.log) : { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
@@ -963,7 +1267,7 @@ function App() {
                       <div key={member.id} className="status-card">
                         <div className="status-avatar" style={{background: attendanceColors[status]}}>{member.avatar}</div>
                         <div className="status-details">
-                          <strong>{member.name}</strong>
+                          <strong>{member.displayName} {member.isHR ? '(HR)' : ''}</strong>
                           <span className="status-text" style={{color: attendanceColors[status]}}>{status}</span>
                           <span className="status-time">⏱️ {times.working} | ☕ {times.breaks} | 📊 {times.productivity}%</span>
                         </div>
@@ -1066,8 +1370,9 @@ function App() {
                   <div className="nav-label">{managerView === 'all' ? 'Quick Switch:' : 'Viewing:'}</div>
                   <div className="user-switcher">
                     <button className={managerView === 'all' ? 'active' : ''} onClick={() => setManagerView('all')}>All Tasks</button>
-                    {team.filter(m => !m.isAdmin).map(member => (
-                      <button key={member.id} className={managerView === member.id ? 'active' : ''} onClick={() => setManagerView(member.id)} title={member.name}>
+                    {/* FIX #11 — Quick Switch now includes admin colleagues too (e.g. PC sees Shivendra, and vice versa), excluding only the current viewer */}
+                    {activeTeam.filter(m => m.id !== currentUser).map(member => (
+                      <button key={member.id} className={managerView === member.id ? 'active' : ''} onClick={() => setManagerView(member.id)} title={member.displayName}>
                         {member.avatar}
                       </button>
                     ))}
@@ -1080,21 +1385,24 @@ function App() {
               </div>
 
               <div className="filters">
+                {/* FIX #8 — default options now carry an explicit value matching the initial
+                    state ('All'), so the dropdown always shows the right selected option and
+                    filtering behaves predictably from first render. */}
                 <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                  <option>All Status</option>
-                  <option>Not Started</option>
-                  <option>In Progress</option>
-                  <option>Completed</option>
-                  <option>On Hold</option>
-                  <option>Delayed</option>
+                  <option value="All">All Status</option>
+                  <option value="Not Started">Not Started</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                  <option value="On Hold">On Hold</option>
+                  <option value="Delayed">Delayed</option>
                 </select>
                 <select value={filterChannel} onChange={(e) => setFilterChannel(e.target.value)}>
-                  <option>All Channels</option>
-                  {channels.map(ch => <option key={ch}>{ch}</option>)}
+                  <option value="All">All Channels</option>
+                  {channels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
                 </select>
                 <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-                  <option>All Categories</option>
-                  {categories.map(cat => <option key={cat}>{cat}</option>)}
+                  <option value="All">All Categories</option>
+                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
                 {isAdmin && (
                   <select value={filterTaskType} onChange={(e) => setFilterTaskType(e.target.value)}>
@@ -1115,6 +1423,7 @@ function App() {
                     {filteredTasks.map(task => {
                       const isCompleted = task.status === 'Completed';
                       const canChangeStatus = isAdmin || !isCompleted;
+                      const canEdit = isAdmin || !isCompleted;
                       const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
                       const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
                       return (
@@ -1123,7 +1432,12 @@ function App() {
                           {isRoutine && <div className="routine-tag">🔄 Routine Task</div>}
                           {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
                           <div className="task-header">
-                            <h3>{task.taskDetails}</h3>
+                            <div className="task-title-row">
+                              <h3>{task.taskDetails}</h3>
+                              {canEdit && (
+                                <button className="btn-edit-task" onClick={() => openEditTask(task)} title="Edit task">✏️</button>
+                              )}
+                            </div>
                             <div className="badges">
                               {channelList.map(ch => <span key={ch} className="badge-channel">{ch}</span>)}
                               <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
@@ -1173,14 +1487,14 @@ function App() {
       )}
 
       {showNewTaskForm && (
-        <div className="modal-overlay" onClick={() => setShowNewTaskForm(false)}>
+        <div className="modal-overlay" onClick={closeTaskModal}>
           <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>➕ Create New Task</h3>
-              <button className="modal-close" onClick={() => setShowNewTaskForm(false)}>✕</button>
+              <h3>{editingTask ? '✏️ Edit Task' : '➕ Create New Task'}</h3>
+              <button className="modal-close" onClick={closeTaskModal}>✕</button>
             </div>
             <div className="modal-body compact-body">
-              {isAdmin && (
+              {isAdmin && !editingTask && (
                 <div className="form-group">
                   <label>Task Type</label>
                   <div className="task-type-toggle">
@@ -1253,7 +1567,7 @@ function App() {
                 </div>
               </div>
 
-              {newTask.taskType === 'General' ? (
+              {(newTask.taskType === 'General' || editingTask) ? (
                 <div className="form-group">
                   <label>Target Date *</label>
                   <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.targetDate} onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} />
@@ -1278,11 +1592,14 @@ function App() {
                   </div>
                 </div>
               )}
+              {editingTask && !isAdmin && (
+                <p className="tm-hint">Note: status changes (including marking Completed) still happen from the status dropdown on the task card, not here.</p>
+              )}
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowNewTaskForm(false)}>Cancel</button>
-              <button className="btn-success" onClick={handleAddTask} disabled={saving}>
-                {saving ? 'Saving...' : '✅ Create Task'}
+              <button className="btn-secondary" onClick={closeTaskModal}>Cancel</button>
+              <button className="btn-success" onClick={editingTask ? handleSaveEdit : handleAddTask} disabled={saving}>
+                {saving ? 'Saving...' : (editingTask ? '💾 Save Changes' : '✅ Create Task')}
               </button>
             </div>
           </div>

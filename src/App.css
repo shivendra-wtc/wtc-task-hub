@@ -735,6 +735,13 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   box-shadow: var(--shadow-md);
 }
 
+.btn-signin:disabled, .btn-resume:disabled, .btn-lunch:disabled, .btn-meeting:disabled, .btn-signout:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
 /* TEAM STATUS */
 .team-status-section {
   background: white;

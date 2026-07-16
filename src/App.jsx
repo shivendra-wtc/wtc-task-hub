@@ -240,6 +240,14 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [attendance, setAttendance] = useState([]);
   const [myStatus, setMyStatus] = useState('Not Signed In');
+  const [attendanceSwitching, setAttendanceSwitching] = useState(false);
+  // Optimistic local copy of the current user's own event log. The server round-trip
+  // for an attendance update takes ~1-1.5s; without this, the timer would keep counting
+  // under the OLD status for that entire window after you click a button, which felt
+  // laggy/unsmooth. We append the new event to this local log the instant you click,
+  // then reconcile with the server's authoritative log once it arrives.
+  const [myLiveLog, setMyLiveLog] = useState('');
+  const myLiveLogSynced = useRef(false);
   const [showAttendance, setShowAttendance] = useState(false);
   const [taskViewMode, setTaskViewMode] = useState('all');
   const [showInbox, setShowInbox] = useState(false);
@@ -377,7 +385,15 @@ function App() {
     try {
       const response = await fetch(API_URL + '?action=getTeam');
       const data = await response.json();
-      if (data.status === 'ok' && data.team.length > 0) setTeam(data.team);
+      if (data.status === 'ok' && data.team.length > 0) {
+        // SAFETY NET: a sheet edit (bad row, accidental delete, mid-edit save) should
+        // never be able to lock everyone out with the "invalid user" screen. Any core
+        // account present in DEFAULT_TEAM but missing from the live sheet gets silently
+        // restored here, so admins can always get back in to fix the sheet properly.
+        const liveIds = new Set(data.team.map(m => m.id));
+        const missingDefaults = DEFAULT_TEAM.filter(m => !liveIds.has(m.id));
+        setTeam([...data.team, ...missingDefaults]);
+      }
     } catch (error) {}
   };
 
@@ -497,7 +513,10 @@ function App() {
         setAttendance(data.attendance);
         if (!isAdmin || isHR) {
           const myRecord = data.attendance.find(a => a.userId === currentUser);
-          if (myRecord) setMyStatus(myRecord.status);
+          if (myRecord) {
+            setMyStatus(myRecord.status);
+            setMyLiveLog(myRecord.log || '');
+          }
         }
       }
     } catch (error) {}
@@ -511,7 +530,10 @@ function App() {
         setAttendance(data.attendance);
         if (!isAdmin || isHR) {
           const myRecord = data.attendance.find(a => a.userId === currentUser);
-          if (myRecord) setMyStatus(myRecord.status);
+          if (myRecord) {
+            setMyStatus(myRecord.status);
+            setMyLiveLog(myRecord.log || ''); // server is authoritative — replaces the optimistic guess
+          }
         }
       }
     } catch (error) {}
@@ -520,20 +542,30 @@ function App() {
   const updateMyStatus = async (newStatus) => {
     if (isAdmin && !isHR) return;
     if (!currentUserInfo) return;
+    if (attendanceSwitching) return; // prevents double-clicks from creating duplicate log rows
+    setAttendanceSwitching(true);
+
+    const nowISO = new Date().toISOString();
     setMyStatus(newStatus);
-    try {
-      fetch(API_URL, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'updateAttendance',
-          userId: currentUser,
-          userName: currentUserInfo.name,
-          status: newStatus
-        })
-      });
-      setTimeout(() => loadAttendanceBackground(), 1500);
-    } catch (error) {}
+    // Append the new event to the local log immediately — this is what makes the
+    // switch feel instant and keeps the per-second timer precise from the very
+    // first tick, instead of waiting ~1.5s for the server round-trip.
+    setMyLiveLog(prev => prev ? `${prev}||EVT||${newStatus}|SEP|${nowISO}` : `${newStatus}|SEP|${nowISO}`);
+
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'updateAttendance',
+        userId: currentUser,
+        userName: currentUserInfo.name,
+        status: newStatus
+      })
+    });
+    setTimeout(() => {
+      loadAttendanceBackground(); // reconciles myLiveLog with the server's authoritative copy
+      setAttendanceSwitching(false);
+    }, 1500);
   };
 
   // FIX #1 + #5 — Real-time calculation. Backend now stores correct UTC timestamps
@@ -886,8 +918,12 @@ function App() {
   const [tmForm, setTmForm] = useState({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' });
   const [tmEditingId, setTmEditingId] = useState(null);
 
+  const [tmSaving, setTmSaving] = useState(false);
+
   const handleTeamAdd = async () => {
     if (!tmForm.name.trim()) { alert('Name is required'); return; }
+    if (tmSaving) return;
+    setTmSaving(true);
     const member = {
       name: tmForm.name.trim(),
       displayName: tmForm.displayName.trim() || tmForm.name.trim(),
@@ -895,20 +931,21 @@ function App() {
       avatar: (tmForm.avatar.trim() || tmForm.name.trim().substring(0, 2)).toUpperCase(),
       quoteType: tmForm.quoteType
     };
-    try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'addTeamMember', member })
-      });
-      // no-cors would hide the response, so this call intentionally omits mode:'no-cors'
-      // and instead relies on Apps Script CORS defaults; if it errors in your browser console,
-      // switch to mode:'no-cors' and just reload the team list after a short delay instead.
+    // FIX: this previously used the default 'cors' mode, which Apps Script POST
+    // endpoints don't support (no CORS headers on POST responses) — the browser
+    // blocked reading the response and threw, which could leave the UI in a
+    // confusing state and invite repeated clicks / duplicate rows. Matches the
+    // no-cors + delayed-reload pattern used by every other write action in this app.
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'addTeamMember', member })
+    });
+    setTimeout(() => {
       setTmForm({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' });
-      setTimeout(() => loadTeam(), 1000);
-    } catch (e) {
-      setTimeout(() => loadTeam(), 1000);
-    }
+      loadTeam();
+      setTmSaving(false);
+    }, 1500);
   };
 
   const handleTeamEdit = (member) => {
@@ -917,20 +954,23 @@ function App() {
   };
 
   const handleTeamSaveEdit = async () => {
-    try {
-      fetch(API_URL, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'updateTeamMember',
-          id: tmEditingId,
-          updates: { displayName: tmForm.displayName, role: tmForm.role, avatar: tmForm.avatar, quoteType: tmForm.quoteType }
-        })
-      });
+    if (tmSaving) return;
+    setTmSaving(true);
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'updateTeamMember',
+        id: tmEditingId,
+        updates: { displayName: tmForm.displayName, role: tmForm.role, avatar: tmForm.avatar, quoteType: tmForm.quoteType }
+      })
+    });
+    setTimeout(() => {
       setTmEditingId(null);
       setTmForm({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' });
-      setTimeout(() => loadTeam(), 1000);
-    } catch (e) {}
+      loadTeam();
+      setTmSaving(false);
+    }, 1500);
   };
 
   const handleTeamToggleActive = async (member) => {
@@ -1176,11 +1216,11 @@ function App() {
                   <div className="form-group" style={{display:'flex', alignItems:'flex-end', gap:'8px'}}>
                     {tmEditingId ? (
                       <>
-                        <button className="btn-success" onClick={handleTeamSaveEdit}>💾 Save Changes</button>
+                        <button className="btn-success" onClick={handleTeamSaveEdit} disabled={tmSaving}>{tmSaving ? 'Saving...' : '💾 Save Changes'}</button>
                         <button className="btn-secondary" onClick={() => { setTmEditingId(null); setTmForm({ name: '', displayName: '', role: '', avatar: '', quoteType: 'social_media' }); }}>Cancel</button>
                       </>
                     ) : (
-                      <button className="btn-success" onClick={handleTeamAdd}>➕ Add New Team Member</button>
+                      <button className="btn-success" onClick={handleTeamAdd} disabled={tmSaving}>{tmSaving ? 'Adding...' : '➕ Add New Team Member'}</button>
                     )}
                   </div>
                 </div>
@@ -1221,10 +1261,11 @@ function App() {
                 <div className="status-badge" style={{background: attendanceColors[myStatus] + '20', color: attendanceColors[myStatus]}}>
                   {myStatus}
                 </div>
-                {attendance.find(a => a.userId === currentUser) && (
+                {(myLiveLog || attendance.find(a => a.userId === currentUser)) && (
                   <div className="time-info">
                     {(() => {
-                      const times = calculateWorkingTime(attendance.find(a => a.userId === currentUser)?.log);
+                      const log = myLiveLog || attendance.find(a => a.userId === currentUser)?.log;
+                      const times = calculateWorkingTime(log);
                       return (
                         <>
                           <div>⏱️ <strong>{times.working}</strong></div>
@@ -1238,13 +1279,13 @@ function App() {
               </div>
               <div className="attendance-buttons">
                 {myStatus === 'Not Signed In' || myStatus === 'Signed Out' ? (
-                  <button className="btn-signin" onClick={() => updateMyStatus('Working')}>🟢 Sign In</button>
+                  <button className="btn-signin" onClick={() => updateMyStatus('Working')} disabled={attendanceSwitching}>🟢 Sign In</button>
                 ) : (
                   <>
-                    {myStatus !== 'Working' && <button className="btn-resume" onClick={() => updateMyStatus('Working')}>🟢 Back to Work</button>}
-                    {myStatus !== 'Lunch Break' && <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')}>🍽️ Lunch</button>}
-                    {myStatus !== 'Meeting' && <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')}>🤝 Meeting</button>}
-                    <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')}>🚪 Sign Out</button>
+                    {myStatus !== 'Working' && <button className="btn-resume" onClick={() => updateMyStatus('Working')} disabled={attendanceSwitching}>🟢 Back to Work</button>}
+                    {myStatus !== 'Lunch Break' && <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')} disabled={attendanceSwitching}>🍽️ Lunch</button>}
+                    {myStatus !== 'Meeting' && <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')} disabled={attendanceSwitching}>🤝 Meeting</button>}
+                    <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')} disabled={attendanceSwitching}>🚪 Sign Out</button>
                   </>
                 )}
               </div>

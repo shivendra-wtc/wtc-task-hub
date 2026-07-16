@@ -123,6 +123,11 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   animation: pulse-badge 2s infinite;
 }
 
+.notif-denied-btn {
+  background: rgba(220, 38, 38, 0.25) !important;
+  border-color: rgba(220, 38, 38, 0.4) !important;
+}
+
 /* PREMIUM HEADER */
 .header-premium {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);

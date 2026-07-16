@@ -248,6 +248,36 @@ function App() {
   // then reconcile with the server's authoritative log once it arrives.
   const [myLiveLog, setMyLiveLog] = useState('');
   const myLiveLogSynced = useRef(false);
+  // Tracks the timestamp (ms) of the newest event we currently trust, whether that
+  // came from an optimistic click or a confirmed server read. A server response is
+  // only ever applied if it's caught up to (or past) this point — this is what stops
+  // the timer from snapping backward when a background poll reads the sheet before
+  // Apps Script has finished writing the most recent click.
+  const myLiveLogTimeRef = useRef(0);
+
+  const getLastEventTime = (log) => {
+    if (!log) return 0;
+    const parts = log.split('||EVT||');
+    const last = parts[parts.length - 1];
+    const timeStr = last.split('|SEP|')[1];
+    if (!timeStr) return 0;
+    const t = new Date(timeStr.trim());
+    return isNaN(t.getTime()) ? 0 : t.getTime();
+  };
+
+  // Call this instead of setMyStatus+setMyLiveLog directly whenever data arrives from
+  // the server, so a stale/racy read can never undo a more recent optimistic update.
+  const applyServerAttendance = (myRecord) => {
+    if (!myRecord) return;
+    const serverTime = getLastEventTime(myRecord.log);
+    if (serverTime >= myLiveLogTimeRef.current) {
+      myLiveLogTimeRef.current = serverTime;
+      setMyStatus(myRecord.status);
+      setMyLiveLog(myRecord.log || '');
+    }
+    // else: server hasn't caught up to our latest click yet — keep showing the
+    // optimistic local state as-is; the next poll (15s later) will catch up.
+  };
   const [showAttendance, setShowAttendance] = useState(false);
   const [taskViewMode, setTaskViewMode] = useState('all');
   const [showInbox, setShowInbox] = useState(false);
@@ -337,6 +367,10 @@ function App() {
     Notification.requestPermission().then(perm => setNotifPermission(perm));
   };
 
+  const sendTestNotification = () => {
+    fireDesktopNotification('WTC Task Hub', '🔔 Test notification — if you see this in your OS notification tray, desktop alerts are working correctly.');
+  };
+
   const pushNotif = (message) => {
     const notifId = Date.now() + Math.random();
     setNotifQueue(q => [...q, { id: notifId, message }]);
@@ -365,10 +399,16 @@ function App() {
         loadAttendanceBackground();
         loadInboxBackground();
         loadChatsBackground();
+        // Re-reads the browser's actual permission state (not just our cached copy) —
+        // if it was ever silently revoked/reset outside the app, the header icon
+        // will reflect that within 15s instead of staying stuck showing "granted".
+        if (typeof Notification !== 'undefined' && Notification.permission !== notifPermission) {
+          setNotifPermission(Notification.permission);
+        }
       }, 15000);
       return () => clearInterval(interval);
     }
-  }, [currentUser]);
+  }, [currentUser, notifPermission]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -512,11 +552,7 @@ function App() {
       if (data.status === 'ok') {
         setAttendance(data.attendance);
         if (!isAdmin || isHR) {
-          const myRecord = data.attendance.find(a => a.userId === currentUser);
-          if (myRecord) {
-            setMyStatus(myRecord.status);
-            setMyLiveLog(myRecord.log || '');
-          }
+          applyServerAttendance(data.attendance.find(a => a.userId === currentUser));
         }
       }
     } catch (error) {}
@@ -529,11 +565,7 @@ function App() {
       if (data.status === 'ok') {
         setAttendance(data.attendance);
         if (!isAdmin || isHR) {
-          const myRecord = data.attendance.find(a => a.userId === currentUser);
-          if (myRecord) {
-            setMyStatus(myRecord.status);
-            setMyLiveLog(myRecord.log || ''); // server is authoritative — replaces the optimistic guess
-          }
+          applyServerAttendance(data.attendance.find(a => a.userId === currentUser));
         }
       }
     } catch (error) {}
@@ -546,6 +578,7 @@ function App() {
     setAttendanceSwitching(true);
 
     const nowISO = new Date().toISOString();
+    myLiveLogTimeRef.current = new Date(nowISO).getTime();
     setMyStatus(newStatus);
     // Append the new event to the local log immediately — this is what makes the
     // switch feel instant and keeps the per-second timer precise from the very
@@ -1043,6 +1076,16 @@ function App() {
             {notifPermission === 'default' && (
               <button className="icon-btn notif-ask-btn" onClick={requestNotifPermission} title="Enable desktop notifications">
                 🔕
+              </button>
+            )}
+            {notifPermission === 'denied' && (
+              <button className="icon-btn notif-denied-btn" onClick={() => alert('Desktop notifications are blocked for this site in your browser.\n\nTo fix: click the 🔒 or ⓘ icon in your address bar → Site settings → Notifications → Allow. Then reload this page.')} title="Desktop notifications blocked — click for how to fix">
+                🚫
+              </button>
+            )}
+            {notifPermission === 'granted' && (
+              <button className="icon-btn" onClick={sendTestNotification} title="Desktop notifications are ON — click to send a test">
+                🔔✓
               </button>
             )}
             {canManageTeam && (

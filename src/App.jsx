@@ -279,6 +279,12 @@ function App() {
     // optimistic local state as-is; the next poll (15s later) will catch up.
   };
   const [showAttendance, setShowAttendance] = useState(false);
+  const [showMonthlyAttendance, setShowMonthlyAttendance] = useState(false);
+  const [monthlyAttendanceDays, setMonthlyAttendanceDays] = useState([]);
+  const [monthlyLoading, setMonthlyLoading] = useState(false);
+  const now_ = new Date();
+  const [monthlyYear, setMonthlyYear] = useState(now_.getFullYear());
+  const [monthlyMonth, setMonthlyMonth] = useState(now_.getMonth() + 1); // 1-12
   const [taskViewMode, setTaskViewMode] = useState('all');
   const [showInbox, setShowInbox] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -302,7 +308,12 @@ function App() {
     category: '',
     frequency: 'Daily',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    // FIX — routine reminder window (Weekly/Monthly Routine tasks only)
+    reminderMode: 'date',   // 'date' | 'band'
+    reminderDaysBefore: 3,
+    bandStart: '',
+    bandEnd: ''
   });
 
   // Tracks which inbox IDs we've already alerted on, per-browser, so the popup/sound/
@@ -322,6 +333,9 @@ function App() {
   const formattedDate = getFormattedDate();
   // Only PC and Shivendra ever see the Team Management panel — checked by fixed login id, not by role text.
   const canManageTeam = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
+  // Only PC and Shivendra can summon people to their cabin / call an immediate meeting —
+  // but either of them can call the OTHER one too, since both hold this permission.
+  const canCall = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
 
   const statusColors = {
     'Not Started': '#64748b',
@@ -339,7 +353,9 @@ function App() {
     'Signed Out': '#64748b',
     'Not Signed In': '#94a3b8'
   };
-  const BREAK_STATUSES = ['Lunch Break', 'Meeting'];
+  // FIX — Meeting now counts toward Working hours (only Lunch Break is a real break).
+  const BREAK_STATUSES = ['Lunch Break'];
+  const WORK_STATUSES = ['Working', 'Meeting'];
 
   const playNotifSound = () => {
     try {
@@ -378,6 +394,143 @@ function App() {
       setNotifQueue(q => q.filter(n => n.id !== notifId));
     }, 5000); // FIX #10 — flashes in, auto-dismisses on its own
   };
+
+  // ============================================================
+  // CALLS — "Come to My Cabin" / "Immediate Meeting" summon alerts
+  // ============================================================
+  const [showCallCompose, setShowCallCompose] = useState(false);
+  const [callRecipients, setCallRecipients] = useState([]);
+  const [incomingCall, setIncomingCall] = useState(null); // { callId, from, type }
+  const [outgoingCall, setOutgoingCall] = useState(null); // { callId, type, recipients: [{to,response}] }
+  const seenCallIds = useRef(new Set());
+  const ringAudioCtxRef = useRef(null);
+  const ringIntervalRef = useRef(null);
+  const incomingCallTimeoutRef = useRef(null);
+
+  // Synthesizes a classic two-tone phone ring using the Web Audio API — deliberately
+  // distinct from the task-notification "ding" so a call is unmistakable at a glance/listen.
+  const playRingTone = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
+      const ctx = ringAudioCtxRef.current;
+      const playTone = (freq, start, duration) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + duration + 0.05);
+      };
+      // classic two-ring burst
+      playTone(950, 0, 0.4);
+      playTone(1400, 0, 0.4);
+      playTone(950, 0.5, 0.4);
+      playTone(1400, 0.5, 0.4);
+    } catch (e) {}
+  };
+
+  const startRinging = () => {
+    playRingTone();
+    if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
+    ringIntervalRef.current = setInterval(playRingTone, 1300);
+  };
+
+  const stopRinging = () => {
+    if (ringIntervalRef.current) { clearInterval(ringIntervalRef.current); ringIntervalRef.current = null; }
+    if (incomingCallTimeoutRef.current) { clearTimeout(incomingCallTimeoutRef.current); incomingCallTimeoutRef.current = null; }
+  };
+
+  const checkIncomingCalls = async () => {
+    if (!currentUserInfo || incomingCall) return; // don't interrupt an already-showing ring
+    try {
+      const response = await fetch(API_URL + '?action=getIncomingCalls&userName=' + encodeURIComponent(currentUserInfo.name));
+      const data = await response.json();
+      if (data.status === 'ok' && data.calls.length > 0) {
+        const fresh = data.calls.find(c => !seenCallIds.current.has(c.callId));
+        if (fresh) {
+          seenCallIds.current.add(fresh.callId);
+          setIncomingCall(fresh);
+          startRinging();
+          fireDesktopNotification('📞 Incoming Call', `${fresh.from} — ${fresh.type}`);
+          // 30-second auto-timeout if ignored
+          incomingCallTimeoutRef.current = setTimeout(() => {
+            respondToIncomingCall(fresh.callId, 'Missed', true);
+          }, 30000);
+        }
+      }
+    } catch (error) {}
+  };
+
+  const respondToIncomingCall = (callId, response, isTimeout) => {
+    stopRinging();
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'respondToCall', callId, userName: currentUserInfo.name, response })
+    });
+    setIncomingCall(null);
+  };
+
+  const openCallCompose = () => {
+    setCallRecipients([]);
+    setShowCallCompose(true);
+  };
+
+  const toggleCallRecipient = (name) => {
+    setCallRecipients(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  const sendCall = async (callType) => {
+    if (callRecipients.length === 0) { alert('Select at least one person to call!'); return; }
+    setShowCallCompose(false);
+    try {
+      const response = await fetch(API_URL + '?action=startCall&from=' + encodeURIComponent(currentUserInfo.name) +
+        '&to=' + encodeURIComponent(callRecipients.join(',')) + '&callType=' + encodeURIComponent(callType));
+      const data = await response.json();
+      if (data.status === 'ok') {
+        setOutgoingCall({ callId: data.callId, callType, recipients: callRecipients.map(r => ({ to: r, response: 'Ringing' })) });
+      }
+    } catch (error) {}
+  };
+
+  // While the sender has the live status tracker open, poll every 3s so accept/decline
+  // shows up quickly without needing a full page refresh.
+  useEffect(() => {
+    if (outgoingCall?.callId) {
+      const poll = async () => {
+        try {
+          const response = await fetch(API_URL + '?action=getCallStatus&callId=' + encodeURIComponent(outgoingCall.callId));
+          const data = await response.json();
+          if (data.status === 'ok') {
+            setOutgoingCall(prev => prev ? { ...prev, recipients: data.recipients } : prev);
+          }
+        } catch (error) {}
+      };
+      poll();
+      const interval = setInterval(poll, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [outgoingCall?.callId]);
+
+  // Poll for incoming calls every 4s for everyone (fast enough to feel immediate without
+  // hammering Apps Script) — separate from the main 15s background sync interval.
+  useEffect(() => {
+    if (currentUser) {
+      const interval = setInterval(checkIncomingCalls, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, incomingCall]);
+
+  useEffect(() => {
+    return () => stopRinging();
+  }, []);
 
   useEffect(() => {
     loadTeam();
@@ -628,14 +781,14 @@ function App() {
       for (let i = 0; i < events.length - 1; i++) {
         const duration = events[i + 1].time - events[i].time;
         if (duration < 0) continue;
-        if (events[i].status === 'Working') workingMs += duration;
+        if (WORK_STATUSES.includes(events[i].status)) workingMs += duration;
         else if (BREAK_STATUSES.includes(events[i].status)) breakMs += duration;
       }
       const lastEvent = events[events.length - 1];
       if (lastEvent && lastEvent.status !== 'Signed Out') {
         const duration = now - lastEvent.time;
         if (duration > 0) {
-          if (lastEvent.status === 'Working') workingMs += duration;
+          if (WORK_STATUSES.includes(lastEvent.status)) workingMs += duration;
           else if (BREAK_STATUSES.includes(lastEvent.status)) breakMs += duration;
         }
       }
@@ -655,6 +808,37 @@ function App() {
     } catch (error) {
       return { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
     }
+  };
+
+  const formatMs = (ms) => {
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return `${h}h ${m}m`;
+  };
+
+  const loadMonthlyAttendance = async (year, month) => {
+    if (!currentUser) return;
+    setMonthlyLoading(true);
+    try {
+      const response = await fetch(API_URL + `?action=getMonthlyAttendance&userId=${currentUser}&year=${year}&month=${month}`);
+      const data = await response.json();
+      if (data.status === 'ok') setMonthlyAttendanceDays(data.days);
+    } catch (error) {} finally { setMonthlyLoading(false); }
+  };
+
+  const openMonthlyAttendance = () => {
+    setShowMonthlyAttendance(true);
+    loadMonthlyAttendance(monthlyYear, monthlyMonth);
+  };
+
+  const changeMonthlyMonth = (delta) => {
+    let newMonth = monthlyMonth + delta;
+    let newYear = monthlyYear;
+    if (newMonth > 12) { newMonth = 1; newYear++; }
+    if (newMonth < 1) { newMonth = 12; newYear--; }
+    setMonthlyMonth(newMonth);
+    setMonthlyYear(newYear);
+    loadMonthlyAttendance(newYear, newMonth);
   };
 
   const isTaskAssignedToMe = (task) => {
@@ -713,6 +897,16 @@ function App() {
       alert('Please select start date!');
       return;
     }
+    if (newTask.taskType === 'Routine' && (newTask.frequency === 'Weekly' || newTask.frequency === 'Monthly')) {
+      if (newTask.reminderMode === 'date' && (newTask.reminderDaysBefore === '' || Number(newTask.reminderDaysBefore) < 0)) {
+        alert('Please enter how many days before the due date this should remind you!');
+        return;
+      }
+      if (newTask.reminderMode === 'band' && (newTask.bandStart === '' || newTask.bandEnd === '')) {
+        alert('Please set both the band start and end!');
+        return;
+      }
+    }
     try {
       setSaving(true);
       const taskData = {
@@ -721,7 +915,13 @@ function App() {
         channel: selectedChannels.length > 0 ? selectedChannels.join(', ') : 'Other',
         assignedBy: currentUserInfo.name,
         status: 'Not Started',
-        targetDate: newTask.taskType === 'Routine' ? newTask.startDate : newTask.targetDate
+        targetDate: newTask.taskType === 'Routine' ? newTask.startDate : newTask.targetDate,
+        // Reminder window fields only make sense for Weekly/Monthly Routine tasks —
+        // stripped out otherwise so General tasks are never affected by this system.
+        reminderMode: (newTask.taskType === 'Routine' && (newTask.frequency === 'Weekly' || newTask.frequency === 'Monthly')) ? newTask.reminderMode : '',
+        reminderDaysBefore: (newTask.taskType === 'Routine' && newTask.reminderMode === 'date') ? newTask.reminderDaysBefore : '',
+        bandStart: (newTask.taskType === 'Routine' && newTask.reminderMode === 'band') ? newTask.bandStart : '',
+        bandEnd: (newTask.taskType === 'Routine' && newTask.reminderMode === 'band') ? newTask.bandEnd : ''
       };
       const tempTask = { id: Date.now(), ...taskData, delayDays: 0 };
       setTasks([...tasks, tempTask]);
@@ -732,7 +932,8 @@ function App() {
       });
       setNewTask({
         taskDetails: '', remarks: '', priority: 'Medium', targetDate: '',
-        taskType: 'General', category: '', frequency: 'Daily', startDate: '', endDate: ''
+        taskType: 'General', category: '', frequency: 'Daily', startDate: '', endDate: '',
+        reminderMode: 'date', reminderDaysBefore: 3, bandStart: '', bandEnd: ''
       });
       setSelectedAssignees([]);
       setSelectedChannels([]);
@@ -798,7 +999,8 @@ function App() {
     setEditingTask(null);
     setNewTask({
       taskDetails: '', remarks: '', priority: 'Medium', targetDate: '',
-      taskType: 'General', category: '', frequency: 'Daily', startDate: '', endDate: ''
+      taskType: 'General', category: '', frequency: 'Daily', startDate: '', endDate: '',
+      reminderMode: 'date', reminderDaysBefore: 3, bandStart: '', bandEnd: ''
     });
     setSelectedAssignees([]);
     setSelectedChannels([]);
@@ -846,24 +1048,20 @@ function App() {
     }
   };
 
-  const markAllInboxRead = async () => {
-    for (const item of inbox.filter(i => i.read === 'No')) {
-      try {
-        fetch(API_URL, {
-          method: 'POST', mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
-        });
-      } catch(e) {}
-    }
-    setInbox(inbox.map(i => ({ ...i, read: 'Yes' })));
+  // FIX — inbox items no longer all get marked read the moment you open the panel.
+  // Clicking a specific notification marks only that one read and removes it right
+  // away; everything else stays until you click it too.
+  const handleInboxItemClick = (item) => {
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
+    });
+    setInbox(prev => prev.filter(i => i.id !== item.id));
   };
 
   const openInbox = () => {
     setShowInbox(!showInbox);
-    if (!showInbox && inbox.some(i => i.read === 'No')) {
-      markAllInboxRead();
-    }
   };
 
   const openChat = () => {
@@ -1093,6 +1291,11 @@ function App() {
                 👥
               </button>
             )}
+            {canCall && (
+              <button className="icon-btn call-icon-btn" onClick={openCallCompose} title="Call / Summon">
+                📞
+              </button>
+            )}
             <button className="icon-btn" onClick={openChat} title="Chat">
               💬
               {unreadChats > 0 && <span className="badge-count">{unreadChats}</span>}
@@ -1123,17 +1326,20 @@ function App() {
             {inbox.length === 0 ? (
               <p className="empty-text">No notifications yet</p>
             ) : (
-              inbox.map(item => (
-                <div key={item.id} className={`inbox-item ${item.read === 'No' ? 'unread' : ''}`}>
-                  <div className="inbox-icon">{item.type === 'new_routine' ? '🔄' : '📌'}</div>
-                  <div className="inbox-content">
-                    <p className="inbox-title">{item.type === 'new_routine' ? 'Routine task' : 'New task'} from {item.from}</p>
-                    <p className="inbox-task">{item.title}</p>
-                    <p className="inbox-time">{new Date(item.timestamp).toLocaleString()}</p>
+              <>
+                <p className="inbox-hint">Tap a notification to clear it</p>
+                {inbox.map(item => (
+                  <div key={item.id} className={`inbox-item ${item.read === 'No' ? 'unread' : ''}`} onClick={() => handleInboxItemClick(item)}>
+                    <div className="inbox-icon">{item.type === 'new_routine' ? '🔄' : '📌'}</div>
+                    <div className="inbox-content">
+                      <p className="inbox-title">{item.type === 'new_routine' ? 'Routine task' : 'New task'} from {item.from}</p>
+                      <p className="inbox-task">{item.title}</p>
+                      <p className="inbox-time">{new Date(item.timestamp).toLocaleString()}</p>
+                    </div>
+                    <span className={`priority-tag ${item.priority.toLowerCase()}`}>{item.priority}</span>
                   </div>
-                  <span className={`priority-tag ${item.priority.toLowerCase()}`}>{item.priority}</span>
-                </div>
-              ))
+                ))}
+              </>
             )}
           </div>
         </div>
@@ -1293,13 +1499,156 @@ function App() {
         </div>
       )}
 
+      {/* Monthly Attendance — available to everyone who has the personal attendance card */}
+      {showMonthlyAttendance && (
+        <div className="modal-overlay" onClick={() => setShowMonthlyAttendance(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📅 My Monthly Attendance</h3>
+              <button className="modal-close" onClick={() => setShowMonthlyAttendance(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="month-nav">
+                <button className="btn-secondary" onClick={() => changeMonthlyMonth(-1)}>← Prev</button>
+                <strong>{new Date(monthlyYear, monthlyMonth - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
+                <button className="btn-secondary" onClick={() => changeMonthlyMonth(1)}>Next →</button>
+              </div>
+              {monthlyLoading ? (
+                <p className="empty-text">Loading...</p>
+              ) : (
+                <div className="monthly-table-wrap">
+                  <table className="monthly-table">
+                    <thead>
+                      <tr><th>Date</th><th>Working</th><th>Break</th><th>Productivity</th></tr>
+                    </thead>
+                    <tbody>
+                      {monthlyAttendanceDays.map(d => (
+                        <tr key={d.date} className={!d.hasData ? 'no-data' : ''}>
+                          <td>{new Date(d.date).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</td>
+                          <td>{d.hasData ? formatMs(d.workingMs) : '—'}</td>
+                          <td>{d.hasData ? formatMs(d.breakMs) : '—'}</td>
+                          <td>{d.hasData ? `${d.productivity}%` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {monthlyAttendanceDays.some(d => d.hasData) && (
+                      <tfoot>
+                        <tr>
+                          <td><strong>Total</strong></td>
+                          <td><strong>{formatMs(monthlyAttendanceDays.reduce((s, d) => s + d.workingMs, 0))}</strong></td>
+                          <td><strong>{formatMs(monthlyAttendanceDays.reduce((s, d) => s + d.breakMs, 0))}</strong></td>
+                          <td>—</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading && <div className="loading-state"><p>Loading...</p></div>}
+
+      {/* CALL COMPOSE — pick recipients, then choose the call type */}
+      {showCallCompose && canCall && (
+        <div className="modal-overlay" onClick={() => setShowCallCompose(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📞 Call / Summon Team</h3>
+              <button className="modal-close" onClick={() => setShowCallCompose(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="form-group">
+                <label>Who do you want to call? ({callRecipients.length} selected)</label>
+                <div className="assignee-avatars-select">
+                  <div
+                    className={`avatar-select ${callRecipients.length === activeTeam.filter(m => m.id !== currentUser).length ? 'checked' : ''}`}
+                    onClick={() => setCallRecipients(
+                      callRecipients.length === activeTeam.filter(m => m.id !== currentUser).length
+                        ? [] : activeTeam.filter(m => m.id !== currentUser).map(m => m.name)
+                    )}
+                    title="Select All"
+                  >
+                    ALL
+                  </div>
+                  {activeTeam.filter(m => m.id !== currentUser).map(member => (
+                    <div
+                      key={member.id}
+                      className={`avatar-select ${callRecipients.includes(member.name) ? 'checked' : ''}`}
+                      onClick={() => toggleCallRecipient(member.name)}
+                      title={member.displayName}
+                    >
+                      {member.avatar}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="reminder-window-hint">This rings on their dashboard with a full-screen alert and sound — not an actual audio/video call, just a fast way to summon someone.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowCallCompose(false)}>Cancel</button>
+              <button className="btn-cabin" onClick={() => sendCall('Come to My Cabin')}>🏠 Come to My Cabin</button>
+              <button className="btn-urgent-call" onClick={() => sendCall('Immediate Meeting')}>🚨 Immediate Meeting</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OUTGOING CALL — live status tracker for the caller */}
+      {outgoingCall && (
+        <div className="modal-overlay" onClick={() => setOutgoingCall(null)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📞 {outgoingCall.callType} — sent to {outgoingCall.recipients.length}</h3>
+              <button className="modal-close" onClick={() => setOutgoingCall(null)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="call-status-list">
+                {outgoingCall.recipients.map(r => {
+                  const member = team.find(t => t.name === r.to);
+                  const icon = r.response === 'Accepted' ? '✅' : r.response === 'Declined' ? '❌' : r.response === 'Missed' ? '⌛' : '📞';
+                  const cls = r.response === 'Accepted' ? 'accepted' : r.response === 'Declined' ? 'declined' : r.response === 'Missed' ? 'missed' : 'ringing';
+                  return (
+                    <div key={r.to} className={`call-status-row ${cls}`}>
+                      <span className="chat-avatar">{member?.avatar || r.to.substring(0, 2)}</span>
+                      <span className="call-status-name">{member?.displayName || r.to}</span>
+                      <span className="call-status-badge">{icon} {r.response === 'Ringing' ? 'Ringing...' : r.response}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INCOMING CALL — full-screen ring overlay */}
+      {incomingCall && (
+        <div className="incoming-call-overlay">
+          <div className="incoming-call-card">
+            <div className="incoming-call-avatar">
+              {team.find(t => t.name === incomingCall.from)?.avatar || incomingCall.from.substring(0, 2)}
+            </div>
+            <h2>📞 {incomingCall.from} is calling you</h2>
+            <p className="incoming-call-type">{incomingCall.type}</p>
+            <div className="incoming-call-actions">
+              <button className="btn-decline-call" onClick={() => respondToIncomingCall(incomingCall.callId, 'Declined')}>✕ Decline</button>
+              <button className="btn-accept-call" onClick={() => respondToIncomingCall(incomingCall.callId, 'Accepted')}>✓ Accept</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!loading && (
         <>
           {(!isAdmin || isHR) && (
             <div className="attendance-card-premium">
-              <h3>⏰ Your Attendance Today</h3>
+              <div className="attendance-card-header">
+                <h3>⏰ Your Attendance Today</h3>
+                <button className="btn-monthly-attendance" onClick={openMonthlyAttendance}>📅 Monthly Attendance</button>
+              </div>
               <div className="attendance-info">
                 <div className="status-badge" style={{background: attendanceColors[myStatus] + '20', color: attendanceColors[myStatus]}}>
                   {myStatus}
@@ -1540,7 +1889,7 @@ function App() {
                             </div>
                             <div className="meta-row">
                               <span>📌 By: <strong>{task.assignedBy}</strong></span>
-                              <span>📅 {new Date(task.targetDate).toLocaleDateString()}</span>
+                              <span className="date-badge">📅 {new Date(task.targetDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                             </div>
                           </div>
                           <div className="task-footer">
@@ -1657,24 +2006,97 @@ function App() {
                   <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.targetDate} onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} />
                 </div>
               ) : (
-                <div className="form-row-3">
-                  <div className="form-group">
-                    <label>Frequency</label>
-                    <select value={newTask.frequency} onChange={(e) => setNewTask({ ...newTask, frequency: e.target.value })}>
-                      <option value="Daily">Daily</option>
-                      <option value="Weekly">Weekly (Same day)</option>
-                      <option value="Monthly">Monthly (Same date)</option>
-                    </select>
+                <>
+                  <div className="form-row-3">
+                    <div className="form-group">
+                      <label>Frequency</label>
+                      <select value={newTask.frequency} onChange={(e) => setNewTask({ ...newTask, frequency: e.target.value })}>
+                        <option value="Daily">Daily</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>{newTask.frequency === 'Daily' ? 'Start *' : (newTask.frequency === 'Weekly' ? 'Anchor Weekday *' : 'Anchor Date *')}</label>
+                      <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.startDate} onChange={(e) => setNewTask({ ...newTask, startDate: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>End (optional)</label>
+                      <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.endDate} onChange={(e) => setNewTask({ ...newTask, endDate: e.target.value })} />
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>Start *</label>
-                    <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.startDate} onChange={(e) => setNewTask({ ...newTask, startDate: e.target.value })} />
-                  </div>
-                  <div className="form-group">
-                    <label>End</label>
-                    <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.endDate} onChange={(e) => setNewTask({ ...newTask, endDate: e.target.value })} />
-                  </div>
-                </div>
+
+                  {(newTask.frequency === 'Weekly' || newTask.frequency === 'Monthly') && (
+                    <div className="reminder-window-box">
+                      <label className="reminder-window-title">⏰ Reminder Window</label>
+                      <div className="task-type-toggle" style={{marginBottom: '10px'}}>
+                        <button type="button" className={newTask.reminderMode === 'date' ? 'active' : ''} onClick={() => setNewTask({...newTask, reminderMode: 'date'})}>
+                          📆 Specific {newTask.frequency === 'Weekly' ? 'Weekday' : 'Date'} + Days Before
+                        </button>
+                        <button type="button" className={newTask.reminderMode === 'band' ? 'active' : ''} onClick={() => setNewTask({...newTask, reminderMode: 'band'})}>
+                          📊 Date Band
+                        </button>
+                      </div>
+
+                      {newTask.reminderMode === 'date' ? (
+                        <div className="form-group">
+                          <label>Remind me this many days before the due date</label>
+                          <input
+                            type="number" min="0" max="60" placeholder="e.g. 7"
+                            value={newTask.reminderDaysBefore}
+                            onChange={(e) => setNewTask({ ...newTask, reminderDaysBefore: e.target.value })}
+                          />
+                          <p className="reminder-window-hint">
+                            The task stays hidden and won't notify anyone until {newTask.reminderDaysBefore || 'X'} day(s) before the due date (taken from the {newTask.frequency === 'Weekly' ? 'weekday' : 'day-of-month'} you picked above). It then appears and sends a reminder message, and stays visible (going overdue if needed) until completed.
+                          </p>
+                        </div>
+                      ) : newTask.frequency === 'Weekly' ? (
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Band Start (weekday)</label>
+                            <select value={newTask.bandStart} onChange={(e) => setNewTask({ ...newTask, bandStart: e.target.value })}>
+                              <option value="">Select</option>
+                              {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, idx) => (
+                                <option key={d} value={idx}>{d}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Band End (weekday)</label>
+                            <select value={newTask.bandEnd} onChange={(e) => setNewTask({ ...newTask, bandEnd: e.target.value })}>
+                              <option value="">Select</option>
+                              {['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map((d, idx) => (
+                                <option key={d} value={idx}>{d}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label>Band Start (day of month)</label>
+                            <select value={newTask.bandStart} onChange={(e) => setNewTask({ ...newTask, bandStart: e.target.value })}>
+                              <option value="">Select</option>
+                              {Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Band End (day of month)</label>
+                            <select value={newTask.bandEnd} onChange={(e) => setNewTask({ ...newTask, bandEnd: e.target.value })}>
+                              <option value="">Select</option>
+                              {Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                      {newTask.reminderMode === 'band' && (
+                        <p className="reminder-window-hint">
+                          The task appears on the Band Start {newTask.frequency === 'Weekly' ? 'weekday' : 'day'} and its due date is the Band End {newTask.frequency === 'Weekly' ? 'weekday' : 'day'} — visible the whole span, every {newTask.frequency === 'Weekly' ? 'week' : 'month'}.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
               {editingTask && !isAdmin && (
                 <p className="tm-hint">Note: status changes (including marking Completed) still happen from the status dropdown on the task card, not here.</p>

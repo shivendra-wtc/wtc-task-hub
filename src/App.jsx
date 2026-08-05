@@ -173,6 +173,13 @@ function App() {
 
   // ---- FIX #13: team is now live state, loaded from the backend TeamConfig sheet ----
   const [team, setTeam] = useState(DEFAULT_TEAM);
+  // FIX — gates the "invalid user" screen behind an actual load attempt. Without this,
+  // anyone added to the team AFTER the original 14 (like Somesh) would briefly — or on a
+  // slow connection, not-so-briefly — see the dead-end "use your personal link" screen on
+  // every fresh page load, simply because getTeam() hadn't resolved yet. That's what made
+  // it look like the dashboard "needed a click" to appear: a later click/action just
+  // happened to coincide with team data having already finished loading.
+  const [teamLoaded, setTeamLoaded] = useState(false);
 
   const extraAssignees = ['AG', 'BG'];
   const activeTeam = team.filter(t => t.active !== false);
@@ -290,6 +297,8 @@ function App() {
   const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showTeamManager, setShowTeamManager] = useState(false); // FIX #13
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [showOlderRoutine, setShowOlderRoutine] = useState(false);
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedChannels, setSelectedChannels] = useState([]);
   const [notifQueue, setNotifQueue] = useState([]); // FIX #7/#10 — queue instead of single popup
@@ -326,7 +335,7 @@ function App() {
   const currentUserInfo = team.find(t => t.id === currentUser);
   const isAdmin = currentUserInfo?.isAdmin || false;
   const isHR = currentUserInfo?.isHR || false;
-  const isInvalidUser = !currentUser || !currentUserInfo;
+  const isInvalidUser = teamLoaded && (!currentUser || !currentUserInfo);
   const displayName = currentUserInfo?.displayName || '';
   const greeting = displayName ? getTimeBasedGreeting(displayName) : '';
   const todayQuote = currentUser ? getTodayQuote(currentUser) : '';
@@ -357,11 +366,27 @@ function App() {
   const BREAK_STATUSES = ['Lunch Break'];
   const WORK_STATUSES = ['Working', 'Meeting'];
 
+  // FIX — live presence dot: true if this person is currently signed in and actively
+  // working (or in a meeting, which counts as working per the attendance fix). Used on
+  // avatars in task cards, Quick Switch, and chat so you can see who's actually around.
+  const isPresent = (name) => {
+    const member = team.find(t => t.name === name);
+    if (!member) return false;
+    const record = attendance.find(a => a.userId === member.id);
+    return !!record && WORK_STATUSES.includes(record.status);
+  };
+
+  // FIX — louder and more noticeable: volume maxed out (was 0.5) and a quick double-beep
+  // instead of a single short beep, so it actually cuts through when someone's not looking.
   const playNotifSound = () => {
     try {
-      const audio = new Audio('data:audio/wav;base64,UklGRlwFAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YTgFAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGnt/yv2wiBTGH0PLTgjMGHm7A7+OZURE');
-      audio.volume = 0.5;
-      audio.play().catch(e => {});
+      const beep = () => {
+        const audio = new Audio('data:audio/wav;base64,UklGRlwFAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YTgFAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGnt/yv2wiBTGH0PLTgjMGHm7A7+OZURE');
+        audio.volume = 1.0;
+        audio.play().catch(e => {});
+      };
+      beep();
+      setTimeout(beep, 220);
     } catch(e) {}
   };
 
@@ -409,6 +434,8 @@ function App() {
 
   // Synthesizes a classic two-tone phone ring using the Web Audio API — deliberately
   // distinct from the task-notification "ding" so a call is unmistakable at a glance/listen.
+  // FIX — made louder (gain 0.25 → 0.55) and more urgent (repeats every 1.1s instead of
+  // 1.3s, with a fuller triple-burst pattern) so it's genuinely hard to miss across a desk.
   const playRingTone = () => {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -421,18 +448,20 @@ function App() {
         osc.type = 'sine';
         osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.55, ctx.currentTime + start + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(ctx.currentTime + start);
         osc.stop(ctx.currentTime + start + duration + 0.05);
       };
-      // classic two-ring burst
-      playTone(950, 0, 0.4);
-      playTone(1400, 0, 0.4);
-      playTone(950, 0.5, 0.4);
-      playTone(1400, 0.5, 0.4);
+      // fuller triple-burst ring pattern
+      playTone(950, 0, 0.35);
+      playTone(1400, 0, 0.35);
+      playTone(950, 0.42, 0.35);
+      playTone(1400, 0.42, 0.35);
+      playTone(950, 0.84, 0.35);
+      playTone(1400, 0.84, 0.35);
     } catch (e) {}
   };
 
@@ -462,7 +491,7 @@ function App() {
           // 30-second auto-timeout if ignored
           incomingCallTimeoutRef.current = setTimeout(() => {
             respondToIncomingCall(fresh.callId, 'Missed', true);
-          }, 30000);
+          }, 45000);
         }
       }
     } catch (error) {}
@@ -521,12 +550,17 @@ function App() {
 
   // Poll for incoming calls every 4s for everyone (fast enough to feel immediate without
   // hammering Apps Script) — separate from the main 15s background sync interval.
+  // FIX — currentUserInfo?.name is in the dependency array on purpose: without it, if team
+  // data (from loadTeam) resolves even a moment AFTER this effect's first run, the interval
+  // callback stays permanently stuck with the stale "not loaded yet" closure forever (since
+  // nothing else in the array ever changes), and checkIncomingCalls silently no-ops on every
+  // single tick. This is exactly why calls to newer team members weren't arriving.
   useEffect(() => {
     if (currentUser) {
       const interval = setInterval(checkIncomingCalls, 4000);
       return () => clearInterval(interval);
     }
-  }, [currentUser, incomingCall]);
+  }, [currentUser, incomingCall, currentUserInfo?.name]);
 
   useEffect(() => {
     return () => stopRinging();
@@ -545,6 +579,9 @@ function App() {
     }
   }, [currentUser]);
 
+  // FIX — same stale-closure issue as the call-polling effect above: currentUserInfo?.name
+  // must be in the dependency array, or this interval can get permanently stuck running
+  // with an undefined currentUserInfo if team data resolves after this effect's first run.
   useEffect(() => {
     if (currentUser) {
       const interval = setInterval(() => {
@@ -561,7 +598,7 @@ function App() {
       }, 15000);
       return () => clearInterval(interval);
     }
-  }, [currentUser, notifPermission]);
+  }, [currentUser, notifPermission, currentUserInfo?.name]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -587,7 +624,10 @@ function App() {
         const missingDefaults = DEFAULT_TEAM.filter(m => !liveIds.has(m.id));
         setTeam([...data.team, ...missingDefaults]);
       }
-    } catch (error) {}
+    } catch (error) {
+    } finally {
+      setTeamLoaded(true);
+    }
   };
 
   const loadTasks = async () => {
@@ -860,9 +900,11 @@ function App() {
         if (t.assignedBy !== currentUserInfo.name || !isTaskAssignedToMe(t)) return false;
       } else {
         if (managerView !== 'all') {
-          const user = team.find(u => u.id === managerView);
+          // AG/BG aren't real team members (no dashboard), so they're not in `team` —
+          // their pseudo-id IS their literal assignedTo name.
+          const targetName = (managerView === 'AG' || managerView === 'BG') ? managerView : team.find(u => u.id === managerView)?.name;
           const assignees = String(t.assignedTo).split(',').map(a => a.trim());
-          if (!assignees.includes(user?.name)) return false;
+          if (!assignees.includes(targetName)) return false;
         }
       }
     } else {
@@ -883,6 +925,12 @@ function App() {
     }
     return true;
   });
+
+  // FIX — Daily routine tasks 14+ days overdue and never completed get split into their
+  // own collapsed section instead of burying the rest of the board. Still fully counted
+  // and visible, just tucked away — nothing is hidden from accountability.
+  const freshTasks = filteredTasks.filter(t => !t.isStale);
+  const staleTasks = filteredTasks.filter(t => t.isStale);
 
   const handleAddTask = async () => {
     if (selectedAssignees.length === 0 || !newTask.taskDetails) {
@@ -1006,12 +1054,59 @@ function App() {
     setSelectedChannels([]);
   };
 
+  const [confettiPieces, setConfettiPieces] = useState([]);
+
+  // Short upbeat ascending chime — distinct from both the notification ding and the call
+  // ring, so completing a task has its own small reward feel.
+  const playSuccessChime = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
+      const ctx = ringAudioCtxRef.current;
+      [523.25, 659.25, 783.99].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const start = idx * 0.09;
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.35, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + 0.3);
+      });
+    } catch (e) {}
+  };
+
+  const CONFETTI_COLORS = ['#c9a961', '#1a3a5c', '#2c5aa0', '#059669', '#dc2626', '#7c3aed'];
+  const triggerCelebration = () => {
+    const pieces = Array.from({ length: 28 }, (_, i) => ({
+      id: Date.now() + '_' + i,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.3,
+      duration: 1.4 + Math.random() * 0.8,
+      color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+      rotate: Math.random() * 360
+    }));
+    setConfettiPieces(pieces);
+    playSuccessChime();
+    setTimeout(() => setConfettiPieces([]), 2400);
+  };
+
   const handleStatusChange = async (taskId, newStatus) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     if (task.status === 'Completed' && !isAdmin) {
       alert('Only Shivendra Singh or PC can change completed tasks!');
       return;
+    }
+    // FIX — small celebration on a genuine new completion (not when re-selecting
+    // Completed again, and not for admins bulk-correcting old records).
+    if (newStatus === 'Completed' && task.status !== 'Completed') {
+      triggerCelebration();
     }
     setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     try {
@@ -1136,6 +1231,7 @@ function App() {
   const getViewTitle = () => {
     if (isAdmin && taskViewMode === 'all' && managerView === 'all') return 'All Team Tasks';
     if (isAdmin && taskViewMode === 'all' && managerView !== 'all') {
+      if (managerView === 'AG' || managerView === 'BG') return `${managerView}'s Tasks`;
       const member = team.find(t => t.id === managerView);
       return `${member?.name}'s Tasks`;
     }
@@ -1220,6 +1316,23 @@ function App() {
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
 
+  // FIX — show a neutral loading state while team data is still being fetched, instead of
+  // jumping straight to the "invalid user" dead-end screen. Matters most for anyone added
+  // to the team after the original 14, whose account only exists once this resolves.
+  if (!teamLoaded && currentUser) {
+    return (
+      <div className="app">
+        <div className="welcome-screen">
+          <div className="welcome-card">
+            <img src="/wtc-logo.png" alt="WTC" className="welcome-logo" />
+            <h1>WTC Management Hub</h1>
+            <p className="welcome-text">Loading your dashboard...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (isInvalidUser) {
     return (
       <div className="app">
@@ -1243,6 +1356,25 @@ function App() {
 
   return (
     <div className="app">
+      {/* FIX — completion celebration confetti */}
+      {confettiPieces.length > 0 && (
+        <div className="confetti-overlay">
+          {confettiPieces.map(p => (
+            <span
+              key={p.id}
+              className="confetti-piece"
+              style={{
+                left: `${p.left}%`,
+                backgroundColor: p.color,
+                animationDelay: `${p.delay}s`,
+                animationDuration: `${p.duration}s`,
+                transform: `rotate(${p.rotate}deg)`
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* FIX #7/#10 — notification queue: multiple can stack, each flashes in and auto-dismisses */}
       <div className="notif-stack">
         {notifQueue.map(n => (
@@ -1271,42 +1403,55 @@ function App() {
           </div>
           
           <div className="header-actions-premium">
-            {notifPermission === 'default' && (
-              <button className="icon-btn notif-ask-btn" onClick={requestNotifPermission} title="Enable desktop notifications">
-                🔕
+            <div className="icon-dock">
+              {notifPermission === 'default' && (
+                <button className="icon-btn icon-gold notif-ask-btn" onClick={requestNotifPermission} title="Enable desktop notifications">
+                  🔕
+                </button>
+              )}
+              {notifPermission === 'denied' && (
+                <button className="icon-btn notif-denied-btn" onClick={() => alert('Desktop notifications are blocked for this site in your browser.\n\nTo fix: click the 🔒 or ⓘ icon in your address bar → Site settings → Notifications → Allow. Then reload this page.')} title="Desktop notifications blocked — click for how to fix">
+                  🚫
+                </button>
+              )}
+              {notifPermission === 'granted' && (
+                <button className="icon-btn icon-gold" onClick={sendTestNotification} title="Desktop notifications are ON — click to send a test">
+                  🔔✓
+                </button>
+              )}
+              {canManageTeam && (
+                <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
+                  👥
+                </button>
+              )}
+              {canCall && (
+                <button className="icon-btn icon-coral call-icon-btn" onClick={openCallCompose} title="Call / Summon">
+                  📞
+                </button>
+              )}
+              <button className="icon-btn icon-teal" onClick={openChat} title="Chat">
+                💬
+                {unreadChats > 0 && <span className="badge-count">{unreadChats}</span>}
               </button>
-            )}
-            {notifPermission === 'denied' && (
-              <button className="icon-btn notif-denied-btn" onClick={() => alert('Desktop notifications are blocked for this site in your browser.\n\nTo fix: click the 🔒 or ⓘ icon in your address bar → Site settings → Notifications → Allow. Then reload this page.')} title="Desktop notifications blocked — click for how to fix">
-                🚫
+              <button className="icon-btn icon-gold" onClick={openInbox} title="Inbox">
+                🔔
+                {unreadInbox > 0 && <span className="badge-count">{unreadInbox}</span>}
               </button>
-            )}
-            {notifPermission === 'granted' && (
-              <button className="icon-btn" onClick={sendTestNotification} title="Desktop notifications are ON — click to send a test">
-                🔔✓
+              <button
+                className={`icon-btn ${manualRefreshing ? 'spinning' : ''}`}
+                onClick={async () => {
+                  if (manualRefreshing) return;
+                  setManualRefreshing(true);
+                  // FIX — uses the silent background loaders (no full-page "Loading..." block)
+                  // so refreshing feels instant instead of blanking the whole dashboard.
+                  await Promise.all([loadTasksBackground(), loadAttendanceBackground(), loadInboxBackground(), loadChatsBackground(), loadTeam()]);
+                  setTimeout(() => setManualRefreshing(false), 500);
+                }}
+                title="Refresh"
+              >
+                🔄
               </button>
-            )}
-            {canManageTeam && (
-              <button className="icon-btn" onClick={() => setShowTeamManager(true)} title="Manage Team">
-                👥
-              </button>
-            )}
-            {canCall && (
-              <button className="icon-btn call-icon-btn" onClick={openCallCompose} title="Call / Summon">
-                📞
-              </button>
-            )}
-            <button className="icon-btn" onClick={openChat} title="Chat">
-              💬
-              {unreadChats > 0 && <span className="badge-count">{unreadChats}</span>}
-            </button>
-            <button className="icon-btn" onClick={openInbox} title="Inbox">
-              🔔
-              {unreadInbox > 0 && <span className="badge-count">{unreadInbox}</span>}
-            </button>
-            <button className="icon-btn" onClick={() => { loadTasks(); loadAttendance(); loadInbox(); loadChats(); loadTeam(); }} title="Refresh">
-              🔄
-            </button>
+            </div>
             {!showArchive && (
               <button className="btn-new-task" onClick={() => setShowNewTaskForm(true)}>
                 <span>+</span> New Task
@@ -1368,7 +1513,10 @@ function App() {
                   const conv = getConversationList().find(c => c.person === member.name);
                   return (
                     <div key={member.id} className="email-row" onClick={() => openChatWith(member.name)}>
-                      <div className="email-avatar">{member.avatar}</div>
+                      <div className="email-avatar-wrap">
+                        <div className="email-avatar">{member.avatar}</div>
+                        {isPresent(member.name) && <span className="presence-dot" title="Currently working"></span>}
+                      </div>
                       <div className="email-row-body">
                         <div className="email-row-top">
                           <strong>{member.displayName}</strong>
@@ -1805,8 +1953,16 @@ function App() {
                     <button className={managerView === 'all' ? 'active' : ''} onClick={() => setManagerView('all')}>All Tasks</button>
                     {/* FIX #11 — Quick Switch now includes admin colleagues too (e.g. PC sees Shivendra, and vice versa), excluding only the current viewer */}
                     {activeTeam.filter(m => m.id !== currentUser).map(member => (
-                      <button key={member.id} className={managerView === member.id ? 'active' : ''} onClick={() => setManagerView(member.id)} title={member.displayName}>
+                      <button key={member.id} className={`quick-switch-btn ${managerView === member.id ? 'active' : ''}`} onClick={() => setManagerView(member.id)} title={member.displayName}>
                         {member.avatar}
+                        {isPresent(member.name) && <span className="presence-dot presence-dot-btn" title="Currently working"></span>}
+                      </button>
+                    ))}
+                    {/* AG and BG are task-assignment-only names (no dashboard/login) — included
+                        here so PC/Shivendra can filter to see just their tasks like anyone else. */}
+                    {extraAssignees.map(name => (
+                      <button key={name} className={managerView === name ? 'active' : ''} onClick={() => setManagerView(name)} title={name}>
+                        {name}
                       </button>
                     ))}
                   </div>
@@ -1847,72 +2003,102 @@ function App() {
               </div>
 
               <div className="tasks-container">
-                {filteredTasks.length === 0 ? (
-                  <div className="empty-state">
-                    <p>No tasks to display</p>
-                  </div>
-                ) : (
-                  <div className="tasks-grid">
-                    {filteredTasks.map(task => {
-                      const isCompleted = task.status === 'Completed';
-                      const canChangeStatus = isAdmin || !isCompleted;
-                      const canEdit = isAdmin || !isCompleted;
-                      const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
-                      const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
-                      return (
-                        <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''}`}>
-                          <div className={`priority-strip ${task.priority.toLowerCase()}`}></div>
-                          {isRoutine && <div className="routine-tag">🔄 Routine Task</div>}
-                          {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
-                          <div className="task-header">
-                            <div className="task-title-row">
-                              <h3>{task.taskDetails}</h3>
-                              {canEdit && (
-                                <button className="btn-edit-task" onClick={() => openEditTask(task)} title="Edit task">✏️</button>
-                              )}
-                            </div>
-                            <div className="badges">
-                              {channelList.map(ch => <span key={ch} className="badge-channel">{ch}</span>)}
-                              <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
-                              {task.category && <span className="badge-category">{task.category}</span>}
-                            </div>
-                            {task.remarks && <p className="task-remarks">💬 {task.remarks}</p>}
+                {(() => {
+                  const renderTaskCard = (task) => {
+                    const isCompleted = task.status === 'Completed';
+                    const canChangeStatus = isAdmin || !isCompleted;
+                    const canEdit = isAdmin || !isCompleted;
+                    const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
+                    const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
+                    const isUrgent = task.priority === 'High' && task.delayDays > 0;
+                    return (
+                      <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''}`}>
+                        <div className={`priority-strip ${task.priority.toLowerCase()} ${isUrgent ? 'urgent-shimmer' : ''}`}></div>
+                        {isRoutine && <div className="routine-tag">🔄 Routine Task</div>}
+                        {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
+                        <div className="task-header">
+                          <div className="task-title-row">
+                            <h3>{task.taskDetails}</h3>
+                            {canEdit && (
+                              <button className="btn-edit-task" onClick={() => openEditTask(task)} title="Edit task">✏️</button>
+                            )}
                           </div>
-                          <div className="task-meta">
-                            <div className="assignee-row">
-                              <span className="meta-label">Assigned to:</span>
-                              <div className="assignee-avatars">
-                                {String(task.assignedTo).split(',').map(a => a.trim()).map(name => (
-                                  <span key={name} className="mini-avatar" title={name}>{getAvatarForName(name)}</span>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="meta-row">
-                              <span>📌 By: <strong>{task.assignedBy}</strong></span>
-                              <span className="date-badge">📅 {new Date(task.targetDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                          <div className="badges">
+                            {channelList.map(ch => <span key={ch} className="badge-channel">{ch}</span>)}
+                            <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
+                            {task.category && <span className="badge-category">{task.category}</span>}
+                          </div>
+                          {task.remarks && <p className="task-remarks">💬 {task.remarks}</p>}
+                        </div>
+                        <div className="task-meta">
+                          <div className="assignee-row">
+                            <span className="meta-label">Assigned to:</span>
+                            <div className="assignee-avatars">
+                              {String(task.assignedTo).split(',').map(a => a.trim()).map(name => (
+                                <span key={name} className="mini-avatar-wrap" title={name}>
+                                  <span className="mini-avatar">{getAvatarForName(name)}</span>
+                                  {isPresent(name) && <span className="presence-dot" title="Currently working"></span>}
+                                </span>
+                              ))}
                             </div>
                           </div>
-                          <div className="task-footer">
-                            <select 
-                              value={task.status} 
-                              onChange={(e) => handleStatusChange(task.id, e.target.value)} 
-                              className={`status-select ${!canChangeStatus ? 'locked' : ''}`}
-                              style={{ color: statusColors[task.status] }}
-                              disabled={!canChangeStatus}
-                            >
-                              <option value="Not Started">Not Started</option>
-                              <option value="In Progress">In Progress</option>
-                              <option value="Completed">Completed {isCompleted && !isAdmin ? '🔒' : ''}</option>
-                              <option value="On Hold">On Hold</option>
-                              <option value="Delayed">Delayed</option>
-                            </select>
-                            <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)}>WA</button>
+                          <div className="meta-row">
+                            <span>📌 By: <strong>{task.assignedBy}</strong></span>
+                            <span className="date-badge">📅 {new Date(task.targetDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div className="task-footer">
+                          <select
+                            value={task.status}
+                            onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                            className={`status-select ${!canChangeStatus ? 'locked' : ''}`}
+                            style={{ color: statusColors[task.status] }}
+                            disabled={!canChangeStatus}
+                          >
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed {isCompleted && !isAdmin ? '🔒' : ''}</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Delayed">Delayed</option>
+                          </select>
+                          <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)}>WA</button>
+                        </div>
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <>
+                      {freshTasks.length === 0 && staleTasks.length === 0 ? (
+                        <div className="empty-state">
+                          <div className="empty-state-icon">🎉</div>
+                          <p className="empty-state-title">You're all caught up!</p>
+                          <p className="empty-state-sub">No tasks to show here right now.</p>
+                        </div>
+                      ) : (
+                        <>
+                          {freshTasks.length > 0 && (
+                            <div className="tasks-grid">
+                              {freshTasks.map(renderTaskCard)}
+                            </div>
+                          )}
+                          {staleTasks.length > 0 && (
+                            <div className="stale-routine-section">
+                              <button className="stale-routine-toggle" onClick={() => setShowOlderRoutine(!showOlderRoutine)}>
+                                📦 Older Routine Tasks ({staleTasks.length}) — 14+ days unfinished {showOlderRoutine ? '▼' : '▶'}
+                              </button>
+                              {showOlderRoutine && (
+                                <div className="tasks-grid stale-grid">
+                                  {staleTasks.map(renderTaskCard)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </>
           )}
@@ -2002,8 +2188,14 @@ function App() {
 
               {(newTask.taskType === 'General' || editingTask) ? (
                 <div className="form-group">
-                  <label>Target Date *</label>
-                  <input type="date" min="2025-01-01" max="2030-12-31" value={newTask.targetDate} onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })} />
+                  <label>Target Date * {editingTask && !isAdmin && <span className="date-locked-tag">🔒 Only Shivendra/PC can change this</span>}</label>
+                  <input
+                    type="date" min="2025-01-01" max="2030-12-31"
+                    value={newTask.targetDate}
+                    onChange={(e) => setNewTask({ ...newTask, targetDate: e.target.value })}
+                    disabled={editingTask && !isAdmin}
+                    className={editingTask && !isAdmin ? 'input-locked' : ''}
+                  />
                 </div>
               ) : (
                 <>

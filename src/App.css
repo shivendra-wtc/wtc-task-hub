@@ -16,6 +16,12 @@
   --warning: #d97706;
   --danger: #dc2626;
   --purple: #7c3aed;
+  /* FIX — new accent colors for the redesigned icon dock + UI variety pass.
+     Brand navy + gold stay primary everywhere else; these are used specifically
+     for icon color-coding and small decorative accents. */
+  --accent-teal: #0d9488;
+  --accent-coral: #f43f5e;
+  --accent-violet: #8b5cf6;
   --gray-50: #f8fafc;
   --gray-100: #f1f5f9;
   --gray-200: #e2e8f0;
@@ -151,6 +157,18 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   pointer-events: none;
 }
 
+.header-premium::after {
+  content: '';
+  position: absolute;
+  bottom: -60%;
+  left: -5%;
+  width: 350px;
+  height: 350px;
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.12) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
 .header-container {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -226,8 +244,36 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 .header-actions-premium {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
+}
+
+/* FIX — icon dock: a single cohesive glass pill housing all the header icons, with thin
+   dividers between them, instead of icons floating loose. Option A+B combo. */
+.icon-dock {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 30px;
+  padding: 5px;
+  backdrop-filter: blur(10px);
+}
+
+.icon-dock .icon-btn {
+  position: relative;
+}
+
+.icon-dock .icon-btn:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .icon-btn {
@@ -250,6 +296,37 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   background: rgba(255, 255, 255, 0.25);
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* FIX — color-coded icons so each function reads instantly at a glance (Option A) */
+.icon-gold { background: rgba(201, 169, 97, 0.28) !important; border-color: rgba(201, 169, 97, 0.5) !important; }
+.icon-gold:hover { background: rgba(201, 169, 97, 0.42) !important; }
+
+.icon-teal { background: rgba(13, 148, 136, 0.28) !important; border-color: rgba(13, 148, 136, 0.5) !important; }
+.icon-teal:hover { background: rgba(13, 148, 136, 0.42) !important; }
+
+.icon-violet { background: rgba(139, 92, 246, 0.28) !important; border-color: rgba(139, 92, 246, 0.5) !important; }
+.icon-violet:hover { background: rgba(139, 92, 246, 0.42) !important; }
+
+.icon-coral { background: rgba(244, 63, 94, 0.28) !important; border-color: rgba(244, 63, 94, 0.5) !important; }
+.icon-coral:hover { background: rgba(244, 63, 94, 0.42) !important; }
+
+/* Call button always has a subtle "alive" pulse ring since it's time-sensitive and new */
+.call-icon-btn {
+  animation: call-alive-pulse 2.4s infinite;
+}
+@keyframes call-alive-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(244, 63, 94, 0); }
+}
+
+/* Refresh icon spins while a manual refresh is in flight */
+.icon-btn.spinning {
+  animation: icon-spin 0.6s linear infinite;
+}
+@keyframes icon-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .badge-count {
@@ -463,6 +540,11 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 .email-row:hover {
   background: var(--gray-50);
+}
+
+.email-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .email-avatar {
@@ -918,6 +1000,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   font-weight: 600;
   color: var(--gray-600);
   white-space: nowrap;
+  position: relative;
 }
 
 .user-switcher button:hover {
@@ -1181,6 +1264,11 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   flex-wrap: wrap;
 }
 
+.mini-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
 .mini-avatar {
   width: 26px;
   height: 26px;
@@ -1194,6 +1282,31 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   font-size: 10px;
   border: 2px solid white;
   box-shadow: var(--shadow-sm);
+}
+
+/* FIX — live presence dot: shows on avatars wherever someone is currently signed in and
+   working (or in a meeting). Small green pulse, positioned at the bottom-right corner. */
+.presence-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  border: 2px solid white;
+  animation: presence-pulse 2s infinite;
+}
+
+.presence-dot-btn {
+  bottom: -2px;
+  right: -2px;
+  border-color: var(--primary-dark);
+}
+
+@keyframes presence-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.6); }
+  50% { box-shadow: 0 0 0 4px rgba(5, 150, 105, 0); }
 }
 
 .meta-row {
@@ -1942,6 +2055,135 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   .header-center { padding: 0; }
   .header-actions-premium { justify-content: center; }
   .side-panel { width: 100%; }
+}
+
+/* ================================================================
+   FIX — completion celebration confetti
+   ================================================================ */
+.confetti-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4000;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  animation-name: confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  0% { top: -20px; opacity: 1; transform: translateY(0) rotate(0deg); }
+  100% { top: 100vh; opacity: 0.3; transform: translateY(0) rotate(540deg); }
+}
+
+/* ================================================================
+   FIX — better empty states
+   ================================================================ */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--gray-500);
+  background: white;
+  border-radius: 16px;
+  box-shadow: var(--shadow-md);
+}
+.empty-state-icon {
+  font-size: 44px;
+  margin-bottom: 12px;
+  animation: empty-bounce 2s ease-in-out infinite;
+}
+@keyframes empty-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.empty-state-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 6px;
+}
+.empty-state-sub {
+  font-size: 13px;
+  color: var(--gray-500);
+}
+
+/* ================================================================
+   FIX — HIGH priority + overdue shimmer, so the truly urgent tasks
+   visually separate themselves instead of blending into the red pile
+   ================================================================ */
+.priority-strip.urgent-shimmer {
+  background: linear-gradient(90deg, var(--danger) 0%, #ff8a8a 25%, var(--danger) 50%, #ff8a8a 75%, var(--danger) 100%);
+  background-size: 200% 100%;
+  animation: urgent-shimmer-move 1.8s linear infinite;
+}
+@keyframes urgent-shimmer-move {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ================================================================
+   FIX — "Older Routine Tasks" collapsed section
+   ================================================================ */
+.stale-routine-section {
+  margin-top: 24px;
+}
+.stale-routine-toggle {
+  width: 100%;
+  text-align: left;
+  padding: 14px 18px;
+  background: var(--gray-100);
+  border: 1.5px dashed var(--gray-300);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-600);
+}
+.stale-routine-toggle:hover {
+  background: var(--gray-200);
+  color: var(--gray-800);
+}
+.stale-grid {
+  margin-top: 14px;
+  opacity: 0.85;
+}
+
+/* ================================================================
+   FIX — staggered card entrance animation for a livelier feel
+   ================================================================ */
+.tasks-grid .task-card {
+  animation: card-enter 0.35s var(--ease-smooth) backwards;
+}
+.tasks-grid .task-card:nth-child(1) { animation-delay: 0.02s; }
+.tasks-grid .task-card:nth-child(2) { animation-delay: 0.05s; }
+.tasks-grid .task-card:nth-child(3) { animation-delay: 0.08s; }
+.tasks-grid .task-card:nth-child(4) { animation-delay: 0.11s; }
+.tasks-grid .task-card:nth-child(5) { animation-delay: 0.14s; }
+.tasks-grid .task-card:nth-child(6) { animation-delay: 0.17s; }
+.tasks-grid .task-card:nth-child(n+7) { animation-delay: 0.19s; }
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Date lock tag shown in the edit modal for non-admins */
+.date-locked-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--warning);
+  margin-left: 8px;
+}
+.input-locked {
+  background: var(--gray-100) !important;
+  cursor: not-allowed !important;
+  opacity: 0.7;
 }
 
 @media (max-width: 600px) {

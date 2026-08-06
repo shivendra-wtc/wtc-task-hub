@@ -328,6 +328,14 @@ function App() {
   // Tracks which inbox IDs we've already alerted on, per-browser, so the popup/sound/
   // desktop notification never fires twice and never gets skipped on first load. FIX #7.
   const seenInboxIds = useRef(new Set());
+  // FIX — permanent client-side dismissal ledger. markInboxRead is a fire-and-forget
+  // no-cors POST (Apps Script POST responses aren't readable), so there's no way to know
+  // exactly when the write lands on the server. Without this, a background poll firing
+  // before that write completes would read the OLD "unread" row and blindly overwrite
+  // local state with it — making a just-cleared notification pop back into the list.
+  // Any ID in this set is filtered out of every inbox render from now on, regardless of
+  // what the server says, until the page is reloaded.
+  const dismissedInboxIds = useRef(new Set());
   const seenChatIds = useRef(new Set());
   const firstInboxLoad = useRef(true);
   const firstChatLoad = useRef(true);
@@ -682,7 +690,7 @@ function App() {
       const data = await response.json();
       if (data.status === 'ok') {
         processInboxForNotifs(data.inbox);
-        setInbox(data.inbox);
+        setInbox(data.inbox.filter(i => !dismissedInboxIds.current.has(i.id)));
       }
     } catch (error) {}
   };
@@ -694,7 +702,7 @@ function App() {
       const data = await response.json();
       if (data.status === 'ok') {
         processInboxForNotifs(data.inbox);
-        setInbox(data.inbox);
+        setInbox(data.inbox.filter(i => !dismissedInboxIds.current.has(i.id)));
       }
     } catch (error) {}
   };
@@ -1145,8 +1153,11 @@ function App() {
 
   // FIX — inbox items no longer all get marked read the moment you open the panel.
   // Clicking a specific notification marks only that one read and removes it right
-  // away; everything else stays until you click it too.
+  // away; everything else stays until you click it too. Also records the dismissal
+  // permanently (dismissedInboxIds) so a background poll racing ahead of the server
+  // write can never make it pop back into the list.
   const handleInboxItemClick = (item) => {
+    dismissedInboxIds.current.add(item.id);
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },

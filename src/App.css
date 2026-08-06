@@ -7,9 +7,11 @@
 }
 
 :root {
-  --primary-dark: #0f1e35;
-  --primary: #1a3a5c;
-  --primary-light: #2c5aa0;
+  /* FIX — purple is now the real core theme color (not just the header), so buttons,
+     modals, active states, and badges all match instead of clashing with the header. */
+  --primary-dark: #2e1065;
+  --primary: #5b21b6;
+  --primary-light: #8b5cf6;
   --accent-gold: #c9a961;
   --accent-gold-light: #e5d5a1;
   --success: #059669;
@@ -139,7 +141,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   /* FIX — genuine purple header per request, deliberately scoped to just the header
      background (not the global --primary variables) so the rest of the app — buttons,
      modals, badges — keeps its current look exactly as-is; only asked to change the header. */
-  background: linear-gradient(135deg, #2e1065 0%, #5b21b6 45%, #8b5cf6 100%);
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
   color: white;
   padding: 18px 25px;
   box-shadow: var(--shadow-lg);
@@ -688,7 +690,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 .chat-input input:focus {
   border-color: var(--primary-light);
-  box-shadow: 0 0 0 3px rgba(44, 90, 160, 0.1);
+  box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.12);
 }
 
 .chat-input button {
@@ -704,7 +706,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 .chat-input button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(26, 58, 92, 0.3);
+  box-shadow: 0 4px 12px rgba(46, 16, 101, 0.3);
 }
 
 /* WELCOME SCREEN */
@@ -955,7 +957,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
   color: white;
   border-color: var(--primary);
-  box-shadow: 0 4px 15px rgba(26, 58, 92, 0.3);
+  box-shadow: 0 4px 15px rgba(46, 16, 101, 0.3);
 }
 
 .btn-archive {
@@ -1052,7 +1054,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 .filters select:hover, .filters select:focus {
   border-color: var(--primary-light);
-  box-shadow: 0 0 0 3px rgba(44, 90, 160, 0.1);
+  box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.12);
   outline: none;
 }
 
@@ -1061,6 +1063,13 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   text-align: center;
   padding: 30px;
   color: var(--gray-600);
+}
+
+.load-timeout-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 /* TASKS */
@@ -1192,7 +1201,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 .badge-channel {
   font-size: 10px;
-  background: rgba(44, 90, 160, 0.1);
+  background: rgba(91, 33, 182, 0.12);
   color: var(--primary-light);
   padding: 3px 8px;
   border-radius: 5px;
@@ -1539,7 +1548,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .compact-body input:focus, .compact-body select:focus {
   outline: none;
   border-color: var(--primary-light);
-  box-shadow: 0 0 0 3px rgba(44, 90, 160, 0.1);
+  box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.12);
 }
 
 .compact-body input[type="date"] {
@@ -1639,7 +1648,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   color: white;
   border-color: var(--primary);
   transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(26, 58, 92, 0.3);
+  box-shadow: 0 4px 12px rgba(46, 16, 101, 0.3);
 }
 
 /* CHANNEL SELECT GRID */

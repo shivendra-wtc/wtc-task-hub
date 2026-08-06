@@ -136,7 +136,10 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 
 /* PREMIUM HEADER */
 .header-premium {
-  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
+  /* FIX — genuine purple header per request, deliberately scoped to just the header
+     background (not the global --primary variables) so the rest of the app — buttons,
+     modals, badges — keeps its current look exactly as-is; only asked to change the header. */
+  background: linear-gradient(135deg, #2e1065 0%, #5b21b6 45%, #8b5cf6 100%);
   color: white;
   padding: 18px 25px;
   box-shadow: var(--shadow-lg);
@@ -152,7 +155,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   right: -10%;
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(201, 169, 97, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(201, 169, 97, 0.18) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -164,7 +167,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   left: -5%;
   width: 350px;
   height: 350px;
-  background: radial-gradient(circle, rgba(13, 148, 136, 0.12) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.15) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -305,8 +308,8 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .icon-teal { background: rgba(13, 148, 136, 0.28) !important; border-color: rgba(13, 148, 136, 0.5) !important; }
 .icon-teal:hover { background: rgba(13, 148, 136, 0.42) !important; }
 
-.icon-violet { background: rgba(139, 92, 246, 0.28) !important; border-color: rgba(139, 92, 246, 0.5) !important; }
-.icon-violet:hover { background: rgba(139, 92, 246, 0.42) !important; }
+.icon-violet { background: rgba(216, 180, 254, 0.4) !important; border-color: rgba(216, 180, 254, 0.65) !important; }
+.icon-violet:hover { background: rgba(216, 180, 254, 0.55) !important; }
 
 .icon-coral { background: rgba(244, 63, 94, 0.28) !important; border-color: rgba(244, 63, 94, 0.5) !important; }
 .icon-coral:hover { background: rgba(244, 63, 94, 0.42) !important; }

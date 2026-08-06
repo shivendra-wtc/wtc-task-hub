@@ -171,15 +171,33 @@ function App() {
     'Business', 'Other', 'Calls', 'Meeting', 'Shri Mandir'
   ];
 
+  // FIX — real fix for the slow/blocking dashboard loading screens. Previously, every
+  // single page load waited on a live network round-trip for team data, THEN another for
+  // task data, showing two sequential full-screen loading gates — however fast the API
+  // responded, that's still at least two round-trips before anything useful appeared, and
+  // on a slow/contended API call that stretched into 10-40+ seconds. This caches the last
+  // successful response in the browser's localStorage: on every load after the first ever
+  // visit, the dashboard renders INSTANTLY from cache (stale data, but visible immediately),
+  // while a fresh request quietly runs in the background and updates the screen the moment
+  // it lands — no blocking screen, no waiting. The very first visit on a given browser still
+  // needs one real network round-trip (unavoidable — there's nothing to show yet), but every
+  // visit after that is instant.
+  const cacheGet = (key) => {
+    try {
+      const raw = localStorage.getItem('wtc_cache_' + key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  };
+  const cacheSet = (key, value) => {
+    try { localStorage.setItem('wtc_cache_' + key, JSON.stringify(value)); } catch (e) {}
+  };
+
   // ---- FIX #13: team is now live state, loaded from the backend TeamConfig sheet ----
-  const [team, setTeam] = useState(DEFAULT_TEAM);
-  // FIX — gates the "invalid user" screen behind an actual load attempt. Without this,
-  // anyone added to the team AFTER the original 14 (like Somesh) would briefly — or on a
-  // slow connection, not-so-briefly — see the dead-end "use your personal link" screen on
-  // every fresh page load, simply because getTeam() hadn't resolved yet. That's what made
-  // it look like the dashboard "needed a click" to appear: a later click/action just
-  // happened to coincide with team data having already finished loading.
-  const [teamLoaded, setTeamLoaded] = useState(false);
+  const [team, setTeam] = useState(() => cacheGet('team') || DEFAULT_TEAM);
+  // FIX — if we already have a cached team list, treat it as "loaded" immediately so the
+  // dashboard renders right away instead of showing the loading screen — loadTeam() still
+  // runs in the background to fetch and apply anything that's actually changed.
+  const [teamLoaded, setTeamLoaded] = useState(() => !!cacheGet('team'));
 
   const extraAssignees = ['AG', 'BG'];
   const activeTeam = team.filter(t => t.active !== false);
@@ -231,11 +249,11 @@ function App() {
     return `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
   };
 
-  const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(() => cacheGet('tasks') || []);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [inbox, setInbox] = useState([]);
   const [chats, setChats] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cacheGet('tasks'));
   const [currentUser, setCurrentUser] = useState(getUserFromURL());
   const [managerView, setManagerView] = useState('all');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -630,7 +648,9 @@ function App() {
         // restored here, so admins can always get back in to fix the sheet properly.
         const liveIds = new Set(data.team.map(m => m.id));
         const missingDefaults = DEFAULT_TEAM.filter(m => !liveIds.has(m.id));
-        setTeam([...data.team, ...missingDefaults]);
+        const merged = [...data.team, ...missingDefaults];
+        setTeam(merged);
+        cacheSet('team', merged); // FIX — powers instant load on the next visit
       }
     } catch (error) {
     } finally {
@@ -639,11 +659,17 @@ function App() {
   };
 
   const loadTasks = async () => {
+    // FIX — no longer forces the blocking loading screen back on here. The initial
+    // `loading` state already correctly reflects whether cached tasks exist; forcing it
+    // true on every call would re-show the spinner even when we have cached data to
+    // display immediately, defeating the whole point of caching.
     try {
-      setLoading(true);
       const response = await fetch(API_URL + '?action=getTasks');
       const data = await response.json();
-      if (data.status === 'ok') setTasks(data.tasks);
+      if (data.status === 'ok') {
+        setTasks(data.tasks);
+        cacheSet('tasks', data.tasks); // FIX — powers instant load on the next visit
+      }
     } catch (error) {} finally { setLoading(false); }
   };
 
@@ -651,7 +677,10 @@ function App() {
     try {
       const response = await fetch(API_URL + '?action=getTasks');
       const data = await response.json();
-      if (data.status === 'ok') setTasks(data.tasks);
+      if (data.status === 'ok') {
+        setTasks(data.tasks);
+        cacheSet('tasks', data.tasks);
+      }
     } catch (error) {}
   };
 

@@ -319,6 +319,20 @@ function App() {
   const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showTeamManager, setShowTeamManager] = useState(false); // FIX #13
+  // ---- Leaderboard ----
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState('week');
+  const [leaderboardData, setLeaderboardData] = useState({ ranking: [] });
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  // ---- Notice Board + Holiday Calendar (shared modal, tabbed) ----
+  const [showNoticeBoard, setShowNoticeBoard] = useState(false);
+  const [noticeBoardTab, setNoticeBoardTab] = useState('notices');
+  const [notices, setNotices] = useState([]);
+  const [holidays, setHolidays] = useState([]);
+  const [newNoticeTitle, setNewNoticeTitle] = useState('');
+  const [newNoticeMessage, setNewNoticeMessage] = useState('');
+  const [newNoticePinned, setNewNoticePinned] = useState(false);
+  const [noticeSaving, setNoticeSaving] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showOlderRoutine, setShowOlderRoutine] = useState(false);
   const [selectedAssignees, setSelectedAssignees] = useState([]);
@@ -556,15 +570,21 @@ function App() {
     setShowLunchAlarm(false);
   };
 
-  // Checks every minute whether it's exactly 1:00 PM and hasn't already fired today.
-  // Applies only to people who actually have the personal attendance card (matches
-  // updateMyStatus's own admin/HR gate) — Shivendra/PC never see this.
+  // FIX — same reliability problem as the call notifications had: a background/throttled
+  // tab could simply miss the exact 13:00 minute this used to require. Two changes:
+  // (1) widened the trigger window to 1:00–1:10 PM instead of exactly minute 0, so a
+  // delayed/throttled check still catches it; (2) added a visibility-change listener so
+  // the moment someone returns to this tab, it immediately checks — same pattern used to
+  // fix call delivery. Applies only to people who actually have the personal attendance
+  // card (matches updateMyStatus's own admin/HR gate) — Shivendra/PC never see this.
   useEffect(() => {
     if (!currentUser || isAdmin) return;
+
     const checkAlarmTime = () => {
       const now = new Date();
       const todayKey = now.toDateString();
-      if (now.getHours() === 13 && now.getMinutes() === 0 && lunchAlarmFiredTodayRef.current !== todayKey) {
+      const afterOnePM = now.getHours() === 13 && now.getMinutes() <= 10;
+      if (afterOnePM && lunchAlarmFiredTodayRef.current !== todayKey) {
         lunchAlarmFiredTodayRef.current = todayKey;
         setShowLunchAlarm(true);
         startLunchAlarmSound();
@@ -572,8 +592,18 @@ function App() {
         lunchAlarmTimeoutRef.current = setTimeout(dismissLunchAlarm, 30000); // 30s auto-dismiss
       }
     };
-    const interval = setInterval(checkAlarmTime, 30000); // check twice a minute, cheap
-    return () => clearInterval(interval);
+
+    const interval = setInterval(checkAlarmTime, 30000);
+
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') checkAlarmTime();
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
   }, [currentUser, isAdmin]);
 
   const checkIncomingCalls = async () => {
@@ -680,11 +710,13 @@ function App() {
         loadInboxBackground();
         loadChatsBackground();
         loadAttendanceBackground();
+        if (showLeaderboard) loadLeaderboard(leaderboardPeriod);
+        if (showNoticeBoard) loadNotices();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [currentUser, incomingCall, currentUserInfo?.name]);
+  }, [currentUser, incomingCall, currentUserInfo?.name, showLeaderboard, leaderboardPeriod, showNoticeBoard]);
 
   useEffect(() => {
     return () => stopRinging();
@@ -1462,6 +1494,105 @@ function App() {
     } catch (e) {}
   };
 
+  // ============================================================
+  // LEADERBOARD — visible to everyone (including Shivendra/PC), real-time while open
+  // ============================================================
+  const loadLeaderboard = async (period) => {
+    setLeaderboardLoading(true);
+    try {
+      const response = await fetch(API_URL + '?action=getLeaderboard&period=' + period);
+      const data = await response.json();
+      if (data.status === 'ok') setLeaderboardData(data);
+    } catch (e) {} finally { setLeaderboardLoading(false); }
+  };
+
+  const openLeaderboard = () => {
+    setShowLeaderboard(true);
+    loadLeaderboard(leaderboardPeriod);
+  };
+
+  const switchLeaderboardPeriod = (period) => {
+    setLeaderboardPeriod(period);
+    loadLeaderboard(period);
+  };
+
+  // Real-time while the modal is open — polls every 15s so scores update live without
+  // needing to close/reopen the panel.
+  useEffect(() => {
+    if (showLeaderboard) {
+      const interval = setInterval(() => loadLeaderboard(leaderboardPeriod), 15000);
+      return () => clearInterval(interval);
+    }
+  }, [showLeaderboard, leaderboardPeriod]);
+
+  // ============================================================
+  // NOTICE BOARD + HOLIDAY CALENDAR — everyone reads; only PC/Shivendra can post/delete
+  // notices (enforced both in the UI below and, more importantly, nowhere else needed
+  // since posting is just a data write anyone with the link could technically call, but
+  // the UI to do so is gated to canManageTeam same as Team Management).
+  // ============================================================
+  const loadNotices = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getNotices');
+      const data = await response.json();
+      if (data.status === 'ok') setNotices(data.notices);
+    } catch (e) {}
+  };
+
+  const loadHolidays = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getHolidays');
+      const data = await response.json();
+      if (data.status === 'ok') setHolidays(data.holidays);
+    } catch (e) {}
+  };
+
+  const openNoticeBoard = () => {
+    setShowNoticeBoard(true);
+    loadNotices();
+    if (holidays.length === 0) loadHolidays();
+  };
+
+  // Real-time while open — new notices from PC/Shivendra show up without a manual refresh.
+  useEffect(() => {
+    if (showNoticeBoard) {
+      const interval = setInterval(loadNotices, 20000);
+      return () => clearInterval(interval);
+    }
+  }, [showNoticeBoard]);
+
+  const handlePostNotice = () => {
+    if (!newNoticeTitle.trim() || !newNoticeMessage.trim()) { alert('Please fill in both title and message!'); return; }
+    if (noticeSaving) return;
+    setNoticeSaving(true);
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'addNotice',
+        title: newNoticeTitle.trim(),
+        message: newNoticeMessage.trim(),
+        postedBy: currentUserInfo.name,
+        pinned: newNoticePinned
+      })
+    });
+    setTimeout(() => {
+      setNewNoticeTitle(''); setNewNoticeMessage(''); setNewNoticePinned(false);
+      loadNotices();
+      setNoticeSaving(false);
+    }, 1200);
+  };
+
+  const handleDeleteNotice = (noticeId) => {
+    if (!confirm('Delete this notice?')) return;
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteNotice', noticeId })
+    });
+    setNotices(prev => prev.filter(n => n.id !== noticeId));
+  };
+
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
 
@@ -1568,6 +1699,12 @@ function App() {
                   🔔✓
                 </button>
               )}
+              <button className="icon-btn icon-emerald" onClick={openLeaderboard} title="Leaderboard">
+                🏆
+              </button>
+              <button className="icon-btn icon-sky" onClick={openNoticeBoard} title="Notice Board">
+                📋
+              </button>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
                   👥
@@ -1791,6 +1928,125 @@ function App() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LEADERBOARD — visible to everyone including Shivendra/PC, real-time while open */}
+      {showLeaderboard && (
+        <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🏆 Leaderboard</h3>
+              <button className="modal-close" onClick={() => setShowLeaderboard(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="task-type-toggle" style={{ marginBottom: '16px' }}>
+                <button className={leaderboardPeriod === 'week' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('week')} type="button">This Week</button>
+                <button className={leaderboardPeriod === 'month' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('month')} type="button">This Month</button>
+                <button className={leaderboardPeriod === 'quarter' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('quarter')} type="button">This Quarter</button>
+              </div>
+
+              {leaderboardLoading ? (
+                <p className="empty-text">Loading...</p>
+              ) : leaderboardData.ranking.length === 0 ? (
+                <p className="empty-text">No scores locked in yet for this period.</p>
+              ) : (
+                <>
+                  <div className="leaderboard-list">
+                    {leaderboardData.ranking.map((r, idx) => {
+                      const rank = idx + 1;
+                      const total = leaderboardData.ranking.length;
+                      const isMe = r.userId === currentUser;
+                      const isTop3 = rank <= 3;
+                      const isBottom3 = total > 3 && rank > total - 3;
+                      const member = team.find(t => t.id === r.userId);
+                      return (
+                        <div key={r.userId} className={`leaderboard-row ${isMe ? 'me' : ''} ${isTop3 ? 'top3' : ''} ${isBottom3 ? 'bottom3' : ''}`}>
+                          <span className="lb-rank">{rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</span>
+                          <span className="chat-avatar">{member?.avatar || r.name.substring(0, 2)}</span>
+                          <span className="lb-name">{member?.displayName || r.name}{isMe ? ' (You)' : ''}</span>
+                          <span className="lb-points">{r.total} pts</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {leaderboardData.ranking.length > 3 && (
+                    <p className="reminder-window-hint">🍫 The bottom 3 bring chocolate for the top 3, every week. 🏆 The #1 spot at quarter-close wins the surprise prize from WTC.</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTICE BOARD + HOLIDAY CALENDAR — everyone reads; only PC/Shivendra can post/pin/delete */}
+      {showNoticeBoard && (
+        <div className="modal-overlay" onClick={() => setShowNoticeBoard(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📋 Notice Board</h3>
+              <button className="modal-close" onClick={() => setShowNoticeBoard(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="task-type-toggle" style={{ marginBottom: '16px' }}>
+                <button className={noticeBoardTab === 'notices' ? 'active' : ''} onClick={() => setNoticeBoardTab('notices')} type="button">📢 Notices</button>
+                <button className={noticeBoardTab === 'holidays' ? 'active' : ''} onClick={() => setNoticeBoardTab('holidays')} type="button">🗓️ Holidays 2026</button>
+              </div>
+
+              {noticeBoardTab === 'notices' ? (
+                <>
+                  {canManageTeam && (
+                    <div className="tm-form">
+                      <div className="form-group">
+                        <label>Title</label>
+                        <input type="text" value={newNoticeTitle} onChange={(e) => setNewNoticeTitle(e.target.value)} placeholder="e.g. Office closed Friday" />
+                      </div>
+                      <div className="form-group">
+                        <label>Message</label>
+                        <input type="text" value={newNoticeMessage} onChange={(e) => setNewNoticeMessage(e.target.value)} placeholder="Details..." />
+                      </div>
+                      <div className="form-row" style={{ alignItems: 'center' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-700)' }}>
+                          <input type="checkbox" checked={newNoticePinned} onChange={(e) => setNewNoticePinned(e.target.checked)} style={{ width: 'auto' }} />
+                          📌 Pin to top
+                        </label>
+                        <button className="btn-success" onClick={handlePostNotice} disabled={noticeSaving}>{noticeSaving ? 'Posting...' : '📤 Post Notice'}</button>
+                      </div>
+                    </div>
+                  )}
+                  {notices.length === 0 ? (
+                    <p className="empty-text">No notices posted yet.</p>
+                  ) : (
+                    <div className="tm-list">
+                      {notices.map(n => (
+                        <div key={n.id} className={`notice-item ${n.pinned ? 'pinned' : ''}`}>
+                          <div className="notice-item-header">
+                            <strong>{n.pinned && '📌 '}{n.title}</strong>
+                            {canManageTeam && <button className="notif-close" onClick={() => handleDeleteNotice(n.id)} title="Delete">✕</button>}
+                          </div>
+                          <p className="notice-item-msg">{n.message}</p>
+                          <p className="inbox-time">By {n.postedBy} • {new Date(n.timestamp).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="tm-list">
+                  {holidays.map(h => (
+                    <div key={h.date} className="tm-row">
+                      <div className="chat-avatar">🎉</div>
+                      <div className="tm-row-info">
+                        <strong>{h.name}</strong>
+                        <span>{new Date(h.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -316,6 +316,12 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .icon-coral { background: rgba(244, 63, 94, 0.28) !important; border-color: rgba(244, 63, 94, 0.5) !important; }
 .icon-coral:hover { background: rgba(244, 63, 94, 0.42) !important; }
 
+.icon-emerald { background: rgba(16, 185, 129, 0.3) !important; border-color: rgba(16, 185, 129, 0.5) !important; }
+.icon-emerald:hover { background: rgba(16, 185, 129, 0.45) !important; }
+
+.icon-sky { background: rgba(14, 165, 233, 0.28) !important; border-color: rgba(14, 165, 233, 0.5) !important; }
+.icon-sky:hover { background: rgba(14, 165, 233, 0.42) !important; }
+
 /* Call button always has a subtle "alive" pulse ring since it's time-sensitive and new */
 .call-icon-btn {
   animation: call-alive-pulse 2.4s infinite;
@@ -2217,4 +2223,88 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   .incoming-call-card h2 { font-size: 20px; }
   .incoming-call-actions { flex-direction: column; gap: 10px; }
   .attendance-card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
+
+/* ================================================================
+   FIX — Leaderboard
+   ================================================================ */
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--gray-50);
+  border: 1.5px solid var(--gray-200);
+}
+.leaderboard-row.me {
+  border-color: var(--primary-light);
+  background: #f5f0ff;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.15);
+}
+.leaderboard-row.top3 {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: var(--accent-gold);
+}
+.leaderboard-row.bottom3 {
+  background: #fdf2f2;
+  border-color: #fecaca;
+}
+.lb-rank {
+  font-size: 18px;
+  font-weight: 700;
+  width: 32px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.lb-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gray-800);
+}
+.lb-points {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+/* ================================================================
+   FIX — Notice Board
+   ================================================================ */
+.notice-item {
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.notice-item.pinned {
+  border-color: var(--accent-gold);
+  background: #fdf8ee;
+}
+.notice-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.notice-item-header strong {
+  font-size: 14px;
+  color: var(--gray-800);
+}
+.notice-item-msg {
+  font-size: 13px;
+  color: var(--gray-700);
+  line-height: 1.5;
+  margin-bottom: 8px;
 }

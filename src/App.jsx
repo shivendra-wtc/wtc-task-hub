@@ -319,14 +319,17 @@ function App() {
   const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showTeamManager, setShowTeamManager] = useState(false); // FIX #13
-  // ---- Leaderboard ----
+  // ---- Peak Performer ----
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboardPeriod, setLeaderboardPeriod] = useState('week');
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState('today');
   const [leaderboardData, setLeaderboardData] = useState({ ranking: [] });
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  // ---- Notice Board + Holiday Calendar (shared modal, tabbed) ----
+  // FIX — header points badge: shows the current user's own points for today at a glance,
+  // without needing to open the full Peak Performer panel.
+  const [myTodayPoints, setMyTodayPoints] = useState(null);
+  // ---- Notice Board + Holiday Calendar (now separate modals) ----
   const [showNoticeBoard, setShowNoticeBoard] = useState(false);
-  const [noticeBoardTab, setNoticeBoardTab] = useState('notices');
+  const [showHolidayCalendar, setShowHolidayCalendar] = useState(false);
   const [notices, setNotices] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
@@ -712,6 +715,7 @@ function App() {
         loadAttendanceBackground();
         if (showLeaderboard) loadLeaderboard(leaderboardPeriod);
         if (showNoticeBoard) loadNotices();
+        loadMyTodayPoints();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -1516,6 +1520,30 @@ function App() {
     loadLeaderboard(period);
   };
 
+  // FIX — header points badge. Reuses the 'today' leaderboard data (already computed
+  // server-side) and just picks out the current user's own row — no separate endpoint
+  // needed. Runs independent of whether the Peak Performer modal is open, so the badge
+  // is always current. Skipped for people excluded from scoring (badge stays hidden).
+  const loadMyTodayPoints = async () => {
+    if (!currentUser || isAdmin) return;
+    try {
+      const response = await fetch(API_URL + '?action=getLeaderboard&period=today');
+      const data = await response.json();
+      if (data.status === 'ok') {
+        const mine = data.ranking.find(r => r.userId === currentUser);
+        setMyTodayPoints(mine ? mine.total : null);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      loadMyTodayPoints();
+      const interval = setInterval(loadMyTodayPoints, 60000); // refresh every minute
+      return () => clearInterval(interval);
+    }
+  }, [currentUser, isAdmin]);
+
   // Real-time while the modal is open — polls every 15s so scores update live without
   // needing to close/reopen the panel.
   useEffect(() => {
@@ -1550,6 +1578,10 @@ function App() {
   const openNoticeBoard = () => {
     setShowNoticeBoard(true);
     loadNotices();
+  };
+
+  const openHolidayCalendar = () => {
+    setShowHolidayCalendar(true);
     if (holidays.length === 0) loadHolidays();
   };
 
@@ -1699,11 +1731,15 @@ function App() {
                   🔔✓
                 </button>
               )}
-              <button className="icon-btn icon-emerald" onClick={openLeaderboard} title="Leaderboard">
-                🏆
+              <button className="icon-btn icon-emerald" onClick={openLeaderboard} title="Peak Performer">
+                👑
+                {myTodayPoints !== null && <span className="badge-count pp-points-badge">{myTodayPoints}</span>}
               </button>
               <button className="icon-btn icon-sky" onClick={openNoticeBoard} title="Notice Board">
                 📋
+              </button>
+              <button className="icon-btn icon-amber" onClick={openHolidayCalendar} title="Holiday Calendar">
+                🗓️
               </button>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
@@ -1936,13 +1972,14 @@ function App() {
       {/* LEADERBOARD — visible to everyone including Shivendra/PC, real-time while open */}
       {showLeaderboard && (
         <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
-          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>🏆 Leaderboard</h3>
+          <div className="modal-content compact pp-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header pp-header">
+              <h3>👑 Peak Performer</h3>
               <button className="modal-close" onClick={() => setShowLeaderboard(false)}>✕</button>
             </div>
             <div className="modal-body compact-body">
-              <div className="task-type-toggle" style={{ marginBottom: '16px' }}>
+              <div className="task-type-toggle pp-tabs" style={{ marginBottom: '18px' }}>
+                <button className={leaderboardPeriod === 'today' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('today')} type="button">Today</button>
                 <button className={leaderboardPeriod === 'week' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('week')} type="button">This Week</button>
                 <button className={leaderboardPeriod === 'month' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('month')} type="button">This Month</button>
                 <button className={leaderboardPeriod === 'quarter' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('quarter')} type="button">This Quarter</button>
@@ -1951,7 +1988,11 @@ function App() {
               {leaderboardLoading ? (
                 <p className="empty-text">Loading...</p>
               ) : leaderboardData.ranking.length === 0 ? (
-                <p className="empty-text">No scores locked in yet for this period.</p>
+                <div className="pp-empty">
+                  <div className="empty-state-icon">🌱</div>
+                  <p className="empty-state-title">No scores locked in yet</p>
+                  <p className="empty-state-sub">Daily points are calculated once each night — check back tomorrow morning, or ask an admin to run today's calculation early for testing.</p>
+                </div>
               ) : (
                 <>
                   <div className="leaderboard-list">
@@ -1962,18 +2003,22 @@ function App() {
                       const isTop3 = rank <= 3;
                       const isBottom3 = total > 3 && rank > total - 3;
                       const member = team.find(t => t.id === r.userId);
+                      const maxPossible = leaderboardPeriod === 'today' ? 10 : null;
                       return (
                         <div key={r.userId} className={`leaderboard-row ${isMe ? 'me' : ''} ${isTop3 ? 'top3' : ''} ${isBottom3 ? 'bottom3' : ''}`}>
-                          <span className="lb-rank">{rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`}</span>
+                          <span className={`pp-rank-badge pp-rank-${rank <= 3 ? rank : 'other'}`}>{rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
                           <span className="chat-avatar">{member?.avatar || r.name.substring(0, 2)}</span>
                           <span className="lb-name">{member?.displayName || r.name}{isMe ? ' (You)' : ''}</span>
-                          <span className="lb-points">{r.total} pts</span>
+                          <span className="lb-points">{r.total}{maxPossible ? `/${maxPossible}` : ''} <small>pts</small></span>
                         </div>
                       );
                     })}
                   </div>
-                  {leaderboardData.ranking.length > 3 && (
-                    <p className="reminder-window-hint">🍫 The bottom 3 bring chocolate for the top 3, every week. 🏆 The #1 spot at quarter-close wins the surprise prize from WTC.</p>
+                  {leaderboardData.ranking.length > 3 && leaderboardPeriod === 'week' && (
+                    <p className="reminder-window-hint">🍫 The bottom 3 this week bring chocolate for the top 3.</p>
+                  )}
+                  {leaderboardPeriod === 'quarter' && (
+                    <p className="reminder-window-hint">👑 The #1 performer at quarter-close wins a surprise reward from WTC.</p>
                   )}
                 </>
               )}
@@ -1982,7 +2027,42 @@ function App() {
         </div>
       )}
 
-      {/* NOTICE BOARD + HOLIDAY CALENDAR — everyone reads; only PC/Shivendra can post/pin/delete */}
+      {/* HOLIDAY CALENDAR — separate from Notice Board, its own icon and modal */}
+      {showHolidayCalendar && (
+        <div className="modal-overlay" onClick={() => setShowHolidayCalendar(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🗓️ Holiday Calendar 2026</h3>
+              <button className="modal-close" onClick={() => setShowHolidayCalendar(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              {holidays.length === 0 ? (
+                <p className="empty-text">Loading...</p>
+              ) : (
+                <div className="holiday-grid">
+                  {holidays.map(h => {
+                    const d = new Date(h.date + 'T12:00:00');
+                    return (
+                      <div key={h.date} className="holiday-card">
+                        <div className="holiday-card-date">
+                          <span className="holiday-day">{d.getDate()}</span>
+                          <span className="holiday-month">{d.toLocaleDateString('en-IN', { month: 'short' })}</span>
+                        </div>
+                        <div className="holiday-card-info">
+                          <strong>{h.name}</strong>
+                          <span>{d.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric' })}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTICE BOARD — everyone reads; only PC/Shivendra can post/pin/delete */}
       {showNoticeBoard && (
         <div className="modal-overlay" onClick={() => setShowNoticeBoard(false)}>
           <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
@@ -1991,58 +2071,37 @@ function App() {
               <button className="modal-close" onClick={() => setShowNoticeBoard(false)}>✕</button>
             </div>
             <div className="modal-body compact-body">
-              <div className="task-type-toggle" style={{ marginBottom: '16px' }}>
-                <button className={noticeBoardTab === 'notices' ? 'active' : ''} onClick={() => setNoticeBoardTab('notices')} type="button">📢 Notices</button>
-                <button className={noticeBoardTab === 'holidays' ? 'active' : ''} onClick={() => setNoticeBoardTab('holidays')} type="button">🗓️ Holidays 2026</button>
-              </div>
-
-              {noticeBoardTab === 'notices' ? (
-                <>
-                  {canManageTeam && (
-                    <div className="tm-form">
-                      <div className="form-group">
-                        <label>Title</label>
-                        <input type="text" value={newNoticeTitle} onChange={(e) => setNewNoticeTitle(e.target.value)} placeholder="e.g. Office closed Friday" />
-                      </div>
-                      <div className="form-group">
-                        <label>Message</label>
-                        <input type="text" value={newNoticeMessage} onChange={(e) => setNewNoticeMessage(e.target.value)} placeholder="Details..." />
-                      </div>
-                      <div className="form-row" style={{ alignItems: 'center' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-700)' }}>
-                          <input type="checkbox" checked={newNoticePinned} onChange={(e) => setNewNoticePinned(e.target.checked)} style={{ width: 'auto' }} />
-                          📌 Pin to top
-                        </label>
-                        <button className="btn-success" onClick={handlePostNotice} disabled={noticeSaving}>{noticeSaving ? 'Posting...' : '📤 Post Notice'}</button>
-                      </div>
-                    </div>
-                  )}
-                  {notices.length === 0 ? (
-                    <p className="empty-text">No notices posted yet.</p>
-                  ) : (
-                    <div className="tm-list">
-                      {notices.map(n => (
-                        <div key={n.id} className={`notice-item ${n.pinned ? 'pinned' : ''}`}>
-                          <div className="notice-item-header">
-                            <strong>{n.pinned && '📌 '}{n.title}</strong>
-                            {canManageTeam && <button className="notif-close" onClick={() => handleDeleteNotice(n.id)} title="Delete">✕</button>}
-                          </div>
-                          <p className="notice-item-msg">{n.message}</p>
-                          <p className="inbox-time">By {n.postedBy} • {new Date(n.timestamp).toLocaleString()}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
+              {canManageTeam && (
+                <div className="tm-form">
+                  <div className="form-group">
+                    <label>Title</label>
+                    <input type="text" value={newNoticeTitle} onChange={(e) => setNewNoticeTitle(e.target.value)} placeholder="e.g. Office closed Friday" />
+                  </div>
+                  <div className="form-group">
+                    <label>Message</label>
+                    <textarea rows="4" value={newNoticeMessage} onChange={(e) => setNewNoticeMessage(e.target.value)} placeholder="Details... (line breaks are preserved)" className="notice-textarea" />
+                  </div>
+                  <div className="form-row" style={{ alignItems: 'center' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: 'var(--gray-700)' }}>
+                      <input type="checkbox" checked={newNoticePinned} onChange={(e) => setNewNoticePinned(e.target.checked)} style={{ width: 'auto' }} />
+                      📌 Pin to top
+                    </label>
+                    <button className="btn-success" onClick={handlePostNotice} disabled={noticeSaving}>{noticeSaving ? 'Posting...' : '📤 Post Notice'}</button>
+                  </div>
+                </div>
+              )}
+              {notices.length === 0 ? (
+                <p className="empty-text">No notices posted yet.</p>
               ) : (
                 <div className="tm-list">
-                  {holidays.map(h => (
-                    <div key={h.date} className="tm-row">
-                      <div className="chat-avatar">🎉</div>
-                      <div className="tm-row-info">
-                        <strong>{h.name}</strong>
-                        <span>{new Date(h.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                  {notices.map(n => (
+                    <div key={n.id} className={`notice-item ${n.pinned ? 'pinned' : ''}`}>
+                      <div className="notice-item-header">
+                        <strong>{n.pinned && '📌 '}{n.title}</strong>
+                        {canManageTeam && <button className="notif-close" onClick={() => handleDeleteNotice(n.id)} title="Delete">✕</button>}
                       </div>
+                      <p className="notice-item-msg">{n.message}</p>
+                      <p className="inbox-time">By {n.postedBy} • {new Date(n.timestamp).toLocaleString()}</p>
                     </div>
                   ))}
                 </div>

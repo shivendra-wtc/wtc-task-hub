@@ -254,6 +254,10 @@ function App() {
   const [inbox, setInbox] = useState([]);
   const [chats, setChats] = useState([]);
   const [loading, setLoading] = useState(() => !cacheGet('tasks'));
+  // FIX — safety net: if the very first (no-cache) load takes too long, stop showing an
+  // infinite spinner and offer a manual retry instead. Only ever relevant on a true
+  // first-ever visit on a browser (every visit after that loads instantly from cache).
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [currentUser, setCurrentUser] = useState(getUserFromURL());
   const [managerView, setManagerView] = useState('all');
   const [filterStatus, setFilterStatus] = useState('All');
@@ -502,6 +506,76 @@ function App() {
     if (incomingCallTimeoutRef.current) { clearTimeout(incomingCallTimeoutRef.current); incomingCallTimeoutRef.current = null; }
   };
 
+  // ============================================================
+  // LUNCH ALARM — fires 1:00 PM sharp for everyone with the attendance card
+  // (Shivendra/PC never see this, same as they never see the attendance card at all).
+  // ============================================================
+  const [showLunchAlarm, setShowLunchAlarm] = useState(false);
+  const lunchAlarmIntervalRef = useRef(null);
+  const lunchAlarmTimeoutRef = useRef(null);
+  const lunchAlarmFiredTodayRef = useRef(null); // stores the date string it last fired for
+
+  // Distinct synthesized alarm — a rising two-tone chirp, deliberately different from
+  // both the call ring (two-tone burst) and the notification ding (single beep), so all
+  // three are instantly recognizable by ear alone.
+  const playAlarmTone = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
+      const ctx = ringAudioCtxRef.current;
+      const playChirp = (start) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(700, ctx.currentTime + start);
+        osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + start + 0.18);
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.45, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + 0.25);
+      };
+      playChirp(0);
+      playChirp(0.28);
+      playChirp(0.56);
+    } catch (e) {}
+  };
+
+  const startLunchAlarmSound = () => {
+    playAlarmTone();
+    if (lunchAlarmIntervalRef.current) clearInterval(lunchAlarmIntervalRef.current);
+    lunchAlarmIntervalRef.current = setInterval(playAlarmTone, 1000);
+  };
+
+  const dismissLunchAlarm = () => {
+    if (lunchAlarmIntervalRef.current) { clearInterval(lunchAlarmIntervalRef.current); lunchAlarmIntervalRef.current = null; }
+    if (lunchAlarmTimeoutRef.current) { clearTimeout(lunchAlarmTimeoutRef.current); lunchAlarmTimeoutRef.current = null; }
+    setShowLunchAlarm(false);
+  };
+
+  // Checks every minute whether it's exactly 1:00 PM and hasn't already fired today.
+  // Applies only to people who actually have the personal attendance card (matches
+  // updateMyStatus's own admin/HR gate) — Shivendra/PC never see this.
+  useEffect(() => {
+    if (!currentUser || isAdmin) return;
+    const checkAlarmTime = () => {
+      const now = new Date();
+      const todayKey = now.toDateString();
+      if (now.getHours() === 13 && now.getMinutes() === 0 && lunchAlarmFiredTodayRef.current !== todayKey) {
+        lunchAlarmFiredTodayRef.current = todayKey;
+        setShowLunchAlarm(true);
+        startLunchAlarmSound();
+        fireDesktopNotification('🍽️ Lunch Time', 'Time for your 45-minute lunch break.');
+        lunchAlarmTimeoutRef.current = setTimeout(dismissLunchAlarm, 30000); // 30s auto-dismiss
+      }
+    };
+    const interval = setInterval(checkAlarmTime, 30000); // check twice a minute, cheap
+    return () => clearInterval(interval);
+  }, [currentUser, isAdmin]);
+
   const checkIncomingCalls = async () => {
     if (!currentUserInfo || incomingCall) return; // don't interrupt an already-showing ring
     try {
@@ -574,8 +648,8 @@ function App() {
     }
   }, [outgoingCall?.callId]);
 
-  // Poll for incoming calls every 4s for everyone (fast enough to feel immediate without
-  // hammering Apps Script) — separate from the main 15s background sync interval.
+  // Poll for incoming calls every 3s while the tab is active (fast enough to feel
+  // immediate) — separate from the main 15s background sync interval.
   // FIX — currentUserInfo?.name is in the dependency array on purpose: without it, if team
   // data (from loadTeam) resolves even a moment AFTER this effect's first run, the interval
   // callback stays permanently stuck with the stale "not loaded yet" closure forever (since
@@ -583,9 +657,33 @@ function App() {
   // single tick. This is exactly why calls to newer team members weren't arriving.
   useEffect(() => {
     if (currentUser) {
-      const interval = setInterval(checkIncomingCalls, 4000);
+      const interval = setInterval(checkIncomingCalls, 3000);
       return () => clearInterval(interval);
     }
+  }, [currentUser, incomingCall, currentUserInfo?.name]);
+
+  // FIX — EXPERT FIX for unreliable/late/missed calls. The root cause: browsers heavily
+  // throttle JS timers in BACKGROUND tabs (sometimes to once a minute or less), so the 3s
+  // interval above only ever really applies while someone is actively looking at this tab.
+  // Rather than fight that (impossible to reliably win), this catches the exact moment
+  // someone switches BACK to the tab — via the Page Visibility API, which fires reliably
+  // regardless of throttling — and checks immediately right then, instead of waiting for
+  // the next (possibly very delayed) interval tick. Combined with widening the server-side
+  // detection window (see Code.gs getIncomingCalls), this means: if you were away, the
+  // instant you look back at this tab, any pending call/notification appears immediately.
+  useEffect(() => {
+    if (!currentUser) return;
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkIncomingCalls();
+        loadTasksBackground();
+        loadInboxBackground();
+        loadChatsBackground();
+        loadAttendanceBackground();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [currentUser, incomingCall, currentUserInfo?.name]);
 
   useEffect(() => {
@@ -663,14 +761,25 @@ function App() {
     // `loading` state already correctly reflects whether cached tasks exist; forcing it
     // true on every call would re-show the spinner even when we have cached data to
     // display immediately, defeating the whole point of caching.
+    setLoadTimedOut(false);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000); // hard 20s cap
     try {
-      const response = await fetch(API_URL + '?action=getTasks');
+      const response = await fetch(API_URL + '?action=getTasks', { signal: controller.signal });
       const data = await response.json();
       if (data.status === 'ok') {
         setTasks(data.tasks);
         cacheSet('tasks', data.tasks); // FIX — powers instant load on the next visit
       }
-    } catch (error) {} finally { setLoading(false); }
+    } catch (error) {
+      // FIX — if the backend genuinely hasn't responded within 20s (likely the old,
+      // pre-optimization Apps Script deployment still being live), stop spinning forever
+      // and show a retry option instead of a dead screen.
+      if (!cacheGet('tasks')) setLoadTimedOut(true);
+    } finally {
+      clearTimeout(timeoutId);
+      setLoading(false);
+    }
   };
 
   const loadTasksBackground = async () => {
@@ -1737,7 +1846,18 @@ function App() {
         </div>
       )}
 
-      {loading && <div className="loading-state"><p>Loading...</p></div>}
+      {loading && (
+        <div className="loading-state">
+          {loadTimedOut ? (
+            <div className="load-timeout-box">
+              <p>This is taking longer than expected.</p>
+              <button className="btn-secondary" onClick={() => { setLoading(true); loadTasks(); }}>🔄 Try Again</button>
+            </div>
+          ) : (
+            <p>Loading...</p>
+          )}
+        </div>
+      )}
 
       {/* CALL COMPOSE — pick recipients, then choose the call type */}
       {showCallCompose && canCall && (
@@ -1824,6 +1944,20 @@ function App() {
             <div className="incoming-call-actions">
               <button className="btn-decline-call" onClick={() => respondToIncomingCall(incomingCall.callId, 'Declined')}>✕ Decline</button>
               <button className="btn-accept-call" onClick={() => respondToIncomingCall(incomingCall.callId, 'Accepted')}>✓ Accept</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LUNCH ALARM — fires 1:00 PM sharp, distinct tone, 30s auto-dismiss */}
+      {showLunchAlarm && (
+        <div className="incoming-call-overlay lunch-alarm-overlay">
+          <div className="incoming-call-card">
+            <div className="incoming-call-avatar lunch-alarm-avatar">🍽️</div>
+            <h2>Lunch Time!</h2>
+            <p className="incoming-call-type">Take your 45-minute break</p>
+            <div className="incoming-call-actions">
+              <button className="btn-accept-call" onClick={dismissLunchAlarm}>✓ Got it</button>
             </div>
           </div>
         </div>

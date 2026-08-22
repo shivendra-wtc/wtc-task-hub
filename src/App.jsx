@@ -161,9 +161,27 @@ function App() {
   const channels = [
     'AG Insta', 'AG YT', 'The Fact-Tree YT', 'The Fact-Tree Insta',
     'HisTree YT', 'HisTree Insta', 'AG.books Insta',
-    "The 7c's YT", 'Spotify', 'LinkedIn', 'Twitter',
+    "The 7c's YT", "The 7c's Insta", 'Spotify', 'LinkedIn', 'Twitter',
     'Poorvaj Insta', 'Devastram Insta', 'Other'
   ];
+
+  // FIX — Content Calendar channel groups. Each group gets its own calendar tab.
+  const CONTENT_CHANNEL_GROUPS = {
+    "Akshat Gupta": ['AG Insta', 'AG YT', 'AG.books Insta', 'Spotify', 'LinkedIn', 'Twitter'],
+    "The Fact-Tree": ['The Fact-Tree YT', 'The Fact-Tree Insta'],
+    "HisTree": ['HisTree YT', 'HisTree Insta'],
+    "The 7C's": ["The 7c's YT", "The 7c's Insta"],
+    "Poorvaj": ['Poorvaj Insta'],
+    "Devastram": ['Devastram Insta'],
+    "WTC Other": ['Other']
+  };
+  const CONTENT_TYPES = [
+    { value: 'Long Format Video', color: '#3b82f6', icon: '🎬' },
+    { value: 'Short (Vertical)', color: '#f59e0b', icon: '⚡' },
+    { value: 'Community Post', color: '#ec4899', icon: '💬' },
+    { value: 'Live Stream', color: '#ef4444', icon: '🔴' }
+  ];
+  const CONTENT_STATUSES = ['Not Started', 'To Edit', 'In Review', 'Approved', 'Uploaded to YT Studio'];
 
   const categories = [
     'Social Media', 'Banking', 'Software/Automation', 'Mails',
@@ -330,6 +348,20 @@ function App() {
   // ---- Notice Board + Holiday Calendar (now separate modals) ----
   const [showNoticeBoard, setShowNoticeBoard] = useState(false);
   const [showHolidayCalendar, setShowHolidayCalendar] = useState(false);
+  // ---- Content Calendar ----
+  const [showContentCalendar, setShowContentCalendar] = useState(false);
+  const [contentEntries, setContentEntries] = useState([]);
+  const [contentGroupTab, setContentGroupTab] = useState('Akshat Gupta');
+  const now2_ = new Date();
+  const [contentCalYear, setContentCalYear] = useState(now2_.getFullYear());
+  const [contentCalMonth, setContentCalMonth] = useState(now2_.getMonth()); // 0-11
+  const [editingContentEntry, setEditingContentEntry] = useState(null); // null = closed, {} = new, {...} = editing
+  const [contentForm, setContentForm] = useState({
+    channels: '', contentType: 'Long Format Video', title: '', date: '',
+    assignedTo: [], status: 'Not Started', priority: 'Medium',
+    finalLink: '', thumbnailLink: '', description: '', notes: ''
+  });
+  const [contentSaving, setContentSaving] = useState(false);
   const [notices, setNotices] = useState([]);
   const [holidays, setHolidays] = useState([]);
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
@@ -1625,6 +1657,124 @@ function App() {
     setNotices(prev => prev.filter(n => n.id !== noticeId));
   };
 
+  // ============================================================
+  // CONTENT CALENDAR — everyone reads/writes; entries auto-create a linked Task
+  // ============================================================
+  const loadContentCalendar = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getContentCalendar');
+      const data = await response.json();
+      if (data.status === 'ok') setContentEntries(data.entries);
+    } catch (e) {}
+  };
+
+  const openContentCalendar = () => {
+    setShowContentCalendar(true);
+    loadContentCalendar();
+  };
+
+  // Real-time while open
+  useEffect(() => {
+    if (showContentCalendar) {
+      const interval = setInterval(loadContentCalendar, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [showContentCalendar]);
+
+  const changeContentCalMonth = (delta) => {
+    let m = contentCalMonth + delta, y = contentCalYear;
+    if (m > 11) { m = 0; y++; }
+    if (m < 0) { m = 11; y--; }
+    setContentCalMonth(m);
+    setContentCalYear(y);
+  };
+
+  const openNewContentEntry = (dateStr) => {
+    setContentForm({
+      channels: CONTENT_CHANNEL_GROUPS[contentGroupTab][0], contentType: 'Long Format Video',
+      title: '', date: dateStr || '', assignedTo: [], status: 'Not Started', priority: 'Medium',
+      finalLink: '', thumbnailLink: '', description: '', notes: ''
+    });
+    setEditingContentEntry({});
+  };
+
+  const openEditContentEntry = (entry) => {
+    setContentForm({
+      channels: entry.channels, contentType: entry.contentType, title: entry.title,
+      date: entry.date ? String(entry.date).slice(0, 10) : '',
+      assignedTo: entry.assignedTo ? String(entry.assignedTo).split(',').map(a => a.trim()) : [],
+      status: entry.status, priority: entry.priority || 'Medium',
+      finalLink: entry.finalLink || '', thumbnailLink: entry.thumbnailLink || '',
+      description: entry.description || '', notes: entry.notes || ''
+    });
+    setEditingContentEntry(entry);
+  };
+
+  const toggleContentAssignee = (name) => {
+    setContentForm(prev => ({
+      ...prev,
+      assignedTo: prev.assignedTo.includes(name) ? prev.assignedTo.filter(a => a !== name) : [...prev.assignedTo, name]
+    }));
+  };
+
+  const handleSaveContentEntry = () => {
+    if (!contentForm.title.trim() || !contentForm.date || contentForm.assignedTo.length === 0) {
+      alert('Please fill in Title, Date, and at least one Assignee!');
+      return;
+    }
+    if (contentSaving) return;
+    setContentSaving(true);
+
+    const isNew = !editingContentEntry.id;
+    const payload = {
+      channelGroup: contentGroupTab,
+      channels: contentForm.channels,
+      contentType: contentForm.contentType,
+      title: contentForm.title.trim(),
+      date: contentForm.date,
+      assignedTo: contentForm.assignedTo.join(', '),
+      status: contentForm.status,
+      priority: contentForm.priority,
+      finalLink: contentForm.finalLink.trim(),
+      thumbnailLink: contentForm.thumbnailLink.trim(),
+      description: contentForm.description.trim(),
+      notes: contentForm.notes.trim(),
+      createdBy: currentUserInfo.name
+    };
+
+    if (isNew) {
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'addContentEntry', entry: payload })
+      });
+    } else {
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'updateContentEntry', id: editingContentEntry.id, updates: payload })
+      });
+    }
+    setTimeout(() => {
+      loadContentCalendar();
+      if (!isNew) loadTasksBackground(); // linked task status may have changed
+      setEditingContentEntry(null);
+      setContentSaving(false);
+    }, 1200);
+  };
+
+  const handleDeleteContentEntry = () => {
+    if (!editingContentEntry?.id) return;
+    if (!confirm('Delete this content entry? (The linked task, if any, will stay on the task board.)')) return;
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteContentEntry', id: editingContentEntry.id })
+    });
+    setContentEntries(prev => prev.filter(e => e.id !== editingContentEntry.id));
+    setEditingContentEntry(null);
+  };
+
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
 
@@ -1740,6 +1890,9 @@ function App() {
               </button>
               <button className="icon-btn icon-amber" onClick={openHolidayCalendar} title="Holiday Calendar">
                 🗓️
+              </button>
+              <button className="icon-btn icon-rose" onClick={openContentCalendar} title="Content Calendar">
+                🎬
               </button>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
@@ -2059,6 +2212,176 @@ function App() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CONTENT CALENDAR — everyone reads/writes, entries integrate with the Task board */}
+      {showContentCalendar && (
+        <div className="modal-overlay" onClick={() => { setShowContentCalendar(false); setEditingContentEntry(null); }}>
+          <div className="modal-content xl" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header cc-header">
+              <h3>🎬 Content Calendar</h3>
+              <button className="modal-close" onClick={() => { setShowContentCalendar(false); setEditingContentEntry(null); }}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="cc-group-tabs">
+                {Object.keys(CONTENT_CHANNEL_GROUPS).map(group => (
+                  <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => setContentGroupTab(group)}>{group}</button>
+                ))}
+              </div>
+
+              <div className="month-nav" style={{ marginTop: '14px' }}>
+                <button className="btn-secondary" onClick={() => changeContentCalMonth(-1)}>← Prev</button>
+                <strong>{new Date(contentCalYear, contentCalMonth, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
+                <button className="btn-secondary" onClick={() => changeContentCalMonth(1)}>Next →</button>
+              </div>
+
+              {(() => {
+                const groupChannels = CONTENT_CHANNEL_GROUPS[contentGroupTab];
+                const entriesThisGroup = contentEntries.filter(e => e.channelGroup === contentGroupTab);
+                const firstOfMonth = new Date(contentCalYear, contentCalMonth, 1);
+                const startOffset = firstOfMonth.getDay(); // 0=Sun
+                const daysInMon = new Date(contentCalYear, contentCalMonth + 1, 0).getDate();
+                const cells = [];
+                for (let i = 0; i < startOffset; i++) cells.push(null);
+                for (let d = 1; d <= daysInMon; d++) cells.push(d);
+                while (cells.length % 7 !== 0) cells.push(null);
+
+                const todayStr = new Date().toISOString().slice(0, 10);
+
+                return (
+                  <div className="cc-calendar-grid">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                      <div key={d} className="cc-day-header">{d}</div>
+                    ))}
+                    {cells.map((day, idx) => {
+                      if (day === null) return <div key={idx} className="cc-day-cell cc-day-empty"></div>;
+                      const dateStr = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const dayEntries = entriesThisGroup.filter(e => String(e.date).slice(0, 10) === dateStr);
+                      const isToday = dateStr === todayStr;
+                      return (
+                        <div key={idx} className={`cc-day-cell ${isToday ? 'cc-today' : ''}`} onClick={() => openNewContentEntry(dateStr)}>
+                          <span className="cc-day-num">{day}</span>
+                          <div className="cc-day-entries">
+                            {dayEntries.map(entry => {
+                              const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
+                              return (
+                                <div
+                                  key={entry.id}
+                                  className="cc-entry-card"
+                                  style={{ background: typeInfo.color + '22', borderLeft: `3px solid ${typeInfo.color}` }}
+                                  onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
+                                  title={entry.title}
+                                >
+                                  {typeInfo.icon} {entry.title}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Entry editor — new or existing, nested modal on top */}
+          {editingContentEntry !== null && (
+            <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setEditingContentEntry(null); }}>
+              <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{editingContentEntry.id ? '✏️ Edit Content' : '➕ New Content'} — {contentGroupTab}</h3>
+                  <button className="modal-close" onClick={() => setEditingContentEntry(null)}>✕</button>
+                </div>
+                <div className="modal-body compact-body">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Channel</label>
+                      <select value={contentForm.channels} onChange={(e) => setContentForm({ ...contentForm, channels: e.target.value })}>
+                        {CONTENT_CHANNEL_GROUPS[contentGroupTab].map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Content Type</label>
+                      <select value={contentForm.contentType} onChange={(e) => setContentForm({ ...contentForm, contentType: e.target.value })}>
+                        {CONTENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.value}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Title / Topic *</label>
+                    <input type="text" value={contentForm.title} onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })} placeholder="e.g. Rudra Avatar Part 3" />
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Date *</label>
+                      <input type="date" min="2025-01-01" max="2030-12-31" value={contentForm.date} onChange={(e) => setContentForm({ ...contentForm, date: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Priority</label>
+                      <select value={contentForm.priority} onChange={(e) => setContentForm({ ...contentForm, priority: e.target.value })}>
+                        <option>Low</option><option>Medium</option><option>High</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Assigned To * ({contentForm.assignedTo.length} selected)</label>
+                    <div className="assignee-avatars-select">
+                      {activeTeam.map(m => (
+                        <div key={m.id} className={`avatar-select ${contentForm.assignedTo.includes(m.name) ? 'checked' : ''}`} onClick={() => toggleContentAssignee(m.name)} title={m.displayName}>
+                          {m.avatar}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Status</label>
+                    <select value={contentForm.status} onChange={(e) => setContentForm({ ...contentForm, status: e.target.value })}>
+                      {CONTENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Final Video/Post Link</label>
+                      <input type="text" value={contentForm.finalLink} onChange={(e) => setContentForm({ ...contentForm, finalLink: e.target.value })} placeholder="https://..." />
+                    </div>
+                    <div className="form-group">
+                      <label>Thumbnail Link</label>
+                      <input type="text" value={contentForm.thumbnailLink} onChange={(e) => setContentForm({ ...contentForm, thumbnailLink: e.target.value })} placeholder="https://..." />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Description</label>
+                    <textarea rows="2" className="notice-textarea" value={contentForm.description} onChange={(e) => setContentForm({ ...contentForm, description: e.target.value })} placeholder="Caption / description..." />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Notes / Script</label>
+                    <textarea rows="3" className="notice-textarea" value={contentForm.notes} onChange={(e) => setContentForm({ ...contentForm, notes: e.target.value })} placeholder="Script, feedback, notes..." />
+                  </div>
+
+                  {!editingContentEntry.id && (
+                    <p className="reminder-window-hint">This will automatically create a matching task on the board for whoever's assigned.</p>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  {editingContentEntry.id && (
+                    <button className="btn-secondary" onClick={handleDeleteContentEntry} style={{ marginRight: 'auto', color: 'var(--danger)' }}>🗑️ Delete</button>
+                  )}
+                  <button className="btn-secondary" onClick={() => setEditingContentEntry(null)}>Cancel</button>
+                  <button className="btn-success" onClick={handleSaveContentEntry} disabled={contentSaving}>{contentSaving ? 'Saving...' : (editingContentEntry.id ? '💾 Save Changes' : '✅ Create Entry')}</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

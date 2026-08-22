@@ -325,6 +325,9 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .icon-amber { background: rgba(217, 119, 6, 0.28) !important; border-color: rgba(217, 119, 6, 0.5) !important; }
 .icon-amber:hover { background: rgba(217, 119, 6, 0.42) !important; }
 
+.icon-rose { background: rgba(225, 29, 72, 0.28) !important; border-color: rgba(225, 29, 72, 0.5) !important; }
+.icon-rose:hover { background: rgba(225, 29, 72, 0.42) !important; }
+
 /* FIX — header points badge on the Peak Performer icon, shows today's running score */
 .pp-points-badge {
   background: linear-gradient(135deg, var(--success) 0%, #10b981 100%) !important;
@@ -1492,6 +1495,10 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   max-width: 780px;
 }
 
+.modal-content.xl {
+  max-width: 1100px;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -2436,4 +2443,116 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   outline: none;
   border-color: var(--primary-light);
   box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.12);
+}
+
+/* ================================================================
+   FIX — Content Calendar
+   ================================================================ */
+.cc-header {
+  background: linear-gradient(135deg, #831843 0%, #be185d 50%, #ec4899 100%) !important;
+}
+
+.cc-group-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+.cc-group-tabs button {
+  padding: 8px 16px;
+  background: white;
+  border: 1.5px solid var(--gray-200);
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-600);
+  white-space: nowrap;
+}
+.cc-group-tabs button:hover {
+  border-color: #ec4899;
+  color: #ec4899;
+}
+.cc-group-tabs button.active {
+  background: linear-gradient(135deg, #be185d 0%, #ec4899 100%);
+  color: white;
+  border-color: #be185d;
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+}
+
+.cc-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-top: 14px;
+}
+.cc-day-header {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 6px;
+}
+.cc-day-cell {
+  min-height: 90px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cc-day-cell:hover {
+  background: white;
+  border-color: #ec4899;
+}
+.cc-day-empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+.cc-day-empty:hover {
+  background: transparent;
+  border: none;
+}
+.cc-today {
+  border-color: var(--accent-gold);
+  border-width: 2px;
+  background: #fdf8ee;
+}
+.cc-day-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-700);
+}
+.cc-day-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  max-height: 70px;
+}
+.cc-entry-card {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gray-800);
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.cc-entry-card:hover {
+  filter: brightness(0.95);
+}
+
+@media (max-width: 968px) {
+  .cc-calendar-grid { grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cc-day-cell { min-height: 60px; padding: 4px; }
+  .cc-day-header { font-size: 9px; }
 }

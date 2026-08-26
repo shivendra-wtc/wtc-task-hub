@@ -348,6 +348,7 @@ function App() {
   // ---- Notice Board + Holiday Calendar (now separate modals) ----
   const [showNoticeBoard, setShowNoticeBoard] = useState(false);
   const [showHolidayCalendar, setShowHolidayCalendar] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   // ---- Content Calendar ----
   const [showContentCalendar, setShowContentCalendar] = useState(false);
   const [contentEntries, setContentEntries] = useState([]);
@@ -1885,15 +1886,23 @@ function App() {
                 👑
                 {myTodayPoints !== null && <span className="badge-count pp-points-badge">{myTodayPoints}</span>}
               </button>
-              <button className="icon-btn icon-sky" onClick={openNoticeBoard} title="Notice Board">
-                📋
-              </button>
-              <button className="icon-btn icon-amber" onClick={openHolidayCalendar} title="Holiday Calendar">
-                🗓️
-              </button>
               <button className="icon-btn icon-rose" onClick={openContentCalendar} title="Content Calendar">
                 🎬
               </button>
+              {/* FIX — Notice Board + Holiday Calendar consolidated into one "More" dropdown
+                  instead of two separate always-visible icons — these are reference/occasional
+                  items, unlike Peak Performer and Content Calendar which people check daily. */}
+              <div className="more-menu-wrap">
+                <button className="icon-btn icon-sky" onClick={() => setShowMoreMenu(!showMoreMenu)} title="More">
+                  ⋮
+                </button>
+                {showMoreMenu && (
+                  <div className="more-menu-dropdown" onMouseLeave={() => setShowMoreMenu(false)}>
+                    <button onClick={() => { setShowMoreMenu(false); openNoticeBoard(); }}>📋 Notice Board</button>
+                    <button onClick={() => { setShowMoreMenu(false); openHolidayCalendar(); }}>🗓️ Holiday Calendar</button>
+                  </div>
+                )}
+              </div>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
                   👥
@@ -2236,6 +2245,16 @@ function App() {
                 <button className="btn-secondary" onClick={() => changeContentCalMonth(1)}>Next →</button>
               </div>
 
+              <div className="cc-legend">
+                {CONTENT_TYPES.map(t => (
+                  <span key={t.value} className="cc-legend-item">
+                    <span className="cc-legend-dot" style={{ background: t.color }}></span>
+                    {t.icon} {t.value}
+                  </span>
+                ))}
+                <span className="cc-legend-item"><span className="cc-tick" style={{ position: 'static' }}>✓</span> Posted</span>
+              </div>
+
               {(() => {
                 const groupChannels = CONTENT_CHANNEL_GROUPS[contentGroupTab];
                 const entriesThisGroup = contentEntries.filter(e => e.channelGroup === contentGroupTab);
@@ -2265,14 +2284,16 @@ function App() {
                           <div className="cc-day-entries">
                             {dayEntries.map(entry => {
                               const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
+                              const isPosted = entry.status === 'Uploaded to YT Studio';
                               return (
                                 <div
                                   key={entry.id}
-                                  className="cc-entry-card"
+                                  className={`cc-entry-card ${isPosted ? 'cc-posted' : ''}`}
                                   style={{ background: typeInfo.color + '22', borderLeft: `3px solid ${typeInfo.color}` }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
                                   title={entry.title}
                                 >
+                                  {isPosted && <span className="cc-tick">✓</span>}
                                   {typeInfo.icon} {entry.title}
                                 </div>
                               );

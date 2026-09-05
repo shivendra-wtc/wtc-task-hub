@@ -157,6 +157,42 @@ const DEFAULT_TEAM = [
   { id: 'jagdish', name: 'Jagdish', displayName: 'Jagdish', role: 'Team Member', avatar: 'JS', quoteType: 'social_media', active: true }
 ];
 
+// FIX — reusable multi-select checklist dropdown, replacing the old single-select native
+// <select> filters. Lets people check multiple options at once (e.g. "Not Started" AND
+// "In Progress" simultaneously) instead of being limited to one value.
+function MultiSelectFilter({ label, options, selected, onChange }) {
+  const [open, setOpen] = useState(false);
+  const toggleOption = (opt) => {
+    if (selected.includes(opt)) onChange(selected.filter(o => o !== opt));
+    else onChange([...selected, opt]);
+  };
+  const displayLabel = selected.length === 0
+    ? `All ${label}`
+    : selected.length === 1
+      ? selected[0]
+      : `${selected.length} ${label} selected`;
+  return (
+    <div className="multiselect-wrap">
+      <button className={`multiselect-btn ${selected.length > 0 ? 'has-selection' : ''}`} onClick={() => setOpen(!open)} type="button">
+        {displayLabel} <span className="multiselect-caret">{open ? '▴' : '▾'}</span>
+      </button>
+      {open && (
+        <div className="multiselect-dropdown" onMouseLeave={() => setOpen(false)}>
+          {selected.length > 0 && (
+            <button className="multiselect-clear" onClick={() => onChange([])} type="button">Clear all</button>
+          )}
+          {options.map(opt => (
+            <label key={opt} className="multiselect-option">
+              <input type="checkbox" checked={selected.includes(opt)} onChange={() => toggleOption(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const channels = [
     'AG Insta', 'AG YT', 'The Fact-Tree YT', 'The Fact-Tree Insta',
@@ -181,7 +217,19 @@ function App() {
     { value: 'Community Post', color: '#ec4899', icon: '💬' },
     { value: 'Live Stream', color: '#ef4444', icon: '🔴' }
   ];
-  const CONTENT_STATUSES = ['Not Started', 'To Edit', 'In Review', 'Approved', 'Uploaded to YT Studio'];
+  // FIX — Notion-style split status tracking: Editing Status (internal progress) and
+  // Video Status (public state) are now independent, each shown as its own colored badge.
+  const EDITING_STATUSES = [
+    { value: 'Not Started', color: '#94a3b8', icon: '⚪' },
+    { value: 'To Edit', color: '#f59e0b', icon: '🟡' },
+    { value: 'In Review', color: '#3b82f6', icon: '🔵' },
+    { value: 'Approved', color: '#10b981', icon: '🟢' }
+  ];
+  const VIDEO_STATUSES = [
+    { value: 'Not Started', color: '#94a3b8', icon: '⚪' },
+    { value: 'Scheduled in YT Studio', color: '#ec4899', icon: '⏰' },
+    { value: 'Published', color: '#10b981', icon: '✅' }
+  ];
 
   const categories = [
     'Social Media', 'Banking', 'Software/Automation', 'Mails',
@@ -278,10 +326,10 @@ function App() {
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [currentUser, setCurrentUser] = useState(getUserFromURL());
   const [managerView, setManagerView] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [filterChannel, setFilterChannel] = useState('All');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterTaskType, setFilterTaskType] = useState('All');
+  const [filterStatus, setFilterStatus] = useState([]);
+  const [filterChannel, setFilterChannel] = useState([]);
+  const [filterCategory, setFilterCategory] = useState([]);
+  const [filterTaskType, setFilterTaskType] = useState([]);
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null); // FIX #6
   const [saving, setSaving] = useState(false);
@@ -337,14 +385,6 @@ function App() {
   const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
   const [showTeamManager, setShowTeamManager] = useState(false); // FIX #13
-  // ---- Peak Performer ----
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [leaderboardPeriod, setLeaderboardPeriod] = useState('today');
-  const [leaderboardData, setLeaderboardData] = useState({ ranking: [] });
-  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  // FIX — header points badge: shows the current user's own points for today at a glance,
-  // without needing to open the full Peak Performer panel.
-  const [myTodayPoints, setMyTodayPoints] = useState(null);
   // ---- Notice Board + Holiday Calendar (now separate modals) ----
   const [showNoticeBoard, setShowNoticeBoard] = useState(false);
   const [showHolidayCalendar, setShowHolidayCalendar] = useState(false);
@@ -359,8 +399,8 @@ function App() {
   const [editingContentEntry, setEditingContentEntry] = useState(null); // null = closed, {} = new, {...} = editing
   const [contentForm, setContentForm] = useState({
     channels: '', contentType: 'Long Format Video', title: '', date: '',
-    assignedTo: [], status: 'Not Started', priority: 'Medium',
-    finalLink: '', thumbnailLink: '', description: '', notes: ''
+    assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
+    finalLink: '', thumbnailLink: '', rawLink: '', draftLink: '', description: '', notes: ''
   });
   const [contentSaving, setContentSaving] = useState(false);
   const [notices, setNotices] = useState([]);
@@ -422,6 +462,10 @@ function App() {
   const formattedDate = getFormattedDate();
   // Only PC and Shivendra ever see the Team Management panel — checked by fixed login id, not by role text.
   const canManageTeam = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
+  // FIX — Routine task creation extended to specific non-admins per request, in addition
+  // to the usual admins. Everyone else still only creates General tasks.
+  const CAN_CREATE_ROUTINE = ['pcwtc45', 'shivendrawtc77', 'sanjeevani', 'muskan', 'nidhi', 'pari'];
+  const canCreateRoutine = CAN_CREATE_ROUTINE.includes(currentUser);
   // Only PC and Shivendra can summon people to their cabin / call an immediate meeting —
   // but either of them can call the OTHER one too, since both hold this permission.
   const canCall = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
@@ -746,14 +790,12 @@ function App() {
         loadInboxBackground();
         loadChatsBackground();
         loadAttendanceBackground();
-        if (showLeaderboard) loadLeaderboard(leaderboardPeriod);
         if (showNoticeBoard) loadNotices();
-        loadMyTodayPoints();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [currentUser, incomingCall, currentUserInfo?.name, showLeaderboard, leaderboardPeriod, showNoticeBoard]);
+  }, [currentUser, incomingCall, currentUserInfo?.name, showNoticeBoard]);
 
   useEffect(() => {
     return () => stopRinging();
@@ -1131,12 +1173,21 @@ function App() {
         if (t.assignedBy !== currentUserInfo.name || !isTaskAssignedToMe(t)) return false;
       }
     }
-    if (filterStatus !== 'All' && t.status !== filterStatus) return false;
-    if (filterChannel !== 'All' && !String(t.channel).split(',').map(c => c.trim()).includes(filterChannel)) return false;
-    if (filterCategory !== 'All' && t.category !== filterCategory) return false;
-    if (filterTaskType !== 'All') {
-      if (filterTaskType === 'General' && t.taskType !== 'General') return false;
-      if (filterTaskType === 'Routine' && !['Routine', 'Routine Instance'].includes(t.taskType)) return false;
+    // FIX — multi-select filters: empty array = no filter (show all), matching the old
+    // "All" behavior; a non-empty array means "match ANY of the selected values."
+    if (filterStatus.length > 0 && !filterStatus.includes(t.status)) return false;
+    if (filterChannel.length > 0) {
+      const taskChannels = String(t.channel).split(',').map(c => c.trim());
+      if (!taskChannels.some(c => filterChannel.includes(c))) return false;
+    }
+    if (filterCategory.length > 0 && !filterCategory.includes(t.category)) return false;
+    if (filterTaskType.length > 0) {
+      const typeMatches = filterTaskType.some(ft => {
+        if (ft === 'General') return t.taskType === 'General';
+        if (ft === 'Routine') return ['Routine', 'Routine Instance'].includes(t.taskType);
+        return false;
+      });
+      if (!typeMatches) return false;
     }
     return true;
   });
@@ -1144,8 +1195,11 @@ function App() {
   // FIX — Daily routine tasks 14+ days overdue and never completed get split into their
   // own collapsed section instead of burying the rest of the board. Still fully counted
   // and visible, just tucked away — nothing is hidden from accountability.
-  const freshTasks = filteredTasks.filter(t => !t.isStale);
-  const staleTasks = filteredTasks.filter(t => t.isStale);
+  // FIX — sort by due date ascending (soonest first) instead of raw sheet order, so
+  // routine tasks (and everything else) appear predictably by urgency, not randomly.
+  const sortByDueDate = (a, b) => new Date(a.targetDate) - new Date(b.targetDate);
+  const freshTasks = filteredTasks.filter(t => !t.isStale).sort(sortByDueDate);
+  const staleTasks = filteredTasks.filter(t => t.isStale).sort(sortByDueDate);
 
   const handleAddTask = async () => {
     if (selectedAssignees.length === 0 || !newTask.taskDetails) {
@@ -1532,61 +1586,6 @@ function App() {
   };
 
   // ============================================================
-  // LEADERBOARD — visible to everyone (including Shivendra/PC), real-time while open
-  // ============================================================
-  const loadLeaderboard = async (period) => {
-    setLeaderboardLoading(true);
-    try {
-      const response = await fetch(API_URL + '?action=getLeaderboard&period=' + period);
-      const data = await response.json();
-      if (data.status === 'ok') setLeaderboardData(data);
-    } catch (e) {} finally { setLeaderboardLoading(false); }
-  };
-
-  const openLeaderboard = () => {
-    setShowLeaderboard(true);
-    loadLeaderboard(leaderboardPeriod);
-  };
-
-  const switchLeaderboardPeriod = (period) => {
-    setLeaderboardPeriod(period);
-    loadLeaderboard(period);
-  };
-
-  // FIX — header points badge. Reuses the 'today' leaderboard data (already computed
-  // server-side) and just picks out the current user's own row — no separate endpoint
-  // needed. Runs independent of whether the Peak Performer modal is open, so the badge
-  // is always current. Skipped for people excluded from scoring (badge stays hidden).
-  const loadMyTodayPoints = async () => {
-    if (!currentUser || isAdmin) return;
-    try {
-      const response = await fetch(API_URL + '?action=getLeaderboard&period=today');
-      const data = await response.json();
-      if (data.status === 'ok') {
-        const mine = data.ranking.find(r => r.userId === currentUser);
-        setMyTodayPoints(mine ? mine.total : null);
-      }
-    } catch (e) {}
-  };
-
-  useEffect(() => {
-    if (currentUser) {
-      loadMyTodayPoints();
-      const interval = setInterval(loadMyTodayPoints, 60000); // refresh every minute
-      return () => clearInterval(interval);
-    }
-  }, [currentUser, isAdmin]);
-
-  // Real-time while the modal is open — polls every 15s so scores update live without
-  // needing to close/reopen the panel.
-  useEffect(() => {
-    if (showLeaderboard) {
-      const interval = setInterval(() => loadLeaderboard(leaderboardPeriod), 15000);
-      return () => clearInterval(interval);
-    }
-  }, [showLeaderboard, leaderboardPeriod]);
-
-  // ============================================================
   // NOTICE BOARD + HOLIDAY CALENDAR — everyone reads; only PC/Shivendra can post/delete
   // notices (enforced both in the UI below and, more importantly, nowhere else needed
   // since posting is just a data write anyone with the link could technically call, but
@@ -1693,8 +1692,8 @@ function App() {
   const openNewContentEntry = (dateStr) => {
     setContentForm({
       channels: CONTENT_CHANNEL_GROUPS[contentGroupTab][0], contentType: 'Long Format Video',
-      title: '', date: dateStr || '', assignedTo: [], status: 'Not Started', priority: 'Medium',
-      finalLink: '', thumbnailLink: '', description: '', notes: ''
+      title: '', date: dateStr || '', assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
+      finalLink: '', thumbnailLink: '', rawLink: '', draftLink: '', description: '', notes: ''
     });
     setEditingContentEntry({});
   };
@@ -1704,8 +1703,9 @@ function App() {
       channels: entry.channels, contentType: entry.contentType, title: entry.title,
       date: entry.date ? String(entry.date).slice(0, 10) : '',
       assignedTo: entry.assignedTo ? String(entry.assignedTo).split(',').map(a => a.trim()) : [],
-      status: entry.status, priority: entry.priority || 'Medium',
+      editingStatus: entry.editingStatus || 'Not Started', videoStatus: entry.videoStatus || 'Not Started', priority: entry.priority || 'Medium',
       finalLink: entry.finalLink || '', thumbnailLink: entry.thumbnailLink || '',
+      rawLink: entry.rawLink || '', draftLink: entry.draftLink || '',
       description: entry.description || '', notes: entry.notes || ''
     });
     setEditingContentEntry(entry);
@@ -1734,10 +1734,13 @@ function App() {
       title: contentForm.title.trim(),
       date: contentForm.date,
       assignedTo: contentForm.assignedTo.join(', '),
-      status: contentForm.status,
+      editingStatus: contentForm.editingStatus,
+      videoStatus: contentForm.videoStatus,
       priority: contentForm.priority,
       finalLink: contentForm.finalLink.trim(),
       thumbnailLink: contentForm.thumbnailLink.trim(),
+      rawLink: contentForm.rawLink.trim(),
+      draftLink: contentForm.draftLink.trim(),
       description: contentForm.description.trim(),
       notes: contentForm.notes.trim(),
       createdBy: currentUserInfo.name
@@ -1882,16 +1885,12 @@ function App() {
                   🔔✓
                 </button>
               )}
-              <button className="icon-btn icon-emerald" onClick={openLeaderboard} title="Peak Performer">
-                👑
-                {myTodayPoints !== null && <span className="badge-count pp-points-badge">{myTodayPoints}</span>}
-              </button>
               <button className="icon-btn icon-rose" onClick={openContentCalendar} title="Content Calendar">
                 🎬
               </button>
               {/* FIX — Notice Board + Holiday Calendar consolidated into one "More" dropdown
                   instead of two separate always-visible icons — these are reference/occasional
-                  items, unlike Peak Performer and Content Calendar which people check daily. */}
+                  items, unlike Content Calendar which people check daily. */}
               <div className="more-menu-wrap">
                 <button className="icon-btn icon-sky" onClick={() => setShowMoreMenu(!showMoreMenu)} title="More">
                   ⋮
@@ -2132,63 +2131,6 @@ function App() {
       )}
 
       {/* LEADERBOARD — visible to everyone including Shivendra/PC, real-time while open */}
-      {showLeaderboard && (
-        <div className="modal-overlay" onClick={() => setShowLeaderboard(false)}>
-          <div className="modal-content compact pp-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header pp-header">
-              <h3>👑 Peak Performer</h3>
-              <button className="modal-close" onClick={() => setShowLeaderboard(false)}>✕</button>
-            </div>
-            <div className="modal-body compact-body">
-              <div className="task-type-toggle pp-tabs" style={{ marginBottom: '18px' }}>
-                <button className={leaderboardPeriod === 'today' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('today')} type="button">Today</button>
-                <button className={leaderboardPeriod === 'week' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('week')} type="button">This Week</button>
-                <button className={leaderboardPeriod === 'month' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('month')} type="button">This Month</button>
-                <button className={leaderboardPeriod === 'quarter' ? 'active' : ''} onClick={() => switchLeaderboardPeriod('quarter')} type="button">This Quarter</button>
-              </div>
-
-              {leaderboardLoading ? (
-                <p className="empty-text">Loading...</p>
-              ) : leaderboardData.ranking.length === 0 ? (
-                <div className="pp-empty">
-                  <div className="empty-state-icon">🌱</div>
-                  <p className="empty-state-title">No scores locked in yet</p>
-                  <p className="empty-state-sub">Daily points are calculated once each night — check back tomorrow morning, or ask an admin to run today's calculation early for testing.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="leaderboard-list">
-                    {leaderboardData.ranking.map((r, idx) => {
-                      const rank = idx + 1;
-                      const total = leaderboardData.ranking.length;
-                      const isMe = r.userId === currentUser;
-                      const isTop3 = rank <= 3;
-                      const isBottom3 = total > 3 && rank > total - 3;
-                      const member = team.find(t => t.id === r.userId);
-                      const maxPossible = leaderboardPeriod === 'today' ? 10 : null;
-                      return (
-                        <div key={r.userId} className={`leaderboard-row ${isMe ? 'me' : ''} ${isTop3 ? 'top3' : ''} ${isBottom3 ? 'bottom3' : ''}`}>
-                          <span className={`pp-rank-badge pp-rank-${rank <= 3 ? rank : 'other'}`}>{rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : rank}</span>
-                          <span className="chat-avatar">{member?.avatar || r.name.substring(0, 2)}</span>
-                          <span className="lb-name">{member?.displayName || r.name}{isMe ? ' (You)' : ''}</span>
-                          <span className="lb-points">{r.total}{maxPossible ? `/${maxPossible}` : ''} <small>pts</small></span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {leaderboardData.ranking.length > 3 && leaderboardPeriod === 'week' && (
-                    <p className="reminder-window-hint">🍫 The bottom 3 this week bring chocolate for the top 3.</p>
-                  )}
-                  {leaderboardPeriod === 'quarter' && (
-                    <p className="reminder-window-hint">👑 The #1 performer at quarter-close wins a surprise reward from WTC.</p>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* HOLIDAY CALENDAR — separate from Notice Board, its own icon and modal */}
       {showHolidayCalendar && (
         <div className="modal-overlay" onClick={() => setShowHolidayCalendar(false)}>
@@ -2280,21 +2222,32 @@ function App() {
                       const isToday = dateStr === todayStr;
                       return (
                         <div key={idx} className={`cc-day-cell ${isToday ? 'cc-today' : ''}`} onClick={() => openNewContentEntry(dateStr)}>
-                          <span className="cc-day-num">{day}</span>
+                          {/* FIX — today's date gets a red circular badge, Notion-style, instead of plain text */}
+                          {isToday ? <span className="cc-day-num-today">{day}</span> : <span className="cc-day-num">{day}</span>}
                           <div className="cc-day-entries">
                             {dayEntries.map(entry => {
                               const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
-                              const isPosted = entry.status === 'Uploaded to YT Studio';
+                              const videoInfo = VIDEO_STATUSES.find(s => s.value === entry.videoStatus) || VIDEO_STATUSES[0];
+                              const isPublished = entry.videoStatus === 'Published';
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-entry-card ${isPosted ? 'cc-posted' : ''}`}
-                                  style={{ background: typeInfo.color + '22', borderLeft: `3px solid ${typeInfo.color}` }}
+                                  className={`cc-entry-card ${isPublished ? 'cc-posted' : ''}`}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
                                   title={entry.title}
                                 >
-                                  {isPosted && <span className="cc-tick">✓</span>}
-                                  {typeInfo.icon} {entry.title}
+                                  <div className="cc-entry-title">
+                                    {isPublished && <span className="cc-tick">✓</span>}
+                                    {entry.title}
+                                  </div>
+                                  <div className="cc-entry-badges">
+                                    <span className="cc-badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>
+                                      {typeInfo.icon} {typeInfo.value}
+                                    </span>
+                                    <span className="cc-badge" style={{ background: videoInfo.color + '22', color: videoInfo.color }}>
+                                      {videoInfo.icon} {videoInfo.value}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -2361,16 +2314,34 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="form-group">
-                    <label>Status</label>
-                    <select value={contentForm.status} onChange={(e) => setContentForm({ ...contentForm, status: e.target.value })}>
-                      {CONTENT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Editing Status</label>
+                      <select value={contentForm.editingStatus} onChange={(e) => setContentForm({ ...contentForm, editingStatus: e.target.value })}>
+                        {EDITING_STATUSES.map(s => <option key={s.value} value={s.value}>{s.icon} {s.value}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Video Status</label>
+                      <select value={contentForm.videoStatus} onChange={(e) => setContentForm({ ...contentForm, videoStatus: e.target.value })}>
+                        {VIDEO_STATUSES.map(s => <option key={s.value} value={s.value}>{s.icon} {s.value}</option>)}
+                      </select>
+                    </div>
                   </div>
 
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Final Video/Post Link</label>
+                      <label>Raw Footage Link</label>
+                      <input type="text" value={contentForm.rawLink} onChange={(e) => setContentForm({ ...contentForm, rawLink: e.target.value })} placeholder="https://..." />
+                    </div>
+                    <div className="form-group">
+                      <label>Draft/Editing Link</label>
+                      <input type="text" value={contentForm.draftLink} onChange={(e) => setContentForm({ ...contentForm, draftLink: e.target.value })} placeholder="https://..." />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Final/Published Link</label>
                       <input type="text" value={contentForm.finalLink} onChange={(e) => setContentForm({ ...contentForm, finalLink: e.target.value })} placeholder="https://..." />
                     </div>
                     <div className="form-group">
@@ -2807,36 +2778,39 @@ function App() {
               </div>
 
               <div className="filters">
-                {/* FIX #8 — default options now carry an explicit value matching the initial
-                    state ('All'), so the dropdown always shows the right selected option and
-                    filtering behaves predictably from first render. */}
-                <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                  <option value="All">All Status</option>
-                  <option value="Not Started">Not Started</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                  <option value="On Hold">On Hold</option>
-                  <option value="Delayed">Delayed</option>
-                </select>
-                <select value={filterChannel} onChange={(e) => setFilterChannel(e.target.value)}>
-                  <option value="All">All Channels</option>
-                  {channels.map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                </select>
-                <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-                  <option value="All">All Categories</option>
-                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
-                {isAdmin && (
-                  <select value={filterTaskType} onChange={(e) => setFilterTaskType(e.target.value)}>
-                    <option value="All">All Types</option>
-                    <option value="General">📋 General</option>
-                    <option value="Routine">🔄 Routine</option>
-                  </select>
+                <MultiSelectFilter
+                  label="Status"
+                  options={['Not Started', 'In Progress', 'Completed', 'On Hold', 'Delayed']}
+                  selected={filterStatus}
+                  onChange={setFilterStatus}
+                />
+                <MultiSelectFilter
+                  label="Channels"
+                  options={channels}
+                  selected={filterChannel}
+                  onChange={setFilterChannel}
+                />
+                <MultiSelectFilter
+                  label="Categories"
+                  options={categories}
+                  selected={filterCategory}
+                  onChange={setFilterCategory}
+                />
+                {(isAdmin || canCreateRoutine) && (
+                  <MultiSelectFilter
+                    label="Types"
+                    options={['General', 'Routine']}
+                    selected={filterTaskType}
+                    onChange={setFilterTaskType}
+                  />
                 )}
               </div>
 
               <div className="tasks-container">
                 {(() => {
+                  const todayForUrgency = new Date();
+                  todayForUrgency.setHours(0, 0, 0, 0);
+
                   const renderTaskCard = (task) => {
                     const isCompleted = task.status === 'Completed';
                     const canChangeStatus = isAdmin || !isCompleted;
@@ -2844,8 +2818,20 @@ function App() {
                     const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
                     const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
                     const isUrgent = task.priority === 'High' && task.delayDays > 0;
+
+                    // FIX — routine tasks now visually differ by urgency: due today/overdue
+                    // gets a red flash so it can't be missed; still a few days out fades
+                    // slightly so it doesn't compete for attention with what's actually urgent.
+                    let routineUrgencyClass = '';
+                    if (isRoutine && !isCompleted && task.targetDate) {
+                      const dueDate = new Date(task.targetDate);
+                      dueDate.setHours(0, 0, 0, 0);
+                      const daysUntilDue = Math.round((dueDate - todayForUrgency) / (1000 * 60 * 60 * 24));
+                      routineUrgencyClass = daysUntilDue <= 1 ? 'routine-urgent' : 'routine-fade';
+                    }
+
                     return (
-                      <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''}`}>
+                      <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''} ${routineUrgencyClass}`}>
                         <div className={`priority-strip ${task.priority.toLowerCase()} ${isUrgent ? 'urgent-shimmer' : ''}`}></div>
                         {isRoutine && <div className="routine-tag">🔄 Routine Task</div>}
                         {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
@@ -2911,7 +2897,7 @@ function App() {
                       ) : (
                         <>
                           {freshTasks.length > 0 && (
-                            <div className="tasks-grid">
+                            <div className={`tasks-grid ${freshTasks.length > 12 ? 'compact-cards' : ''}`}>
                               {freshTasks.map(renderTaskCard)}
                             </div>
                           )}
@@ -2946,7 +2932,7 @@ function App() {
               <button className="modal-close" onClick={closeTaskModal}>✕</button>
             </div>
             <div className="modal-body compact-body">
-              {isAdmin && !editingTask && (
+              {canCreateRoutine && !editingTask && (
                 <div className="form-group">
                   <label>Task Type</label>
                   <div className="task-type-toggle">

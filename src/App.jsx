@@ -811,8 +811,8 @@ function App() {
     }
   }, [outgoingCall?.callId]);
 
-  // Poll for incoming calls every 3s while the tab is active (fast enough to feel
-  // immediate) — separate from the main 15s background sync interval.
+  // FIX — tightened from 3s to 1.5s per request, for a snappier ring while the app is
+  // active. Separate from the main 15s background sync interval.
   // FIX — currentUserInfo?.name is in the dependency array on purpose: without it, if team
   // data (from loadTeam) resolves even a moment AFTER this effect's first run, the interval
   // callback stays permanently stuck with the stale "not loaded yet" closure forever (since
@@ -820,7 +820,7 @@ function App() {
   // single tick. This is exactly why calls to newer team members weren't arriving.
   useEffect(() => {
     if (currentUser) {
-      const interval = setInterval(checkIncomingCalls, 3000);
+      const interval = setInterval(checkIncomingCalls, 1500);
       return () => clearInterval(interval);
     }
   }, [currentUser, incomingCall, currentUserInfo?.name]);

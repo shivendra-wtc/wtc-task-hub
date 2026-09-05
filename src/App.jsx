@@ -277,11 +277,40 @@ function App() {
     return name.substring(0, 2).toUpperCase();
   };
 
+  const PWA_USER_KEY = 'wtc_pwa_user_slug';
+
+  // FIX — PWA support. The installed app always opens the same start_url with no
+  // ?user= param (that's how PWAs work — one shared install link for everyone). So
+  // this now also checks localStorage: once someone has done the one-time private
+  // setup (entered their own link once), their slug is remembered on that device
+  // forever, and every future launch goes straight to their dashboard automatically.
   const getUserFromURL = () => {
     const params = new URLSearchParams(window.location.search);
     const user = params.get('user');
-    if (!user) return null;
-    return user.toLowerCase();
+    if (user) return user.toLowerCase();
+    try {
+      const saved = localStorage.getItem(PWA_USER_KEY);
+      if (saved) return saved;
+    } catch (e) {}
+    return null;
+  };
+
+  const isRunningStandalone = () => {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    } catch (e) { return false; }
+  };
+
+  const extractSlugFromInput = (input) => {
+    const trimmed = input.trim();
+    try {
+      const url = new URL(trimmed);
+      const param = url.searchParams.get('user');
+      if (param) return param.toLowerCase();
+    } catch (e) {
+      // not a full URL — fall through and treat as a bare slug
+    }
+    return trimmed.replace(/^\?user=/i, '').toLowerCase();
   };
 
   const getDayOfYear = () => {
@@ -325,6 +354,29 @@ function App() {
   // first-ever visit on a browser (every visit after that loads instantly from cache).
   const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [currentUser, setCurrentUser] = useState(getUserFromURL());
+  const [pwaSetupInput, setPwaSetupInput] = useState('');
+  const [pwaSetupError, setPwaSetupError] = useState('');
+
+  // FIX — one-time private setup: saves the slug to this device only, never shown to
+  // or shared with anyone else. No visible list of names/links — purely a private
+  // text box, matching the "keep it private" requirement.
+  const handlePwaSetupSubmit = () => {
+    const slug = extractSlugFromInput(pwaSetupInput);
+    if (!slug) {
+      setPwaSetupError('Please enter your personal dashboard link.');
+      return;
+    }
+    try { localStorage.setItem(PWA_USER_KEY, slug); } catch (e) {}
+    setPwaSetupError('');
+    setCurrentUser(slug);
+  };
+
+  const handleUseDifferentLink = () => {
+    try { localStorage.removeItem(PWA_USER_KEY); } catch (e) {}
+    setCurrentUser(null);
+    setPwaSetupInput('');
+  };
+
   const [managerView, setManagerView] = useState('all');
   const [filterStatus, setFilterStatus] = useState([]);
   const [filterChannel, setFilterChannel] = useState([]);
@@ -455,7 +507,8 @@ function App() {
   const currentUserInfo = team.find(t => t.id === currentUser);
   const isAdmin = currentUserInfo?.isAdmin || false;
   const isHR = currentUserInfo?.isHR || false;
-  const isInvalidUser = teamLoaded && (!currentUser || !currentUserInfo);
+  const needsPwaSetup = teamLoaded && !currentUser;
+  const isInvalidUser = teamLoaded && !!currentUser && !currentUserInfo;
   const displayName = currentUserInfo?.displayName || '';
   const greeting = displayName ? getTimeBasedGreeting(displayName) : '';
   const todayQuote = currentUser ? getTodayQuote(currentUser) : '';
@@ -1782,6 +1835,59 @@ function App() {
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
 
+  // FIX — PWA browser-tab block. Only ever affects THIS page, in THIS tab — a website
+  // cannot see or touch any other tab or site, so this has zero effect anywhere else.
+  // Triggers only if this device has already completed the private one-time setup
+  // (meaning they've used the installed app before) AND they're currently NOT inside
+  // the installed app — i.e., they opened the link in a regular browser tab instead.
+  let hasSavedPwaUser = false;
+  try { hasSavedPwaUser = !!localStorage.getItem(PWA_USER_KEY); } catch (e) {}
+  const showBrowserBlock = hasSavedPwaUser && !isRunningStandalone();
+
+  if (showBrowserBlock) {
+    return (
+      <div className="app">
+        <div className="welcome-screen">
+          <div className="welcome-card">
+            <img src="/wtc-logo.png" alt="WTC" className="welcome-logo" />
+            <h1>WTC Management Hub</h1>
+            <p className="welcome-text">Please use the WTC Hub app to access your dashboard.</p>
+            <div className="welcome-info">
+              Open the <strong>WTC Hub</strong> icon on your desktop or home screen instead of this browser tab.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // FIX — one-time private setup screen. Shown only when no dashboard link has been
+  // identified yet (no ?user= in the URL, nothing saved on this device). Purely a
+  // private text box — no list of names or links is ever shown here.
+  if (needsPwaSetup) {
+    return (
+      <div className="app">
+        <div className="welcome-screen">
+          <div className="welcome-card">
+            <img src="/wtc-logo.png" alt="WTC" className="welcome-logo" />
+            <h1>WTC Management Hub</h1>
+            <p className="welcome-text">Enter your personal dashboard link to get started. This is saved privately on this device only — you won't need to enter it again.</p>
+            <input
+              type="text"
+              className="pwa-setup-input"
+              placeholder="Paste your link or enter your username"
+              value={pwaSetupInput}
+              onChange={(e) => setPwaSetupInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handlePwaSetupSubmit()}
+            />
+            {pwaSetupError && <p className="pwa-setup-error">{pwaSetupError}</p>}
+            <button className="btn-new-task pwa-setup-btn" onClick={handlePwaSetupSubmit}>Continue</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // FIX — show a neutral loading state while team data is still being fetched, instead of
   // jumping straight to the "invalid user" dead-end screen. Matters most for anyone added
   // to the team after the original 14, whose account only exists once this resolves.
@@ -1811,6 +1917,7 @@ function App() {
               <strong>Need your link?</strong><br/>
               Contact Shivendra Singh for your personal URL.
             </div>
+            <button className="btn-secondary" style={{ marginTop: '16px' }} onClick={handleUseDifferentLink}>Try a different link</button>
           </div>
         </div>
         <footer className="footer">

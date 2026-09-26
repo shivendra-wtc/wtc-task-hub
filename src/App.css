@@ -20,6 +20,16 @@
   --warning: #d97706;
   --danger: #dc2626;
   --purple: #7c3aed;
+  /* NEW — branded "urgent" color. The old candy-pink/red (#fee2e2/#dc2626) delay banners
+     and overdue borders clashed hard against the new green/teal theme, so overdue/high-
+     priority indicators now use this warm burnt-amber instead — still reads as "urgent",
+     but sits in the same family as the rest of the palette instead of fighting it.
+     --danger stays pure red and is reserved for genuinely destructive actions only
+     (delete task, sign out) where a hard red is the right, expected signal. */
+  --urgent: #c2410c;
+  --urgent-light: #ea580c;
+  --urgent-bg: #fff7ed;
+  --urgent-bg-strong: #fed7aa;
   /* Icon-dock color-coding accents — kept varied on purpose so header icons stay
      visually distinct from each other; nudged slightly cooler to sit with the new
      green/blue theme instead of clashing with it. */
@@ -519,7 +529,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   text-transform: uppercase;
 }
 
-.priority-tag.high { background: #fee2e2; color: var(--danger); }
+.priority-tag.high { background: var(--urgent-bg); color: var(--urgent); }
 .priority-tag.medium { background: #fef3c7; color: var(--warning); }
 .priority-tag.low { background: #d1fae5; color: var(--success); }
 
@@ -1252,11 +1262,11 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   width: 100%;
 }
 
-.priority-strip.high { background: linear-gradient(90deg, var(--danger) 0%, #ef4444 100%); }
+.priority-strip.high { background: linear-gradient(90deg, var(--urgent) 0%, var(--urgent-light) 100%); }
 .priority-strip.medium { background: linear-gradient(90deg, var(--warning) 0%, #f59e0b 100%); }
 .priority-strip.low { background: linear-gradient(90deg, var(--success) 0%, #10b981 100%); }
 
-.task-card.overdue { border-left: 4px solid var(--danger); }
+.task-card.overdue { border-left: 4px solid var(--urgent); }
 .task-card.completed { opacity: 0.85; }
 .task-card.archived { background: var(--gray-50); }
 .task-card.routine { border-left: 4px solid var(--accent-gold); }
@@ -1265,12 +1275,12 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
    be missed; still a few days out fades slightly so it doesn't compete with what's
    actually urgent right now. */
 .task-card.routine-urgent {
-  border-left: 4px solid var(--danger);
+  border-left: 4px solid var(--urgent);
   animation: routine-flash 1.6s ease-in-out infinite;
 }
 @keyframes routine-flash {
   0%, 100% { box-shadow: var(--shadow-sm); }
-  50% { box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25), var(--shadow-md); }
+  50% { box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.25), var(--shadow-md); }
 }
 .task-card.routine-fade {
   opacity: 0.72;
@@ -1318,13 +1328,13 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 }
 
 .alert-banner {
-  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-  color: var(--danger);
+  background: linear-gradient(135deg, var(--urgent-bg) 0%, var(--urgent-bg-strong) 100%);
+  color: var(--urgent);
   padding: 8px 15px;
   font-size: 11px;
   font-weight: 700;
   text-align: center;
-  border-bottom: 1px solid #fecaca;
+  border-bottom: 1px solid var(--urgent-bg-strong);
 }
 
 .task-header {
@@ -1395,7 +1405,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   text-transform: uppercase;
 }
 
-.badge-priority.high { background: #fee2e2; color: var(--danger); }
+.badge-priority.high { background: var(--urgent-bg); color: var(--urgent); }
 .badge-priority.medium { background: #fef3c7; color: var(--warning); }
 .badge-priority.low { background: #d1fae5; color: var(--success); }
 

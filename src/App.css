@@ -26,10 +26,10 @@
      but sits in the same family as the rest of the palette instead of fighting it.
      --danger stays pure red and is reserved for genuinely destructive actions only
      (delete task, sign out) where a hard red is the right, expected signal. */
-  --urgent: #c2410c;
-  --urgent-light: #ea580c;
-  --urgent-bg: #fff7ed;
-  --urgent-bg-strong: #fed7aa;
+  --urgent: #6d28d9;
+  --urgent-light: #9333ea;
+  --urgent-bg: #f5f0ff;
+  --urgent-bg-strong: #ddd6fe;
   /* Icon-dock color-coding accents — kept varied on purpose so header icons stay
      visually distinct from each other; nudged slightly cooler to sit with the new
      green/blue theme instead of clashing with it. */
@@ -97,6 +97,15 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   animation: slideInBounce 0.4s var(--ease-smooth), fadeOutNotif 0.4s ease-in 4.6s forwards;
   max-width: 400px;
   border-left: 4px solid var(--primary-light);
+}
+
+/* NEW — toast is clickable when it carries a navigate action (task or chat) */
+.notif-popup.clickable {
+  cursor: pointer;
+}
+.notif-popup.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 24px 45px rgba(0, 0, 0, 0.2);
 }
 
 @keyframes slideInBounce {
@@ -1280,7 +1289,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 }
 @keyframes routine-flash {
   0%, 100% { box-shadow: var(--shadow-sm); }
-  50% { box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.25), var(--shadow-md); }
+  50% { box-shadow: 0 0 0 3px rgba(109, 40, 217, 0.28), var(--shadow-md); }
 }
 .task-card.routine-fade {
   opacity: 0.72;
@@ -1328,13 +1337,15 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 }
 
 .alert-banner {
-  background: linear-gradient(135deg, var(--urgent-bg) 0%, var(--urgent-bg-strong) 100%);
-  color: var(--urgent);
+  /* NEW — solid purple ribbon with white text, per the requested color swatch, instead
+     of the earlier light pastel banner. */
+  background: linear-gradient(135deg, var(--urgent) 0%, var(--urgent-light) 100%);
+  color: white;
   padding: 8px 15px;
   font-size: 11px;
   font-weight: 700;
   text-align: center;
-  border-bottom: 1px solid var(--urgent-bg-strong);
+  border-bottom: 1px solid var(--urgent);
 }
 
 .task-header {
@@ -2247,6 +2258,33 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   70% { box-shadow: 0 0 0 30px rgba(217, 119, 6, 0); }
   100% { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0); }
 }
+
+/* NEW — Team Meet alarm: distinct teal/emerald theme (matches the branded green/blue
+   palette) so it's visually distinguishable at a glance from the amber lunch alarm and
+   the red incoming-call overlay. */
+.meeting-alarm-overlay {
+  background: rgba(6, 78, 59, 0.94);
+}
+.meeting-alarm-avatar {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  animation: meeting-pulse 1s infinite;
+}
+@keyframes meeting-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.6); }
+  70% { box-shadow: 0 0 0 30px rgba(20, 184, 166, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(20, 184, 166, 0); }
+}
+.meeting-alarm-purpose {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  margin: 4px 0;
+  font-style: italic;
+}
+.meeting-alarm-meta {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  margin-top: 6px;
+}
 .incoming-call-card h2 {
   font-family: 'Playfair Display', serif;
   font-size: 26px;
@@ -2629,6 +2667,71 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   outline: none;
   border-color: var(--primary-light);
   box-shadow: 0 0 0 3px rgba(91, 33, 182, 0.12);
+}
+
+/* ================================================================
+   NEW — Team Meet
+   ================================================================ */
+.meeting-header {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%) !important;
+}
+.meetings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.meeting-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  border-left: 4px solid var(--primary-light);
+}
+.meeting-card.meeting-past {
+  opacity: 0.6;
+}
+.meeting-card-main { flex: 1; min-width: 0; }
+.meeting-card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.meeting-card-top strong {
+  font-size: 14px;
+  color: var(--gray-800);
+}
+.meeting-type-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: var(--primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.meeting-purpose {
+  font-size: 12px;
+  color: var(--gray-600);
+  font-style: italic;
+  margin: 4px 0;
+}
+.meeting-card-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--gray-600);
+  margin-top: 6px;
+}
+.meeting-created-by {
+  font-size: 10px;
+  color: var(--gray-400);
+  margin-top: 6px;
 }
 
 /* ================================================================

@@ -464,6 +464,17 @@ function App() {
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [showOlderRoutine, setShowOlderRoutine] = useState(false);
+  // ---- Team Meet ----
+  const [meetings, setMeetings] = useState([]);
+  const [showMeetings, setShowMeetings] = useState(false);
+  const [showNewMeetingForm, setShowNewMeetingForm] = useState(false);
+  const [meetingSaving, setMeetingSaving] = useState(false);
+  const [meetingAssignees, setMeetingAssignees] = useState([]);
+  const [newMeeting, setNewMeeting] = useState({
+    title: '', purpose: '', type: 'Team Meet', meetingDate: '', meetingTime: ''
+  });
+  const [activeMeetingAlarm, setActiveMeetingAlarm] = useState(null); // the meeting currently alarming
+  const meetingAlarmFiredRef = useRef(new Set()); // "meetingId" strings already alarmed, this session
   const [selectedAssignees, setSelectedAssignees] = useState([]);
   const [selectedChannels, setSelectedChannels] = useState([]);
   const [notifQueue, setNotifQueue] = useState([]); // FIX #7/#10 — queue instead of single popup
@@ -590,9 +601,12 @@ function App() {
     fireDesktopNotification('WTC Task Hub', '🔔 Test notification — if you see this in your OS notification tray, desktop alerts are working correctly.');
   };
 
-  const pushNotif = (message) => {
+  // NEW — pushNotif now optionally carries an onClick handler, so the toast itself is
+  // clickable and navigates (to the task, or to the right chat conversation), not just
+  // the Inbox panel entry after you open the bell. taskId is stored too so we can log/debug.
+  const pushNotif = (message, onClick) => {
     const notifId = Date.now() + Math.random();
-    setNotifQueue(q => [...q, { id: notifId, message }]);
+    setNotifQueue(q => [...q, { id: notifId, message, onClick }]);
     setTimeout(() => {
       setNotifQueue(q => q.filter(n => n.id !== notifId));
     }, 5000); // FIX #10 — flashes in, auto-dismisses on its own
@@ -662,6 +676,8 @@ function App() {
   const lunchAlarmIntervalRef = useRef(null);
   const lunchAlarmTimeoutRef = useRef(null);
   const lunchAlarmFiredTodayRef = useRef(null); // stores the date string it last fired for
+  const meetingAlarmIntervalRef = useRef(null);
+  const meetingAlarmTimeoutRef = useRef(null);
 
   // Distinct synthesized alarm — a rising two-tone chirp, deliberately different from
   // both the call ring (two-tone burst) and the notification ding (single beep), so all
@@ -739,6 +755,155 @@ function App() {
       document.removeEventListener('visibilitychange', handleVisible);
     };
   }, [currentUser, isAdmin]);
+
+  // ============================================================
+  // TEAM MEET — schedule a meeting (Routine/General/Team Meet/Other), assign anyone,
+  // pick a date+time. Everyone assigned (and the creator) gets a distinct alarm exactly
+  // 1 minute before the meeting time — same reliability pattern as the lunch alarm and
+  // the call ring: a periodic check plus a visibility-change listener so a backgrounded
+  // tab still catches it the moment it's reopened.
+  // ============================================================
+  const loadMeetings = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getMeetings');
+      const data = await response.json();
+      if (data.status === 'ok') setMeetings(data.meetings);
+    } catch (error) {}
+  };
+
+  const loadMeetingsBackground = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getMeetings');
+      const data = await response.json();
+      if (data.status === 'ok') setMeetings(data.meetings);
+    } catch (error) {}
+  };
+
+  const openMeetings = () => {
+    setShowMeetings(true);
+    loadMeetings();
+  };
+
+  const toggleMeetingAssignee = (name) => {
+    setMeetingAssignees(prev => prev.includes(name) ? prev.filter(a => a !== name) : [...prev, name]);
+  };
+
+  const handleAddMeeting = () => {
+    if (!newMeeting.title || !newMeeting.meetingDate || !newMeeting.meetingTime || meetingAssignees.length === 0) {
+      alert('Please fill Title, Date, Time and select at least one person!');
+      return;
+    }
+    setMeetingSaving(true);
+    const meetingData = {
+      ...newMeeting,
+      assignedTo: meetingAssignees.join(', '),
+      createdBy: currentUserInfo.name
+    };
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'addMeeting', meeting: meetingData })
+    });
+    setNewMeeting({ title: '', purpose: '', type: 'Team Meet', meetingDate: '', meetingTime: '' });
+    setMeetingAssignees([]);
+    setShowNewMeetingForm(false);
+    setMeetingSaving(false);
+    setTimeout(() => loadMeetingsBackground(), 1500);
+  };
+
+  const handleDeleteMeeting = (meeting) => {
+    const canDelete = isAdmin || meeting.createdBy === currentUserInfo?.name;
+    if (!canDelete) return;
+    if (!window.confirm(`Delete "${meeting.title}"?`)) return;
+    setMeetings(meetings.filter(m => m.id !== meeting.id));
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteMeeting', meetingId: meeting.id })
+    });
+  };
+
+  // Distinct alarm sound — an alternating two-note bell (880Hz / 660Hz sine "ding-dong"),
+  // deliberately different from the lunch alarm's rising triangle chirp, the call ring's
+  // two-tone burst, and the plain notification ding, so it's instantly recognizable.
+  const playMeetingAlarmTone = () => {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
+      const ctx = ringAudioCtxRef.current;
+      const playBell = (start, freq) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + start + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + 0.42);
+      };
+      playBell(0, 880);
+      playBell(0.42, 660);
+    } catch (e) {}
+  };
+
+  const startMeetingAlarmSound = () => {
+    playMeetingAlarmTone();
+    if (meetingAlarmIntervalRef.current) clearInterval(meetingAlarmIntervalRef.current);
+    meetingAlarmIntervalRef.current = setInterval(playMeetingAlarmTone, 1200);
+  };
+
+  const dismissMeetingAlarm = () => {
+    if (meetingAlarmIntervalRef.current) { clearInterval(meetingAlarmIntervalRef.current); meetingAlarmIntervalRef.current = null; }
+    if (meetingAlarmTimeoutRef.current) { clearTimeout(meetingAlarmTimeoutRef.current); meetingAlarmTimeoutRef.current = null; }
+    setActiveMeetingAlarm(null);
+  };
+
+  useEffect(() => {
+    if (!currentUser || !currentUserInfo) return;
+
+    const checkMeetingAlarms = () => {
+      const now = new Date();
+      meetings.forEach(m => {
+        if (activeMeetingAlarm) return; // one at a time
+        if (meetingAlarmFiredRef.current.has(String(m.id))) return;
+        const involved = String(m.assignedTo).split(',').map(a => a.trim()).includes(currentUserInfo.name)
+          || m.createdBy === currentUserInfo.name;
+        if (!involved) return;
+        if (!m.meetingDate || !m.meetingTime) return;
+        const meetingDateTime = new Date(`${m.meetingDate}T${m.meetingTime}:00`);
+        const msUntil = meetingDateTime - now;
+        // Fires any time from 70s before to the meeting time itself — a wide-enough
+        // window that a throttled/backgrounded tab still catches the "1 minute before"
+        // moment instead of silently skipping it (same reasoning as the lunch alarm).
+        if (msUntil <= 70000 && msUntil > -30000) {
+          meetingAlarmFiredRef.current.add(String(m.id));
+          setActiveMeetingAlarm(m);
+          startMeetingAlarmSound();
+          fireDesktopNotification('🤝 Meeting starting soon', `${m.title} at ${m.meetingTime}`);
+          meetingAlarmTimeoutRef.current = setTimeout(dismissMeetingAlarm, 30000);
+        }
+      });
+    };
+
+    const interval = setInterval(checkMeetingAlarms, 15000);
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') checkMeetingAlarms();
+    };
+    document.addEventListener('visibilitychange', handleVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
+  }, [currentUser, currentUserInfo, meetings, activeMeetingAlarm]);
+
+  useEffect(() => {
+    if (currentUser) loadMeetings();
+  }, [currentUser]);
 
   const checkIncomingCalls = async () => {
     if (!currentUserInfo || incomingCall) return; // don't interrupt an already-showing ring
@@ -848,6 +1013,7 @@ function App() {
         loadInboxBackground();
         loadChatsBackground();
         loadAttendanceBackground();
+        loadMeetingsBackground();
         if (showNoticeBoard) loadNotices();
       }
     };
@@ -882,6 +1048,7 @@ function App() {
         loadAttendanceBackground();
         loadInboxBackground();
         loadChatsBackground();
+        loadMeetingsBackground();
         // Re-reads the browser's actual permission state (not just our cached copy) —
         // if it was ever silently revoked/reset outside the app, the header icon
         // will reflect that within 15s instead of staying stuck showing "granted".
@@ -982,10 +1149,18 @@ function App() {
     const newOnes = items.filter(i => i.read === 'No' && !seenInboxIds.current.has(i.id));
     newOnes.forEach(item => {
       seenInboxIds.current.add(item.id);
-      const label = item.type === 'new_routine' ? '🔄 Routine task' : '📌 New task';
-      const msg = `${label} from ${item.from}: ${item.title}`;
+      const label = item.type === 'new_routine' ? '🔄 Routine task'
+        : item.type === 'task_completed' ? '✅ Task completed'
+        : item.type === 'new_meeting' ? '🤝 Meeting scheduled'
+        : '📌 New task';
+      const msg = item.type === 'task_completed' ? `✅ ${item.from} completed: ${item.title}`
+        : item.type === 'new_meeting' ? `🤝 ${item.from} scheduled: ${item.title}`
+        : `${label} from ${item.from}: ${item.title}`;
       playNotifSound();
-      pushNotif(msg);
+      // NEW — clicking the toast itself now navigates straight to the task, same as
+      // clicking the Inbox panel entry does, instead of only being clickable once you
+      // open the bell icon.
+      pushNotif(msg, item.taskId ? () => handleInboxItemClick(item) : undefined);
       fireDesktopNotification('WTC Task Hub', msg);
     });
   };
@@ -1024,7 +1199,8 @@ function App() {
     newOnes.forEach(msg => {
       seenChatIds.current.add(msg.id);
       playNotifSound();
-      pushNotif(`💬 New message from ${msg.from}`);
+      // NEW — clicking a chat toast now opens that conversation directly.
+      pushNotif(`💬 New message from ${msg.from}`, () => { setShowChat(true); openChatWith(msg.from); });
       fireDesktopNotification(`💬 ${msg.from}`, msg.message);
     });
   };
@@ -1498,8 +1674,15 @@ function App() {
   // "task_completed" notification (sent to the original assigner) has no further state
   // to wait on, so it still dismisses immediately on click, same as before.
   const navigateToTask = (taskId) => {
+    // NEW — close every other overlay/modal too, not just the inbox, so a notification
+    // click always lands you on the task list no matter what was open when it fired.
     setShowInbox(false);
+    setShowChat(false);
     setShowArchive(false);
+    setShowContentCalendar(false);
+    setShowTeamManager(false);
+    setShowNoticeBoard(false);
+    setShowHolidayCalendar(false);
     if (isAdmin) { setTaskViewMode('all'); setManagerView('all'); }
     setFilterStatus(['All']);
     setFilterChannel(['All']);
@@ -1514,7 +1697,9 @@ function App() {
   };
 
   const handleInboxItemClick = (item) => {
-    if (item.type === 'task_completed') {
+    if (item.type === 'task_completed' || item.type === 'new_meeting') {
+      // These have no further state to wait on (a meeting notification isn't "resolved"
+      // by anything the way a task is by being Completed), so they dismiss on click.
       dismissedInboxIds.current.add(item.id);
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
@@ -1522,14 +1707,15 @@ function App() {
         body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
       });
       setInbox(prev => prev.filter(i => i.id !== item.id));
-    } else {
-      fetch(API_URL, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
-      });
-      setInbox(prev => prev.map(i => i.id === item.id ? { ...i, read: 'Yes' } : i));
+      if (item.type === 'new_meeting') { setShowInbox(false); openMeetings(); }
+      return;
     }
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
+    });
+    setInbox(prev => prev.map(i => i.id === item.id ? { ...i, read: 'Yes' } : i));
     if (item.taskId) navigateToTask(item.taskId);
   };
 
@@ -2023,10 +2209,17 @@ function App() {
       {/* FIX #7/#10 — notification queue: multiple can stack, each flashes in and auto-dismisses */}
       <div className="notif-stack">
         {notifQueue.map(n => (
-          <div key={n.id} className="notif-popup">
+          <div
+            key={n.id}
+            className={`notif-popup ${n.onClick ? 'clickable' : ''}`}
+            onClick={() => {
+              if (n.onClick) n.onClick();
+              setNotifQueue(q => q.filter(x => x.id !== n.id));
+            }}
+          >
             <div className="notif-icon">🔔</div>
             <div className="notif-msg">{n.message}</div>
-            <button className="notif-close" onClick={() => setNotifQueue(q => q.filter(x => x.id !== n.id))}>✕</button>
+            <button className="notif-close" onClick={(e) => { e.stopPropagation(); setNotifQueue(q => q.filter(x => x.id !== n.id)); }}>✕</button>
           </div>
         ))}
       </div>
@@ -2067,20 +2260,17 @@ function App() {
               <button className="icon-btn icon-rose" onClick={openContentCalendar} title="Content Calendar">
                 🎬
               </button>
-              {/* FIX — Notice Board + Holiday Calendar consolidated into one "More" dropdown
-                  instead of two separate always-visible icons — these are reference/occasional
-                  items, unlike Content Calendar which people check daily. */}
-              <div className="more-menu-wrap">
-                <button className="icon-btn icon-sky" onClick={() => setShowMoreMenu(!showMoreMenu)} title="More">
-                  ⋮
-                </button>
-                {showMoreMenu && (
-                  <div className="more-menu-dropdown" onMouseLeave={() => setShowMoreMenu(false)}>
-                    <button onClick={() => { setShowMoreMenu(false); openNoticeBoard(); }}>📋 Notice Board</button>
-                    <button onClick={() => { setShowMoreMenu(false); openHolidayCalendar(); }}>🗓️ Holiday Calendar</button>
-                  </div>
-                )}
-              </div>
+              {/* NEW — every icon lives directly in the top bar now; nothing is tucked
+                  away behind a "More" dropdown anymore. */}
+              <button className="icon-btn icon-sky" onClick={openNoticeBoard} title="Notice Board">
+                📋
+              </button>
+              <button className="icon-btn icon-amber" onClick={openHolidayCalendar} title="Holiday Calendar">
+                🗓️
+              </button>
+              <button className="icon-btn icon-emerald" onClick={openMeetings} title="Team Meet">
+                🤝
+              </button>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
                   👥
@@ -2134,12 +2324,19 @@ function App() {
               <p className="empty-text">No notifications yet</p>
             ) : (
               <>
-                <p className="inbox-hint">Tap a notification to clear it</p>
+                <p className="inbox-hint">Tap a notification to jump to it — task notifications clear on their own once completed</p>
                 {inbox.map(item => (
                   <div key={item.id} className={`inbox-item ${item.read === 'No' ? 'unread' : ''}`} onClick={() => handleInboxItemClick(item)}>
-                    <div className="inbox-icon">{item.type === 'new_routine' ? '🔄' : '📌'}</div>
+                    <div className="inbox-icon">
+                      {item.type === 'new_routine' ? '🔄'
+                        : item.type === 'task_completed' ? '✅'
+                        : item.type === 'new_meeting' ? '🤝'
+                        : '📌'}
+                    </div>
                     <div className="inbox-content">
-                      <p className="inbox-title">{item.type === 'new_routine' ? 'Routine task' : 'New task'} from {item.from}</p>
+                      <p className="inbox-title">
+                        {item.type === 'new_routine' ? 'Routine task' : item.type === 'task_completed' ? 'Task completed' : item.type === 'new_meeting' ? 'Meeting scheduled' : 'New task'} from {item.from}
+                      </p>
                       <p className="inbox-task">{item.title}</p>
                       <p className="inbox-time">{new Date(item.timestamp).toLocaleString()}</p>
                     </div>
@@ -2339,6 +2536,111 @@ function App() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TEAM MEET — anyone can schedule a meeting and assign anyone; assigned people
+          (and the creator) get a 1-minute-before alarm (see effect above). */}
+      {showMeetings && (
+        <div className="modal-overlay" onClick={() => { setShowMeetings(false); setShowNewMeetingForm(false); }}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header meeting-header">
+              <h3>🤝 Team Meet</h3>
+              <button className="modal-close" onClick={() => { setShowMeetings(false); setShowNewMeetingForm(false); }}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              {!showNewMeetingForm ? (
+                <>
+                  <button className="btn-success" style={{ marginBottom: '16px' }} onClick={() => setShowNewMeetingForm(true)}>
+                    + Schedule a Meeting
+                  </button>
+                  {meetings.length === 0 ? (
+                    <p className="empty-text">No meetings scheduled yet.</p>
+                  ) : (
+                    <div className="meetings-list">
+                      {[...meetings]
+                        .sort((a, b) => new Date(`${a.meetingDate}T${a.meetingTime || '00:00'}`) - new Date(`${b.meetingDate}T${b.meetingTime || '00:00'}`))
+                        .map(m => {
+                          const canDelete = isAdmin || m.createdBy === currentUserInfo?.name;
+                          const isPast = new Date(`${m.meetingDate}T${m.meetingTime || '00:00'}`) < new Date();
+                          return (
+                            <div key={m.id} className={`meeting-card ${isPast ? 'meeting-past' : ''}`}>
+                              <div className="meeting-card-main">
+                                <div className="meeting-card-top">
+                                  <span className="meeting-type-tag">{m.type}</span>
+                                  <strong>{m.title}</strong>
+                                </div>
+                                {m.purpose && <p className="meeting-purpose">{m.purpose}</p>}
+                                <div className="meeting-card-meta">
+                                  <span>📅 {new Date(m.meetingDate + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                  <span>🕐 {m.meetingTime}</span>
+                                  <span>👥 {m.assignedTo}</span>
+                                </div>
+                                <p className="meeting-created-by">Scheduled by {m.createdBy}</p>
+                              </div>
+                              {canDelete && (
+                                <button className="btn-delete-task" title="Delete meeting" onClick={() => handleDeleteMeeting(m)}>🗑️</button>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="form-group">
+                    <label>Meeting Title *</label>
+                    <input type="text" placeholder="e.g. Weekly Content Review" value={newMeeting.title} onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label>Meeting Purpose</label>
+                    <input type="text" placeholder="What's this meeting about? (optional)" value={newMeeting.purpose} onChange={(e) => setNewMeeting({ ...newMeeting, purpose: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label>Type</label>
+                    <select value={newMeeting.type} onChange={(e) => setNewMeeting({ ...newMeeting, type: e.target.value })}>
+                      <option value="Team Meet">Team Meet</option>
+                      <option value="Routine">Routine</option>
+                      <option value="General">General</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Assign to * ({meetingAssignees.length} selected)</label>
+                    <div className="assignee-avatars-select">
+                      {team.filter(m => m.active !== false).map(member => (
+                        <div
+                          key={member.id}
+                          className={`avatar-select ${meetingAssignees.includes(member.name) ? 'checked' : ''}`}
+                          onClick={() => toggleMeetingAssignee(member.name)}
+                          title={member.name}
+                        >
+                          {member.avatar}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Date *</label>
+                      <input type="date" value={newMeeting.meetingDate} onChange={(e) => setNewMeeting({ ...newMeeting, meetingDate: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Time *</label>
+                      <input type="time" value={newMeeting.meetingTime} onChange={(e) => setNewMeeting({ ...newMeeting, meetingTime: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="modal-footer" style={{ padding: '15px 0 0', border: 'none', background: 'transparent' }}>
+                    <button className="btn-secondary" onClick={() => setShowNewMeetingForm(false)}>Cancel</button>
+                    <button className="btn-success" onClick={handleAddMeeting} disabled={meetingSaving}>
+                      {meetingSaving ? 'Saving...' : '✅ Schedule Meeting'}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -2767,6 +3069,21 @@ function App() {
             <p className="incoming-call-type">Take your 45-minute break</p>
             <div className="incoming-call-actions">
               <button className="btn-accept-call" onClick={dismissLunchAlarm}>✓ Got it</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeMeetingAlarm && (
+        <div className="incoming-call-overlay meeting-alarm-overlay">
+          <div className="incoming-call-card">
+            <div className="incoming-call-avatar meeting-alarm-avatar">🤝</div>
+            <h2>Meeting starting in 1 minute!</h2>
+            <p className="incoming-call-type">{activeMeetingAlarm.title}</p>
+            {activeMeetingAlarm.purpose && <p className="meeting-alarm-purpose">{activeMeetingAlarm.purpose}</p>}
+            <p className="meeting-alarm-meta">🕐 {activeMeetingAlarm.meetingTime} · 👥 {activeMeetingAlarm.assignedTo}</p>
+            <div className="incoming-call-actions">
+              <button className="btn-accept-call" onClick={dismissMeetingAlarm}>✓ Got it</button>
             </div>
           </div>
         </div>

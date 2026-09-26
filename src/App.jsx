@@ -144,17 +144,17 @@ const DEFAULT_TEAM = [
   { id: 'pcwtc45', name: 'PC', displayName: 'PC', role: 'CEO', avatar: 'PC', quoteType: 'ceo', isAdmin: true, active: true },
   { id: 'shivendrawtc77', name: 'Shivendra Singh', displayName: 'Shivendra Singh', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true, active: true },
   { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media', active: true },
-  { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', role: 'Poorvaj', avatar: 'NV', quoteType: 'social_media', active: true },
+  { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', role: 'MFG', avatar: 'NV', quoteType: 'social_media', active: true },
   { id: 'samanta', name: 'Samanta', displayName: 'Samanta', role: 'Social Media Exec & Design', avatar: 'SP', quoteType: 'social_media', active: true },
   { id: 'muskan', name: 'Muskan', displayName: 'Muskan', role: 'Devastram', avatar: 'MC', quoteType: 'social_media', active: true },
   { id: 'sanjeevani', name: 'Sanjeevani', displayName: 'Sanjeevani', role: 'PR Manager', avatar: 'SJ', quoteType: 'pr', active: true },
   { id: 'pari', name: 'Pari', displayName: 'Pari', role: 'HR', avatar: 'PA', quoteType: 'hr', isHR: true, active: true },
-  { id: 'khushi', name: 'Khushi', displayName: 'Khushi', role: 'Social Media Exec & Design', avatar: 'KJ', quoteType: 'social_media', active: true },
-  { id: 'saraswati', name: 'Saraswati', displayName: 'Saraswati', role: 'Social Media Exec & Design', avatar: 'SR', quoteType: 'social_media', active: true },
   { id: 'charu', name: 'Charu', displayName: 'Charu', role: 'Social Media Exec & Design', avatar: 'CN', quoteType: 'social_media', active: true },
   { id: 'naman', name: 'Naman', displayName: 'Naman', role: 'Video Editor', avatar: 'NJ', quoteType: 'video_editor', active: true },
-  { id: 'karan', name: 'Karan', displayName: 'Karan', role: 'Video Editor', avatar: 'KR', quoteType: 'video_editor', active: true },
   { id: 'jagdish', name: 'Jagdish', displayName: 'Jagdish', role: 'Team Member', avatar: 'JS', quoteType: 'social_media', active: true }
+  // Saraswati, Khushi and Karan removed permanently — they left the organization.
+  // Run removeDepartedMembers() once in the Apps Script editor to also purge them
+  // from the live TeamConfig sheet (see Code.gs).
 ];
 
 // FIX — reusable multi-select checklist dropdown, replacing the old single-select native
@@ -196,18 +196,18 @@ function MultiSelectFilter({ label, options, selected, onChange }) {
 function App() {
   const channels = [
     'AG Insta', 'AG YT', 'The Fact-Tree YT', 'The Fact-Tree Insta',
-    'HisTree YT', 'HisTree Insta', 'AG.books Insta',
+    'AG.books Insta',
     "The 7c's YT", "The 7c's Insta", 'Spotify', 'LinkedIn', 'Twitter',
-    'Poorvaj Insta', 'Devastram Insta', 'Other'
+    'MFG Insta', 'Devastram Insta', 'Other'
   ];
 
   // FIX — Content Calendar channel groups. Each group gets its own calendar tab.
+  // Poorvaj renamed to MFG; HisTree removed entirely per management request.
   const CONTENT_CHANNEL_GROUPS = {
     "Akshat Gupta": ['AG Insta', 'AG YT', 'AG.books Insta', 'Spotify', 'LinkedIn', 'Twitter'],
     "The Fact-Tree": ['The Fact-Tree YT', 'The Fact-Tree Insta'],
-    "HisTree": ['HisTree YT', 'HisTree Insta'],
     "The 7C's": ["The 7c's YT", "The 7c's Insta"],
-    "Poorvaj": ['Poorvaj Insta'],
+    "MFG": ['MFG Insta'],
     "Devastram": ['Devastram Insta'],
     "WTC Other": ['Other']
   };
@@ -433,6 +433,7 @@ function App() {
   const [monthlyYear, setMonthlyYear] = useState(now_.getFullYear());
   const [monthlyMonth, setMonthlyMonth] = useState(now_.getMonth() + 1); // 1-12
   const [taskViewMode, setTaskViewMode] = useState('all');
+  const [highlightTaskId, setHighlightTaskId] = useState(null); // NEW — task-navigation from a clicked notification
   const [showInbox, setShowInbox] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showArchive, setShowArchive] = useState(false);
@@ -811,8 +812,12 @@ function App() {
     }
   }, [outgoingCall?.callId]);
 
-  // FIX — tightened from 3s to 1.5s per request, for a snappier ring while the app is
-  // active. Separate from the main 15s background sync interval.
+  // FIX — tightened again from 1.5s to 1s per request, as the incremental stopgap while
+  // polling is still the underlying mechanism. Ceiling: this cannot get calls reliably
+  // under ~1s because it's still round-trip-to-Apps-Script polling, not push delivery —
+  // true near-instant ringing needs a push-based rebuild (service worker + a push
+  // provider), which is a separate, bigger project outside a polling tune-up like this one.
+  // Separate from the main 15s background sync interval.
   // FIX — currentUserInfo?.name is in the dependency array on purpose: without it, if team
   // data (from loadTeam) resolves even a moment AFTER this effect's first run, the interval
   // callback stays permanently stuck with the stale "not loaded yet" closure forever (since
@@ -820,7 +825,7 @@ function App() {
   // single tick. This is exactly why calls to newer team members weren't arriving.
   useEffect(() => {
     if (currentUser) {
-      const interval = setInterval(checkIncomingCalls, 1500);
+      const interval = setInterval(checkIncomingCalls, 1000);
       return () => clearInterval(interval);
     }
   }, [currentUser, incomingCall, currentUserInfo?.name]);
@@ -1403,7 +1408,7 @@ function App() {
     } catch (e) {}
   };
 
-  const CONFETTI_COLORS = ['#c9a961', '#1a3a5c', '#2c5aa0', '#059669', '#dc2626', '#7c3aed'];
+  const CONFETTI_COLORS = ['#22c55e', '#064e3b', '#14b8a6', '#0ea5e9', '#f59e0b', '#dc2626'];
   const triggerCelebration = () => {
     const pieces = Array.from({ length: 28 }, (_, i) => ({
       id: Date.now() + '_' + i,
@@ -1449,6 +1454,21 @@ function App() {
     alert('Message copied!');
   };
 
+  // NEW — PC/Shivendra can delete ANY task from the dashboard, not just their own.
+  const handleDeleteTask = (task) => {
+    if (!isAdmin) return;
+    if (!window.confirm(`Delete "${task.taskDetails}"? This cannot be undone.`)) return;
+    setTasks(tasks.filter(t => t.id !== task.id));
+    try {
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'deleteTask', taskId: task.id })
+      });
+    } catch (error) {}
+    setTimeout(() => loadTasksBackground(), 1500);
+  };
+
   const toggleAssignee = (name) => {
     if (selectedAssignees.includes(name)) {
       setSelectedAssignees(selectedAssignees.filter(a => a !== name));
@@ -1466,19 +1486,71 @@ function App() {
   };
 
   // FIX — inbox items no longer all get marked read the moment you open the panel.
-  // Clicking a specific notification marks only that one read and removes it right
-  // away; everything else stays until you click it too. Also records the dismissal
-  // permanently (dismissedInboxIds) so a background poll racing ahead of the server
-  // write can never make it pop back into the list.
-  const handleInboxItemClick = (item) => {
-    dismissedInboxIds.current.add(item.id);
-    fetch(API_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
-    });
-    setInbox(prev => prev.filter(i => i.id !== item.id));
+  // Clicking a specific notification marks only that one read; everything else stays
+  // until you click it too. Also records the dismissal permanently (dismissedInboxIds)
+  // so a background poll racing ahead of the server write can never make it pop back.
+  //
+  // NEW behavior: clicking a task-assignment notification (new_task/new_routine) now
+  // NAVIGATES to that task (closes the inbox, switches to a view that shows it, and
+  // highlights the card) instead of just disappearing. It stays in the inbox list
+  // (marked read so it stops looking "new") until the task itself is marked Completed
+  // — a separate effect below watches for that and clears it automatically. A
+  // "task_completed" notification (sent to the original assigner) has no further state
+  // to wait on, so it still dismisses immediately on click, same as before.
+  const navigateToTask = (taskId) => {
+    setShowInbox(false);
+    setShowArchive(false);
+    if (isAdmin) { setTaskViewMode('all'); setManagerView('all'); }
+    setFilterStatus(['All']);
+    setFilterChannel(['All']);
+    setFilterCategory(['All']);
+    setFilterTaskType(['All']);
+    setHighlightTaskId(taskId);
+    setTimeout(() => {
+      const el = document.getElementById('task-card-' + taskId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
+    setTimeout(() => setHighlightTaskId(null), 4000);
   };
+
+  const handleInboxItemClick = (item) => {
+    if (item.type === 'task_completed') {
+      dismissedInboxIds.current.add(item.id);
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
+      });
+      setInbox(prev => prev.filter(i => i.id !== item.id));
+    } else {
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
+      });
+      setInbox(prev => prev.map(i => i.id === item.id ? { ...i, read: 'Yes' } : i));
+    }
+    if (item.taskId) navigateToTask(item.taskId);
+  };
+
+  // NEW — auto-clears a task-assignment notification the moment its task is Completed
+  // (not before, and not just because it was clicked/viewed).
+  useEffect(() => {
+    const linkedUnresolved = inbox.filter(i => (i.type === 'new_task' || i.type === 'new_routine'));
+    if (linkedUnresolved.length === 0) return;
+    linkedUnresolved.forEach(item => {
+      const linkedTask = tasks.find(t => String(t.id) === String(item.taskId));
+      if (linkedTask && linkedTask.status === 'Completed') {
+        dismissedInboxIds.current.add(item.id);
+        fetch(API_URL, {
+          method: 'POST', mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
+        });
+        setInbox(prev => prev.filter(i => i.id !== item.id));
+      }
+    });
+  }, [tasks]);
 
   const openInbox = () => {
     setShowInbox(!showInbox);
@@ -2938,7 +3010,7 @@ function App() {
                     }
 
                     return (
-                      <div key={task.id} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''} ${routineUrgencyClass}`}>
+                      <div key={task.id} id={`task-card-${task.id}`} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''} ${routineUrgencyClass} ${String(highlightTaskId) === String(task.id) ? 'task-highlighted' : ''}`}>
                         <div className={`priority-strip ${task.priority.toLowerCase()} ${isUrgent ? 'urgent-shimmer' : ''}`}></div>
                         {isRoutine && <div className="routine-tag">🔄 Routine Task</div>}
                         {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
@@ -2988,6 +3060,9 @@ function App() {
                             <option value="Delayed">Delayed</option>
                           </select>
                           <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)}>WA</button>
+                          {isAdmin && (
+                            <button className="btn-delete-task" title="Delete task" onClick={() => handleDeleteTask(task)}>🗑️</button>
+                          )}
                         </div>
                       </div>
                     );

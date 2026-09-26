@@ -7,23 +7,25 @@
 }
 
 :root {
-  /* FIX — purple is now the real core theme color (not just the header), so buttons,
-     modals, active states, and badges all match instead of clashing with the header. */
-  --primary-dark: #2e1065;
-  --primary: #5b21b6;
-  --primary-light: #8b5cf6;
-  --accent-gold: #c9a961;
-  --accent-gold-light: #e5d5a1;
+  /* THEME v2 — complete green→blue gradient theme (replaces the earlier purple pass),
+     per management's requested color swatch. Same cascading-variable architecture as
+     before: everything (header, buttons, badges, active states, modals) reads from
+     these root variables, so the whole app re-themes from these few lines. */
+  --primary-dark: #064e3b;
+  --primary: #0f766e;
+  --primary-light: #14b8a6;
+  --accent-gold: #22c55e;
+  --accent-gold-light: #86efac;
   --success: #059669;
   --warning: #d97706;
   --danger: #dc2626;
   --purple: #7c3aed;
-  /* FIX — new accent colors for the redesigned icon dock + UI variety pass.
-     Brand navy + gold stay primary everywhere else; these are used specifically
-     for icon color-coding and small decorative accents. */
-  --accent-teal: #0d9488;
+  /* Icon-dock color-coding accents — kept varied on purpose so header icons stay
+     visually distinct from each other; nudged slightly cooler to sit with the new
+     green/blue theme instead of clashing with it. */
+  --accent-teal: #0891b2;
   --accent-coral: #f43f5e;
-  --accent-violet: #8b5cf6;
+  --accent-violet: #6366f1;
   --gray-50: #f8fafc;
   --gray-100: #f1f5f9;
   --gray-200: #e2e8f0;
@@ -1277,6 +1279,17 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   opacity: 1;
 }
 
+/* NEW — brief highlight when navigating here from a clicked inbox notification */
+.task-card.task-highlighted {
+  animation: task-highlight-pulse 1.2s ease-in-out 2;
+  position: relative;
+  z-index: 2;
+}
+@keyframes task-highlight-pulse {
+  0%, 100% { box-shadow: var(--shadow-sm); transform: translateY(0); }
+  50% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.45), var(--shadow-lg); transform: translateY(-2px); }
+}
+
 /* FIX — compact card mode when 12+ tasks are on screen at once, so the board stays
    scannable instead of requiring endless scrolling at full card size. */
 .tasks-grid.compact-cards {
@@ -1546,6 +1559,24 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .btn-whatsapp:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(37, 211, 102, 0.4);
+}
+
+/* NEW — admin-only delete button on task cards (PC/Shivendra) */
+.btn-delete-task {
+  padding: 8px 12px;
+  background: white;
+  color: var(--danger);
+  border: 1.5px solid #fecaca;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.btn-delete-task:hover {
+  background: #fee2e2;
+  border-color: var(--danger);
+  transform: translateY(-2px);
 }
 
 /* ARCHIVE VIEW */

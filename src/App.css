@@ -2694,6 +2694,10 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .meeting-card.meeting-past {
   opacity: 0.6;
 }
+.meeting-card.meeting-routine {
+  border-left: 4px solid var(--accent-gold);
+  background: linear-gradient(135deg, var(--gray-50) 0%, #f0fdfa 100%);
+}
 .meeting-card-main { flex: 1; min-width: 0; }
 .meeting-card-top {
   display: flex;

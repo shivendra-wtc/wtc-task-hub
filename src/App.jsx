@@ -471,7 +471,7 @@ function App() {
   const [meetingSaving, setMeetingSaving] = useState(false);
   const [meetingAssignees, setMeetingAssignees] = useState([]);
   const [newMeeting, setNewMeeting] = useState({
-    title: '', purpose: '', type: 'Team Meet', meetingDate: '', meetingTime: ''
+    title: '', purpose: '', type: 'Team Meet', meetingDate: '', meetingTime: '', frequency: 'Daily'
   });
   const [activeMeetingAlarm, setActiveMeetingAlarm] = useState(null); // the meeting currently alarming
   const meetingAlarmFiredRef = useRef(new Set()); // "meetingId" strings already alarmed, this session
@@ -526,7 +526,8 @@ function App() {
   const todayQuote = currentUser ? getTodayQuote(currentUser) : '';
   const formattedDate = getFormattedDate();
   // Only PC and Shivendra ever see the Team Management panel — checked by fixed login id, not by role text.
-  const canManageTeam = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
+  // NEW — HR (Pari) can now also add/remove/edit team members, not just PC/Shivendra.
+  const canManageTeam = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77' || currentUser === 'pari';
   // FIX — Routine task creation extended to specific non-admins per request, in addition
   // to the usual admins. Everyone else still only creates General tasks.
   const CAN_CREATE_ROUTINE = ['pcwtc45', 'shivendrawtc77', 'sanjeevani', 'muskan', 'nidhi', 'pari'];
@@ -624,10 +625,11 @@ function App() {
   const ringIntervalRef = useRef(null);
   const incomingCallTimeoutRef = useRef(null);
 
-  // Synthesizes a classic two-tone phone ring using the Web Audio API — deliberately
-  // distinct from the task-notification "ding" so a call is unmistakable at a glance/listen.
-  // FIX — made louder (gain 0.25 → 0.55) and more urgent (repeats every 1.1s instead of
-  // 1.3s, with a fuller triple-burst pattern) so it's genuinely hard to miss across a desk.
+  // NEW — changed ring sound per request. Replaced the triple dual-tone burst with a
+  // fast "modern smartphone trill" — a quick alternating warble between two close
+  // pitches on a sawtooth wave (more electronic/buzzy texture than the old pure-sine
+  // tones), so it's both louder-feeling and clearly a different sound than before while
+  // remaining just as unmistakable from the plain task-notification "ding".
   const playRingTone = () => {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -637,23 +639,22 @@ function App() {
       const playTone = (freq, start, duration) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
+        osc.type = 'sawtooth';
         osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.55, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + start + 0.015);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + duration + 0.05);
+        osc.stop(ctx.currentTime + start + duration + 0.03);
       };
-      // fuller triple-burst ring pattern
-      playTone(950, 0, 0.35);
-      playTone(1400, 0, 0.35);
-      playTone(950, 0.42, 0.35);
-      playTone(1400, 0.42, 0.35);
-      playTone(950, 0.84, 0.35);
-      playTone(1400, 0.84, 0.35);
+      // Fast trill: 6 quick alternating bursts between two close pitches, forming one
+      // "brrring" cycle, then silence until the next interval tick.
+      const pitches = [1150, 1450];
+      for (let i = 0; i < 6; i++) {
+        playTone(pitches[i % 2], i * 0.13, 0.11);
+      }
     } catch (e) {}
   };
 
@@ -759,7 +760,7 @@ function App() {
   // ============================================================
   // TEAM MEET — schedule a meeting (Routine/General/Team Meet/Other), assign anyone,
   // pick a date+time. Everyone assigned (and the creator) gets a distinct alarm exactly
-  // 1 minute before the meeting time — same reliability pattern as the lunch alarm and
+  // 5 minutes before the meeting time — same reliability pattern as the lunch alarm and
   // the call ring: a periodic check plus a visibility-change listener so a backgrounded
   // tab still catches it the moment it's reopened.
   // ============================================================
@@ -804,7 +805,7 @@ function App() {
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'addMeeting', meeting: meetingData })
     });
-    setNewMeeting({ title: '', purpose: '', type: 'Team Meet', meetingDate: '', meetingTime: '' });
+    setNewMeeting({ title: '', purpose: '', type: 'Team Meet', meetingDate: '', meetingTime: '', frequency: 'Daily' });
     setMeetingAssignees([]);
     setShowNewMeetingForm(false);
     setMeetingSaving(false);
@@ -865,25 +866,43 @@ function App() {
   useEffect(() => {
     if (!currentUser || !currentUserInfo) return;
 
+    // NEW — Routine meetings recur (Daily/Weekly/Monthly, same as Routine tasks);
+    // General/Team Meet/Other meetings are one-time, for their exact date only.
     const checkMeetingAlarms = () => {
       const now = new Date();
+      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       meetings.forEach(m => {
         if (activeMeetingAlarm) return; // one at a time
-        if (meetingAlarmFiredRef.current.has(String(m.id))) return;
         const involved = String(m.assignedTo).split(',').map(a => a.trim()).includes(currentUserInfo.name)
           || m.createdBy === currentUserInfo.name;
         if (!involved) return;
         if (!m.meetingDate || !m.meetingTime) return;
-        const meetingDateTime = new Date(`${m.meetingDate}T${m.meetingTime}:00`);
+
+        const isRoutine = m.type === 'Routine';
+        const originalDate = new Date(m.meetingDate + 'T00:00:00');
+        let occursToday = false;
+        if (!isRoutine) {
+          occursToday = m.meetingDate === todayKey; // one-time: exact day only
+        } else if (now >= originalDate) {
+          if (m.frequency === 'Weekly') occursToday = originalDate.getDay() === now.getDay();
+          else if (m.frequency === 'Monthly') occursToday = originalDate.getDate() === now.getDate();
+          else occursToday = true; // Daily (default for Routine)
+        }
+        if (!occursToday) return;
+
+        const fireKey = `${m.id}|${todayKey}`; // lets a recurring meeting alarm again on its next occurrence
+        if (meetingAlarmFiredRef.current.has(fireKey)) return;
+
+        const meetingDateTime = new Date(`${todayKey}T${m.meetingTime}:00`);
         const msUntil = meetingDateTime - now;
-        // Fires any time from 70s before to the meeting time itself — a wide-enough
-        // window that a throttled/backgrounded tab still catches the "1 minute before"
-        // moment instead of silently skipping it (same reasoning as the lunch alarm).
-        if (msUntil <= 70000 && msUntil > -30000) {
-          meetingAlarmFiredRef.current.add(String(m.id));
+        // NEW — reminder now fires 5 minutes before (was 1 minute), per request. Window
+        // is wide (5:10 before through 30s after) so a throttled/backgrounded tab still
+        // catches it the moment it's reopened, instead of silently missing the exact tick.
+        if (msUntil <= 310000 && msUntil > -30000) {
+          meetingAlarmFiredRef.current.add(fireKey);
           setActiveMeetingAlarm(m);
           startMeetingAlarmSound();
-          fireDesktopNotification('🤝 Meeting starting soon', `${m.title} at ${m.meetingTime}`);
+          fireDesktopNotification('🤝 Meeting starting in 5 minutes', `${m.title} at ${m.meetingTime}`);
           meetingAlarmTimeoutRef.current = setTimeout(dismissMeetingAlarm, 30000);
         }
       });
@@ -2543,7 +2562,7 @@ function App() {
       )}
 
       {/* TEAM MEET — anyone can schedule a meeting and assign anyone; assigned people
-          (and the creator) get a 1-minute-before alarm (see effect above). */}
+          (and the creator) get a 5-minute-before alarm (see effect above). */}
       {showMeetings && (
         <div className="modal-overlay" onClick={() => { setShowMeetings(false); setShowNewMeetingForm(false); }}>
           <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
@@ -2565,17 +2584,19 @@ function App() {
                         .sort((a, b) => new Date(`${a.meetingDate}T${a.meetingTime || '00:00'}`) - new Date(`${b.meetingDate}T${b.meetingTime || '00:00'}`))
                         .map(m => {
                           const canDelete = isAdmin || m.createdBy === currentUserInfo?.name;
-                          const isPast = new Date(`${m.meetingDate}T${m.meetingTime || '00:00'}`) < new Date();
+                          const isRoutine = m.type === 'Routine';
+                          // Recurring meetings are never "past" — they keep coming back.
+                          const isPast = !isRoutine && new Date(`${m.meetingDate}T${m.meetingTime || '00:00'}`) < new Date();
                           return (
-                            <div key={m.id} className={`meeting-card ${isPast ? 'meeting-past' : ''}`}>
+                            <div key={m.id} className={`meeting-card ${isPast ? 'meeting-past' : ''} ${isRoutine ? 'meeting-routine' : ''}`}>
                               <div className="meeting-card-main">
                                 <div className="meeting-card-top">
-                                  <span className="meeting-type-tag">{m.type}</span>
+                                  <span className="meeting-type-tag">{isRoutine ? `🔄 ${m.frequency || 'Daily'}` : m.type}</span>
                                   <strong>{m.title}</strong>
                                 </div>
                                 {m.purpose && <p className="meeting-purpose">{m.purpose}</p>}
                                 <div className="meeting-card-meta">
-                                  <span>📅 {new Date(m.meetingDate + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                                  <span>📅 {isRoutine ? 'From ' : ''}{new Date(m.meetingDate + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                                   <span>🕐 {m.meetingTime}</span>
                                   <span>👥 {m.assignedTo}</span>
                                 </div>
@@ -2600,14 +2621,27 @@ function App() {
                     <label>Meeting Purpose</label>
                     <input type="text" placeholder="What's this meeting about? (optional)" value={newMeeting.purpose} onChange={(e) => setNewMeeting({ ...newMeeting, purpose: e.target.value })} />
                   </div>
-                  <div className="form-group">
-                    <label>Type</label>
-                    <select value={newMeeting.type} onChange={(e) => setNewMeeting({ ...newMeeting, type: e.target.value })}>
-                      <option value="Team Meet">Team Meet</option>
-                      <option value="Routine">Routine</option>
-                      <option value="General">General</option>
-                      <option value="Other">Other</option>
-                    </select>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Type</label>
+                      <select value={newMeeting.type} onChange={(e) => setNewMeeting({ ...newMeeting, type: e.target.value })}>
+                        <option value="Team Meet">Team Meet (one-time)</option>
+                        <option value="General">General (one-time)</option>
+                        <option value="Routine">Routine (recurring)</option>
+                        <option value="Other">Other (one-time)</option>
+                      </select>
+                    </div>
+                    {/* NEW — Routine meetings recur; the rest happen once, on their exact date. */}
+                    {newMeeting.type === 'Routine' && (
+                      <div className="form-group">
+                        <label>Repeats</label>
+                        <select value={newMeeting.frequency} onChange={(e) => setNewMeeting({ ...newMeeting, frequency: e.target.value })}>
+                          <option value="Daily">Daily</option>
+                          <option value="Weekly">Weekly (same weekday)</option>
+                          <option value="Monthly">Monthly (same date)</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
                   <div className="form-group">
                     <label>Assign to * ({meetingAssignees.length} selected)</label>
@@ -2626,7 +2660,7 @@ function App() {
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Date *</label>
+                      <label>{newMeeting.type === 'Routine' ? 'Starts On *' : 'Date *'}</label>
                       <input type="date" value={newMeeting.meetingDate} onChange={(e) => setNewMeeting({ ...newMeeting, meetingDate: e.target.value })} />
                     </div>
                     <div className="form-group">
@@ -2634,6 +2668,11 @@ function App() {
                       <input type="time" value={newMeeting.meetingTime} onChange={(e) => setNewMeeting({ ...newMeeting, meetingTime: e.target.value })} />
                     </div>
                   </div>
+                  {newMeeting.type === 'Routine' && (
+                    <p className="meeting-purpose" style={{ marginTop: '-4px', marginBottom: '12px' }}>
+                      🔄 This will repeat {newMeeting.frequency.toLowerCase()} starting from the date above — everyone assigned gets the 5-minute reminder every time it recurs.
+                    </p>
+                  )}
                   <div className="modal-footer" style={{ padding: '15px 0 0', border: 'none', background: 'transparent' }}>
                     <button className="btn-secondary" onClick={() => setShowNewMeetingForm(false)}>Cancel</button>
                     <button className="btn-success" onClick={handleAddMeeting} disabled={meetingSaving}>
@@ -3078,7 +3117,7 @@ function App() {
         <div className="incoming-call-overlay meeting-alarm-overlay">
           <div className="incoming-call-card">
             <div className="incoming-call-avatar meeting-alarm-avatar">🤝</div>
-            <h2>Meeting starting in 1 minute!</h2>
+            <h2>Meeting starting in 5 minutes!</h2>
             <p className="incoming-call-type">{activeMeetingAlarm.title}</p>
             {activeMeetingAlarm.purpose && <p className="meeting-alarm-purpose">{activeMeetingAlarm.purpose}</p>}
             <p className="meeting-alarm-meta">🕐 {activeMeetingAlarm.meetingTime} · 👥 {activeMeetingAlarm.assignedTo}</p>

@@ -3,6 +3,20 @@ import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
 
+// FIX — Web Push public key (VAPID). Safe to be public — it's how the browser verifies
+// push messages actually came from our server, the private half never leaves Vercel.
+const VAPID_PUBLIC_KEY = "BG_mSITAFS-wOeqyvmRXwHXgMdt4C5WS9lFtFJc32J7mOppmSdhSLCmASbHp1Jv6ASv9CE3TLil54KE78BXwNAA";
+
+// Converts the VAPID key from base64url text into the raw byte array the Push API needs.
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
 const QUOTES = {
   manager: [
     "Great leaders create more leaders, not followers. — Tom Peters",
@@ -610,10 +624,49 @@ function App() {
     }
   };
 
+  // FIX — real Web Push subscription. This is what makes calls/alerts actually wake the
+  // device instead of depending on a browser tab's polling timer staying alive. Runs
+  // once permission is granted and we know who's logged in; safe to call repeatedly —
+  // if a subscription already exists, the browser just hands the same one back.
+  const subscribeToPush = async (userName) => {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      if (!userName) return;
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+      }
+      fetch(API_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'savePushSubscription', userName, subscription: subscription.toJSON() })
+      });
+    } catch (e) {
+      // Most common cause: permission was granted but the service worker isn't ready
+      // yet on first load — subscribeToPush gets called again once currentUser settles.
+    }
+  };
+
   const requestNotifPermission = () => {
     if (typeof Notification === 'undefined') return;
-    Notification.requestPermission().then(perm => setNotifPermission(perm));
+    Notification.requestPermission().then(perm => {
+      setNotifPermission(perm);
+      if (perm === 'granted') subscribeToPush(currentUserInfo?.name);
+    });
   };
+
+  // Covers the case where permission was already granted in an earlier session — no
+  // button click to hook into, so subscribe as soon as we know who's logged in.
+  useEffect(() => {
+    if (currentUserInfo?.name && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      subscribeToPush(currentUserInfo.name);
+    }
+  }, [currentUserInfo?.name]);
 
   const sendTestNotification = () => {
     fireDesktopNotification('WTC Task Hub', '🔔 Test notification — if you see this in your OS notification tray, desktop alerts are working correctly.');
@@ -642,33 +695,35 @@ function App() {
   const ringIntervalRef = useRef(null);
   const incomingCallTimeoutRef = useRef(null);
 
-  // Restored per request — the sawtooth "trill" was irritating; back to the classic
-  // pure-sine triple dual-tone burst (950Hz/1400Hz), which the user preferred.
+  // Changed again per request — chosen as "Marimba Cascade": a warm triangle-wave tone
+  // with a fast attack and natural decay (like a struck wooden bar), playing a
+  // descending 3-note pattern (C6 → A5 → F5). Deliberately a different waveform/timbre
+  // and rhythm from every other sound in the app (ding, lunch chirp, meeting bell), per
+  // the request to keep every sound distinct.
   const playRingTone = () => {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
       if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
       const ctx = ringAudioCtxRef.current;
-      const playTone = (freq, start, duration) => {
+      const playNote = (freq, start, duration) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
+        osc.type = 'triangle';
         osc.frequency.value = freq;
+        // Fast attack, natural exponential decay — the "struck bar" marimba character.
         gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.55, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + start + 0.012);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(ctx.currentTime + start);
         osc.stop(ctx.currentTime + start + duration + 0.03);
       };
-      // Triple dual-tone burst: three quick "brring-brring" pulses.
-      for (let i = 0; i < 3; i++) {
-        const base = i * 0.45;
-        playTone(950, base, 0.18);
-        playTone(1400, base + 0.2, 0.18);
-      }
+      // Descending cascade: C6, A5, F5 — repeats each time the interval below fires.
+      playNote(1046.5, 0, 0.32);
+      playNote(880, 0.16, 0.32);
+      playNote(698.46, 0.32, 0.4);
     } catch (e) {}
   };
 

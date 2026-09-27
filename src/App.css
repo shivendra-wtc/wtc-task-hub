@@ -2744,6 +2744,18 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .cc-header {
   background: linear-gradient(135deg, #831843 0%, #be185d 50%, #ec4899 100%) !important;
 }
+.cc-manage-btn {
+  margin-left: auto;
+  margin-right: 10px;
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: white !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  font-size: 12px !important;
+  padding: 7px 12px !important;
+}
+.cc-manage-btn:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
 
 .cc-group-tabs {
   display: flex;
@@ -2838,9 +2850,174 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .cc-day-entries {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   overflow-y: auto;
   max-height: 130px;
+}
+
+/* FIX — Notion-style day cell header: date number + a small holiday ribbon when the
+   day is a declared holiday, side by side instead of stacked. */
+.cc-day-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.cc-day-cell.cc-holiday {
+  background: #fff1f5;
+  border-color: #fbcfe8;
+}
+.cc-holiday-ribbon {
+  font-size: 8px;
+  font-weight: 700;
+  color: #be185d;
+  background: #fce7f3;
+  padding: 2px 5px;
+  border-radius: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
+}
+.cc-holiday-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fce7f3;
+  border: 1.5px solid #be185d;
+}
+
+/* FIX — Notion-style compact "chip" for a day-cell entry, instead of a full card with
+   stacked badges. One line, colored left bar for content type, optional time. Cards this
+   dense stop the month grid from turning into a wall of text on a busy day. */
+.cc-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-left: 3px solid var(--gray-300);
+  border-radius: 5px;
+  padding: 3px 6px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gray-800);
+  overflow: hidden;
+  white-space: nowrap;
+  transition: transform 0.12s var(--ease-smooth), box-shadow 0.12s var(--ease-smooth);
+}
+.cc-chip:hover {
+  transform: translateX(1px);
+  box-shadow: var(--shadow-sm);
+}
+.cc-chip-time {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--gray-500);
+  flex-shrink: 0;
+}
+.cc-chip-icon {
+  flex-shrink: 0;
+}
+.cc-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-chip.cc-posted {
+  opacity: 0.65;
+}
+.cc-chip-more {
+  border-left-color: var(--gray-300);
+  color: var(--gray-500);
+  font-weight: 700;
+  justify-content: center;
+  background: var(--gray-50);
+}
+.cc-chip-more:hover {
+  background: var(--gray-100);
+}
+
+/* Manage Channels admin panel */
+.cc-channel-manage-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cc-channel-manage-group {
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.cc-channel-manage-group strong {
+  display: block;
+  font-size: 12px;
+  color: var(--gray-700);
+  margin-bottom: 6px;
+}
+.cc-channel-manage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cc-channel-manage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--gray-100);
+  border-radius: 14px;
+  padding: 4px 6px 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+.cc-channel-manage-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+/* Holiday admin row (add form) + per-holiday delete button */
+.holiday-admin-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.holiday-admin-row input[type="date"] {
+  flex: 1;
+  min-width: 140px;
+}
+.holiday-admin-row input[type="text"] {
+  flex: 2;
+  min-width: 160px;
+}
+.holiday-card {
+  position: relative;
+}
+.holiday-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gray-400);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.holiday-delete-btn:hover {
+  background: var(--gray-100);
+  color: var(--danger);
 }
 
 /* FIX — richer entry card: title + stacked colored badges (content type + video status),

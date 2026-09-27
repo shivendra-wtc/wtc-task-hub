@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -203,7 +203,10 @@ function App() {
 
   // FIX — Content Calendar channel groups. Each group gets its own calendar tab.
   // Poorvaj renamed to MFG; HisTree removed entirely per management request.
-  const CONTENT_CHANNEL_GROUPS = {
+  // This is now only the fallback default — the real, editable list lives in the
+  // ContentChannels sheet and loads into contentChannelGroups state below, so
+  // PC/Shivendra/Pari can add or remove groups/channels from the app itself.
+  const DEFAULT_CONTENT_CHANNEL_GROUPS = {
     "Akshat Gupta": ['AG Insta', 'AG YT', 'AG.books Insta', 'Spotify', 'LinkedIn', 'Twitter'],
     "The Fact-Tree": ['The Fact-Tree YT', 'The Fact-Tree Insta'],
     "The 7C's": ["The 7c's YT", "The 7c's Insta"],
@@ -451,13 +454,27 @@ function App() {
   const [contentCalMonth, setContentCalMonth] = useState(now2_.getMonth()); // 0-11
   const [editingContentEntry, setEditingContentEntry] = useState(null); // null = closed, {} = new, {...} = editing
   const [contentForm, setContentForm] = useState({
-    channels: '', contentType: 'Long Format Video', title: '', date: '',
+    channels: '', contentType: 'Long Format Video', title: '', date: '', time: '',
     assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
-    finalLink: '', thumbnailLink: '', rawLink: '', draftLink: '', description: '', notes: ''
+    finalLink: '', thumbnailLink: '', designLink: '', rawLink: '', draftLink: '', description: '', notes: ''
   });
   const [contentSaving, setContentSaving] = useState(false);
+  // ---- Content Calendar: dynamic channel groups (PC/Shivendra/Pari can edit these
+  // from the app now, instead of them being hardcoded — starts from the same defaults
+  // that used to be hardcoded, so nothing changes until someone actually edits it) ----
+  const [contentChannelGroups, setContentChannelGroups] = useState(DEFAULT_CONTENT_CHANNEL_GROUPS);
+  const [showManageChannels, setShowManageChannels] = useState(false);
+  const [newChannelGroup, setNewChannelGroup] = useState('');
+  const [newChannelName, setNewChannelName] = useState('');
+  // Which day (within the currently open group/month) is expanded to show every entry —
+  // the month cell itself only shows a few compact chips, Notion-style.
+  const [expandedContentDay, setExpandedContentDay] = useState(null);
   const [notices, setNotices] = useState([]);
   const [holidays, setHolidays] = useState([]);
+  const [showManageHolidays, setShowManageHolidays] = useState(false);
+  const [newHolidayDate, setNewHolidayDate] = useState('');
+  const [newHolidayName, setNewHolidayName] = useState('');
+  const [holidaySaving, setHolidaySaving] = useState(false);
   const [newNoticeTitle, setNewNoticeTitle] = useState('');
   const [newNoticeMessage, setNewNoticeMessage] = useState('');
   const [newNoticePinned, setNewNoticePinned] = useState(false);
@@ -625,11 +642,8 @@ function App() {
   const ringIntervalRef = useRef(null);
   const incomingCallTimeoutRef = useRef(null);
 
-  // NEW — changed ring sound per request. Replaced the triple dual-tone burst with a
-  // fast "modern smartphone trill" — a quick alternating warble between two close
-  // pitches on a sawtooth wave (more electronic/buzzy texture than the old pure-sine
-  // tones), so it's both louder-feeling and clearly a different sound than before while
-  // remaining just as unmistakable from the plain task-notification "ding".
+  // Restored per request — the sawtooth "trill" was irritating; back to the classic
+  // pure-sine triple dual-tone burst (950Hz/1400Hz), which the user preferred.
   const playRingTone = () => {
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -639,21 +653,21 @@ function App() {
       const playTone = (freq, start, duration) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sawtooth';
+        osc.type = 'sine';
         osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.55, ctx.currentTime + start + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.start(ctx.currentTime + start);
         osc.stop(ctx.currentTime + start + duration + 0.03);
       };
-      // Fast trill: 6 quick alternating bursts between two close pitches, forming one
-      // "brrring" cycle, then silence until the next interval tick.
-      const pitches = [1150, 1450];
-      for (let i = 0; i < 6; i++) {
-        playTone(pitches[i % 2], i * 0.13, 0.11);
+      // Triple dual-tone burst: three quick "brring-brring" pulses.
+      for (let i = 0; i < 3; i++) {
+        const base = i * 0.45;
+        playTone(950, base, 0.18);
+        playTone(1400, base + 0.2, 0.18);
       }
     } catch (e) {}
   };
@@ -1046,6 +1060,8 @@ function App() {
 
   useEffect(() => {
     loadTeam();
+    loadContentChannels();
+    loadHolidays();
   }, []);
 
   useEffect(() => {
@@ -1944,7 +1960,37 @@ function App() {
 
   const openHolidayCalendar = () => {
     setShowHolidayCalendar(true);
-    if (holidays.length === 0) loadHolidays();
+    loadHolidays();
+  };
+
+  // FIX — HR access request: holidays now live in a real sheet, and PC/Shivendra/Pari
+  // (canManageTeam) can add or remove one straight from this modal instead of asking for
+  // a code change. Optimistic local update, same pattern as everything else here.
+  const handleAddHoliday = () => {
+    if (!newHolidayDate || !newHolidayName.trim()) { alert('Pick a date and enter a name.'); return; }
+    if (holidaySaving) return;
+    setHolidaySaving(true);
+    const name = newHolidayName.trim();
+    const date = newHolidayDate;
+    setHolidays(prev => [...prev, { id: 'tmp_' + Date.now(), date, name }].sort((a, b) => a.date.localeCompare(b.date)));
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'addHoliday', date, name })
+    });
+    setNewHolidayDate('');
+    setNewHolidayName('');
+    setTimeout(() => { loadHolidays(); setHolidaySaving(false); }, 1000);
+  };
+
+  const handleDeleteHoliday = (holiday) => {
+    if (!confirm(`Remove "${holiday.name}"?`)) return;
+    setHolidays(prev => prev.filter(h => h.id !== holiday.id));
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteHoliday', id: holiday.id })
+    });
   };
 
   // Real-time while open — new notices from PC/Shivendra show up without a manual refresh.
@@ -1988,7 +2034,11 @@ function App() {
   };
 
   // ============================================================
-  // CONTENT CALENDAR — everyone reads/writes; entries auto-create a linked Task
+  // CONTENT CALENDAR — everyone reads/writes; entries auto-create a linked Task.
+  // FIX — speed complaint: the calendar was only ever refreshed by a 15s poll, so any
+  // edit you made felt "stuck" until the next tick. Every save/delete below now updates
+  // contentEntries in local state immediately (optimistic UI) — the poll below is now
+  // purely a backup for catching a teammate's edits, tightened to 6s.
   // ============================================================
   const loadContentCalendar = async () => {
     try {
@@ -1998,18 +2048,68 @@ function App() {
     } catch (e) {}
   };
 
+  const loadContentChannels = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getContentChannels');
+      const data = await response.json();
+      if (data.status === 'ok' && data.groupOrder && data.groupOrder.length > 0) {
+        const ordered = {};
+        data.groupOrder.forEach(g => { ordered[g] = data.groups[g] || []; });
+        setContentChannelGroups(ordered);
+      }
+    } catch (e) {}
+  };
+
   const openContentCalendar = () => {
     setShowContentCalendar(true);
     loadContentCalendar();
+    loadContentChannels();
   };
 
-  // Real-time while open
+  // Real-time while open — tightened from 15s to 6s, purely as a backup to the
+  // optimistic local updates (see handleSaveContentEntry/handleDeleteContentEntry).
   useEffect(() => {
     if (showContentCalendar) {
-      const interval = setInterval(loadContentCalendar, 15000);
+      const interval = setInterval(loadContentCalendar, 6000);
       return () => clearInterval(interval);
     }
   }, [showContentCalendar]);
+
+  const handleAddChannel = () => {
+    const group = (newChannelGroup || '').trim();
+    const channel = (newChannelName || '').trim();
+    if (!group || !channel) { alert('Enter both a group name and a channel name.'); return; }
+    setContentChannelGroups(prev => {
+      const next = { ...prev };
+      next[group] = [...(next[group] || []), channel];
+      return next;
+    });
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'addContentChannel', groupName: group, channelName: channel })
+    });
+    setNewChannelName('');
+  };
+
+  const handleDeleteChannel = (group, channel) => {
+    if (!confirm(`Remove "${channel}" from ${group}?`)) return;
+    setContentChannelGroups(prev => {
+      const next = { ...prev };
+      next[group] = (next[group] || []).filter(c => c !== channel);
+      if (next[group].length === 0) delete next[group];
+      return next;
+    });
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteContentChannel', groupName: group, channelName: channel })
+    });
+    if (contentGroupTab === group) {
+      const remaining = Object.keys(contentChannelGroups).filter(g => g !== group);
+      if (remaining.length > 0) setContentGroupTab(remaining[0]);
+    }
+  };
 
   const changeContentCalMonth = (delta) => {
     let m = contentCalMonth + delta, y = contentCalYear;
@@ -2020,10 +2120,11 @@ function App() {
   };
 
   const openNewContentEntry = (dateStr) => {
+    const groupChannels = contentChannelGroups[contentGroupTab] || [];
     setContentForm({
-      channels: CONTENT_CHANNEL_GROUPS[contentGroupTab][0], contentType: 'Long Format Video',
-      title: '', date: dateStr || '', assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
-      finalLink: '', thumbnailLink: '', rawLink: '', draftLink: '', description: '', notes: ''
+      channels: groupChannels[0] || '', contentType: 'Long Format Video',
+      title: '', date: dateStr || '', time: '', assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
+      finalLink: '', thumbnailLink: '', designLink: '', rawLink: '', draftLink: '', description: '', notes: ''
     });
     setEditingContentEntry({});
   };
@@ -2031,10 +2132,10 @@ function App() {
   const openEditContentEntry = (entry) => {
     setContentForm({
       channels: entry.channels, contentType: entry.contentType, title: entry.title,
-      date: entry.date ? String(entry.date).slice(0, 10) : '',
+      date: entry.date ? String(entry.date).slice(0, 10) : '', time: entry.time || '',
       assignedTo: entry.assignedTo ? String(entry.assignedTo).split(',').map(a => a.trim()) : [],
       editingStatus: entry.editingStatus || 'Not Started', videoStatus: entry.videoStatus || 'Not Started', priority: entry.priority || 'Medium',
-      finalLink: entry.finalLink || '', thumbnailLink: entry.thumbnailLink || '',
+      finalLink: entry.finalLink || '', thumbnailLink: entry.thumbnailLink || '', designLink: entry.designLink || '',
       rawLink: entry.rawLink || '', draftLink: entry.draftLink || '',
       description: entry.description || '', notes: entry.notes || ''
     });
@@ -2063,12 +2164,14 @@ function App() {
       contentType: contentForm.contentType,
       title: contentForm.title.trim(),
       date: contentForm.date,
+      time: contentForm.time,
       assignedTo: contentForm.assignedTo.join(', '),
       editingStatus: contentForm.editingStatus,
       videoStatus: contentForm.videoStatus,
       priority: contentForm.priority,
       finalLink: contentForm.finalLink.trim(),
       thumbnailLink: contentForm.thumbnailLink.trim(),
+      designLink: contentForm.designLink.trim(),
       rawLink: contentForm.rawLink.trim(),
       draftLink: contentForm.draftLink.trim(),
       description: contentForm.description.trim(),
@@ -2076,24 +2179,31 @@ function App() {
       createdBy: currentUserInfo.name
     };
 
+    // FIX — instant "reflect on edit": update contentEntries in local state right away
+    // instead of waiting on the next poll tick. A new entry gets a temporary local ID so
+    // it renders on the grid immediately; the background reload a moment later swaps it
+    // for the real server ID transparently (same date/title, so nothing visibly jumps).
     if (isNew) {
+      const tempId = 'tmp_' + Date.now();
+      setContentEntries(prev => [...prev, { ...payload, id: tempId, createdDate: new Date().toISOString().slice(0, 10) }]);
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addContentEntry', entry: payload })
       });
     } else {
+      setContentEntries(prev => prev.map(e => e.id === editingContentEntry.id ? { ...e, ...payload } : e));
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'updateContentEntry', id: editingContentEntry.id, updates: payload })
       });
     }
+    setEditingContentEntry(null);
+    setContentSaving(false);
     setTimeout(() => {
       loadContentCalendar();
       if (!isNew) loadTasksBackground(); // linked task status may have changed
-      setEditingContentEntry(null);
-      setContentSaving(false);
     }, 1200);
   };
 
@@ -2108,6 +2218,24 @@ function App() {
     setContentEntries(prev => prev.filter(e => e.id !== editingContentEntry.id));
     setEditingContentEntry(null);
   };
+
+  // FIX — hoisted out of the modal's render tree (hooks can't live inside a conditional
+  // block) so the month grid only recomputes when something it depends on actually
+  // changes, instead of on every render — this is the real fix for the "calendar feels
+  // slow" complaint, not just a faster poll.
+  const contentCalGridData = useMemo(() => {
+    const entriesThisGroup = contentEntries.filter(e => e.channelGroup === contentGroupTab);
+    const firstOfMonth = new Date(contentCalYear, contentCalMonth, 1);
+    const startOffset = firstOfMonth.getDay(); // 0=Sun
+    const daysInMon = new Date(contentCalYear, contentCalMonth + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < startOffset; i++) cells.push(null);
+    for (let d = 1; d <= daysInMon; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    const holidaySet = {};
+    holidays.forEach(h => { holidaySet[h.date] = h.name; });
+    return { entriesThisGroup, cells, holidaySet };
+  }, [contentGroupTab, contentEntries, contentCalYear, contentCalMonth, holidays]);
 
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
@@ -2277,7 +2405,7 @@ function App() {
                 </button>
               )}
               <button className="icon-btn icon-rose" onClick={openContentCalendar} title="Content Calendar">
-                🎬
+                🗓️
               </button>
               {/* NEW — every icon lives directly in the top bar now; nothing is tucked
                   away behind a "More" dropdown anymore. */}
@@ -2531,10 +2659,17 @@ function App() {
         <div className="modal-overlay" onClick={() => setShowHolidayCalendar(false)}>
           <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🗓️ Holiday Calendar 2026</h3>
+              <h3>🗓️ Holiday Calendar</h3>
               <button className="modal-close" onClick={() => setShowHolidayCalendar(false)}>✕</button>
             </div>
             <div className="modal-body compact-body">
+              {canManageTeam && (
+                <div className="holiday-admin-row">
+                  <input type="date" value={newHolidayDate} onChange={(e) => setNewHolidayDate(e.target.value)} />
+                  <input type="text" placeholder="Holiday name" value={newHolidayName} onChange={(e) => setNewHolidayName(e.target.value)} />
+                  <button className="btn-success" onClick={handleAddHoliday} disabled={holidaySaving}>+ Add</button>
+                </div>
+              )}
               {holidays.length === 0 ? (
                 <p className="empty-text">Loading...</p>
               ) : (
@@ -2542,7 +2677,7 @@ function App() {
                   {holidays.map(h => {
                     const d = new Date(h.date + 'T12:00:00');
                     return (
-                      <div key={h.date} className="holiday-card">
+                      <div key={h.id || h.date} className="holiday-card">
                         <div className="holiday-card-date">
                           <span className="holiday-day">{d.getDate()}</span>
                           <span className="holiday-month">{d.toLocaleDateString('en-IN', { month: 'short' })}</span>
@@ -2551,6 +2686,9 @@ function App() {
                           <strong>{h.name}</strong>
                           <span>{d.toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric' })}</span>
                         </div>
+                        {canManageTeam && (
+                          <button className="holiday-delete-btn" onClick={() => handleDeleteHoliday(h)} title="Remove holiday">✕</button>
+                        )}
                       </div>
                     );
                   })}
@@ -2691,20 +2829,23 @@ function App() {
         <div className="modal-overlay" onClick={() => { setShowContentCalendar(false); setEditingContentEntry(null); }}>
           <div className="modal-content xl" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header cc-header">
-              <h3>🎬 Content Calendar</h3>
+              <h3>🗓️ Content Calendar</h3>
+              {canManageTeam && (
+                <button className="btn-secondary cc-manage-btn" onClick={() => setShowManageChannels(true)}>⚙️ Manage Channels</button>
+              )}
               <button className="modal-close" onClick={() => { setShowContentCalendar(false); setEditingContentEntry(null); }}>✕</button>
             </div>
             <div className="modal-body compact-body">
               <div className="cc-group-tabs">
-                {Object.keys(CONTENT_CHANNEL_GROUPS).map(group => (
-                  <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => setContentGroupTab(group)}>{group}</button>
+                {Object.keys(contentChannelGroups).map(group => (
+                  <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => { setContentGroupTab(group); setExpandedContentDay(null); }}>{group}</button>
                 ))}
               </div>
 
               <div className="month-nav" style={{ marginTop: '14px' }}>
-                <button className="btn-secondary" onClick={() => changeContentCalMonth(-1)}>← Prev</button>
+                <button className="btn-secondary" onClick={() => { changeContentCalMonth(-1); setExpandedContentDay(null); }}>← Prev</button>
                 <strong>{new Date(contentCalYear, contentCalMonth, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
-                <button className="btn-secondary" onClick={() => changeContentCalMonth(1)}>Next →</button>
+                <button className="btn-secondary" onClick={() => { changeContentCalMonth(1); setExpandedContentDay(null); }}>Next →</button>
               </div>
 
               <div className="cc-legend">
@@ -2715,20 +2856,18 @@ function App() {
                   </span>
                 ))}
                 <span className="cc-legend-item"><span className="cc-tick" style={{ position: 'static' }}>✓</span> Posted</span>
+                <span className="cc-legend-item"><span className="cc-holiday-dot"></span> Holiday</span>
               </div>
 
+              {/* FIX — speed complaint: this grid used to be rebuilt from scratch, inline,
+                  on every single render (every 1-second clock tick anywhere in the app).
+                  contentCalGridData (useMemo'd in the component body, see above) means it
+                  only recomputes when the entries, tab, month, year, or holidays actually
+                  change — which is the real reason it now feels fast. */}
               {(() => {
-                const groupChannels = CONTENT_CHANNEL_GROUPS[contentGroupTab];
-                const entriesThisGroup = contentEntries.filter(e => e.channelGroup === contentGroupTab);
-                const firstOfMonth = new Date(contentCalYear, contentCalMonth, 1);
-                const startOffset = firstOfMonth.getDay(); // 0=Sun
-                const daysInMon = new Date(contentCalYear, contentCalMonth + 1, 0).getDate();
-                const cells = [];
-                for (let i = 0; i < startOffset; i++) cells.push(null);
-                for (let d = 1; d <= daysInMon; d++) cells.push(d);
-                while (cells.length % 7 !== 0) cells.push(null);
-
+                const { entriesThisGroup, cells, holidaySet } = contentCalGridData;
                 const todayStr = new Date().toISOString().slice(0, 10);
+                const MAX_CHIPS = 3;
 
                 return (
                   <div className="cc-calendar-grid">
@@ -2738,39 +2877,49 @@ function App() {
                     {cells.map((day, idx) => {
                       if (day === null) return <div key={idx} className="cc-day-cell cc-day-empty"></div>;
                       const dateStr = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                      const dayEntries = entriesThisGroup.filter(e => String(e.date).slice(0, 10) === dateStr);
+                      const dayEntries = entriesThisGroup.filter(e => String(e.date).slice(0, 10) === dateStr)
+                        .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
                       const isToday = dateStr === todayStr;
+                      const holidayName = holidaySet[dateStr];
+                      const visibleEntries = dayEntries.slice(0, MAX_CHIPS);
+                      const extraCount = dayEntries.length - visibleEntries.length;
                       return (
-                        <div key={idx} className={`cc-day-cell ${isToday ? 'cc-today' : ''}`} onClick={() => openNewContentEntry(dateStr)}>
-                          {/* FIX — today's date gets a red circular badge, Notion-style, instead of plain text */}
-                          {isToday ? <span className="cc-day-num-today">{day}</span> : <span className="cc-day-num">{day}</span>}
+                        <div
+                          key={idx}
+                          className={`cc-day-cell ${isToday ? 'cc-today' : ''} ${holidayName ? 'cc-holiday' : ''}`}
+                          onClick={() => openNewContentEntry(dateStr)}
+                        >
+                          <div className="cc-day-top">
+                            {isToday ? <span className="cc-day-num-today">{day}</span> : <span className="cc-day-num">{day}</span>}
+                            {holidayName && <span className="cc-holiday-ribbon" title={holidayName}>{holidayName}</span>}
+                          </div>
                           <div className="cc-day-entries">
-                            {dayEntries.map(entry => {
+                            {visibleEntries.map(entry => {
                               const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
-                              const videoInfo = VIDEO_STATUSES.find(s => s.value === entry.videoStatus) || VIDEO_STATUSES[0];
                               const isPublished = entry.videoStatus === 'Published';
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-entry-card ${isPublished ? 'cc-posted' : ''}`}
+                                  className={`cc-chip ${isPublished ? 'cc-posted' : ''}`}
+                                  style={{ borderLeftColor: typeInfo.color }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
                                   title={entry.title}
                                 >
-                                  <div className="cc-entry-title">
-                                    {isPublished && <span className="cc-tick">✓</span>}
-                                    {entry.title}
-                                  </div>
-                                  <div className="cc-entry-badges">
-                                    <span className="cc-badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>
-                                      {typeInfo.icon} {typeInfo.value}
-                                    </span>
-                                    <span className="cc-badge" style={{ background: videoInfo.color + '22', color: videoInfo.color }}>
-                                      {videoInfo.icon} {videoInfo.value}
-                                    </span>
-                                  </div>
+                                  {isPublished && <span className="cc-tick">✓</span>}
+                                  {entry.time && <span className="cc-chip-time">{entry.time}</span>}
+                                  <span className="cc-chip-icon">{typeInfo.icon}</span>
+                                  <span className="cc-chip-title">{entry.title}</span>
                                 </div>
                               );
                             })}
+                            {extraCount > 0 && (
+                              <div
+                                className="cc-chip cc-chip-more"
+                                onClick={(e) => { e.stopPropagation(); setExpandedContentDay({ dateStr, day }); }}
+                              >
+                                +{extraCount} more
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -2780,6 +2929,91 @@ function App() {
               })()}
             </div>
           </div>
+
+          {/* Day-expand popover — Notion-style "see everything scheduled this day"
+              when a day has more entries than fit as compact chips in the cell. */}
+          {expandedContentDay && (
+            <div className="modal-overlay" onClick={() => setExpandedContentDay(null)}>
+              <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>{new Date(contentCalYear, contentCalMonth, expandedContentDay.day).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</h3>
+                  <button className="modal-close" onClick={() => setExpandedContentDay(null)}>✕</button>
+                </div>
+                <div className="modal-body compact-body">
+                  {contentEntries
+                    .filter(e => e.channelGroup === contentGroupTab && String(e.date).slice(0, 10) === expandedContentDay.dateStr)
+                    .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+                    .map(entry => {
+                      const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
+                      const videoInfo = VIDEO_STATUSES.find(s => s.value === entry.videoStatus) || VIDEO_STATUSES[0];
+                      const isPublished = entry.videoStatus === 'Published';
+                      return (
+                        <div
+                          key={entry.id}
+                          className={`cc-entry-card ${isPublished ? 'cc-posted' : ''}`}
+                          onClick={() => { setExpandedContentDay(null); openEditContentEntry(entry); }}
+                        >
+                          <div className="cc-entry-title">
+                            {isPublished && <span className="cc-tick">✓</span>}
+                            {entry.time && <strong>{entry.time} — </strong>}{entry.title}
+                          </div>
+                          <div className="cc-entry-badges">
+                            <span className="cc-badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>{typeInfo.icon} {typeInfo.value}</span>
+                            <span className="cc-badge" style={{ background: videoInfo.color + '22', color: videoInfo.color }}>{videoInfo.icon} {videoInfo.value}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  <button className="btn-success" style={{ marginTop: '10px' }} onClick={() => { const d = expandedContentDay.dateStr; setExpandedContentDay(null); openNewContentEntry(d); }}>+ Add another</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Manage Channels — PC/Shivendra/Pari can add or remove a channel group or a
+              channel within a group, straight from the app. */}
+          {showManageChannels && (
+            <div className="modal-overlay" onClick={() => setShowManageChannels(false)}>
+              <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3>⚙️ Manage Channels</h3>
+                  <button className="modal-close" onClick={() => setShowManageChannels(false)}>✕</button>
+                </div>
+                <div className="modal-body compact-body">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Group name</label>
+                      <input type="text" list="cc-existing-groups" placeholder="e.g. Akshat Gupta" value={newChannelGroup} onChange={(e) => setNewChannelGroup(e.target.value)} />
+                      <datalist id="cc-existing-groups">
+                        {Object.keys(contentChannelGroups).map(g => <option key={g} value={g} />)}
+                      </datalist>
+                    </div>
+                    <div className="form-group">
+                      <label>Channel name</label>
+                      <input type="text" placeholder="e.g. AG Insta" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} />
+                    </div>
+                  </div>
+                  <button className="btn-success" onClick={handleAddChannel}>+ Add Channel</button>
+
+                  <div className="cc-channel-manage-list">
+                    {Object.keys(contentChannelGroups).map(group => (
+                      <div key={group} className="cc-channel-manage-group">
+                        <strong>{group}</strong>
+                        <div className="cc-channel-manage-chips">
+                          {(contentChannelGroups[group] || []).map(ch => (
+                            <span key={ch} className="cc-channel-manage-chip">
+                              {ch}
+                              <button onClick={() => handleDeleteChannel(group, ch)} title="Remove">✕</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Entry editor — new or existing, nested modal on top */}
           {editingContentEntry !== null && (
@@ -2794,7 +3028,7 @@ function App() {
                     <div className="form-group">
                       <label>Channel</label>
                       <select value={contentForm.channels} onChange={(e) => setContentForm({ ...contentForm, channels: e.target.value })}>
-                        {CONTENT_CHANNEL_GROUPS[contentGroupTab].map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                        {(contentChannelGroups[contentGroupTab] || []).map(ch => <option key={ch} value={ch}>{ch}</option>)}
                       </select>
                     </div>
                     <div className="form-group">
@@ -2814,6 +3048,10 @@ function App() {
                     <div className="form-group">
                       <label>Date *</label>
                       <input type="date" min="2025-01-01" max="2030-12-31" value={contentForm.date} onChange={(e) => setContentForm({ ...contentForm, date: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Time</label>
+                      <input type="time" value={contentForm.time} onChange={(e) => setContentForm({ ...contentForm, time: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label>Priority</label>
@@ -2861,13 +3099,17 @@ function App() {
                   </div>
                   <div className="form-row">
                     <div className="form-group">
-                      <label>Final/Published Link</label>
-                      <input type="text" value={contentForm.finalLink} onChange={(e) => setContentForm({ ...contentForm, finalLink: e.target.value })} placeholder="https://..." />
+                      <label>Final Editing Link</label>
+                      <input type="text" value={contentForm.finalLink} onChange={(e) => setContentForm({ ...contentForm, finalLink: e.target.value })} placeholder="https://... (fully cut file, ready to publish)" />
                     </div>
                     <div className="form-group">
                       <label>Thumbnail Link</label>
                       <input type="text" value={contentForm.thumbnailLink} onChange={(e) => setContentForm({ ...contentForm, thumbnailLink: e.target.value })} placeholder="https://..." />
                     </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Design Link</label>
+                    <input type="text" value={contentForm.designLink} onChange={(e) => setContentForm({ ...contentForm, designLink: e.target.value })} placeholder="https://... (Canva/Figma/PSD source, etc.)" />
                   </div>
 
                   <div className="form-group">

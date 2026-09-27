@@ -695,6 +695,51 @@ function App() {
   const ringIntervalRef = useRef(null);
   const incomingCallTimeoutRef = useRef(null);
 
+  // FIX — precise root cause of "sound sometimes doesn't play, sometimes does, and never
+  // on phone": every sound in this app (ring, ding, lunch alarm, meeting alarm, success
+  // chime) is generated in JavaScript, and browsers refuse to play ANY JS-generated audio
+  // until the page itself has had at least one direct tap/click/keypress since it loaded —
+  // this is a hard browser autoplay-protection rule, not a bug, and it's stricter on phones
+  // than desktop. A push notification can wake the app and show a system alert, but it is
+  // NOT a "tap" in the browser's eyes, so audio can stay silently blocked even though the
+  // notification itself came through correctly — which is exactly what was being seen.
+  // getRingCtx_() is the single place every sound function now gets its AudioContext from,
+  // and it always tries to un-suspend it first, and the listener below unlocks it (and a
+  // matching silent unlock for the plain <audio> ding) on the very first tap anywhere in
+  // the app, so by the time a real call/alarm needs to play, audio has already been
+  // unlocked instead of hoping a race condition works out.
+  const audioUnlockedRef = useRef(false);
+  const getRingCtx_ = () => {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
+    const ctx = ringAudioCtxRef.current;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    return ctx;
+  };
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioUnlockedRef.current) return;
+      try {
+        const ctx = getRingCtx_();
+        if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+        // Also unlocks plain <audio> playback (used by the task/inbox ding) — iOS Safari
+        // in particular only counts a play() call made directly inside the gesture
+        // handler itself, not one that merely happens sometime after a gesture.
+        const silent = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+        silent.volume = 0;
+        silent.play().catch(() => {});
+        audioUnlockedRef.current = true;
+      } catch (e) {}
+    };
+    document.addEventListener('pointerdown', unlockAudio, { passive: true });
+    document.addEventListener('keydown', unlockAudio);
+    return () => {
+      document.removeEventListener('pointerdown', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+    };
+  }, []);
+
   // Changed again per request — chosen as "Marimba Cascade": a warm triangle-wave tone
   // with a fast attack and natural decay (like a struck wooden bar), playing a
   // descending 3-note pattern (C6 → A5 → F5). Deliberately a different waveform/timbre
@@ -702,10 +747,8 @@ function App() {
   // the request to keep every sound distinct.
   const playRingTone = () => {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
-      const ctx = ringAudioCtxRef.current;
+      const ctx = getRingCtx_();
+      if (!ctx) return;
       const playNote = (freq, start, duration) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -754,10 +797,8 @@ function App() {
   // three are instantly recognizable by ear alone.
   const playAlarmTone = () => {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
-      const ctx = ringAudioCtxRef.current;
+      const ctx = getRingCtx_();
+      if (!ctx) return;
       const playChirp = (start) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -898,10 +939,8 @@ function App() {
   // two-tone burst, and the plain notification ding, so it's instantly recognizable.
   const playMeetingAlarmTone = () => {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
-      const ctx = ringAudioCtxRef.current;
+      const ctx = getRingCtx_();
+      if (!ctx) return;
       const playBell = (start, freq) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -1096,6 +1135,13 @@ function App() {
     if (!currentUser) return;
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        // FIX — the tab coming back to foreground (e.g. tapping a push notification) is
+        // exactly when a suspended AudioContext needs to be woken up, so any ring/alarm
+        // that's supposed to be playing actually starts making sound right away instead
+        // of sitting silently "on" until some other interaction happens to resume it.
+        if (ringAudioCtxRef.current && ringAudioCtxRef.current.state === 'suspended') {
+          ringAudioCtxRef.current.resume().catch(() => {});
+        }
         checkIncomingCalls();
         loadTasksBackground();
         loadInboxBackground();
@@ -1653,10 +1699,8 @@ function App() {
   // ring, so completing a task has its own small reward feel.
   const playSuccessChime = () => {
     try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) return;
-      if (!ringAudioCtxRef.current) ringAudioCtxRef.current = new Ctx();
-      const ctx = ringAudioCtxRef.current;
+      const ctx = getRingCtx_();
+      if (!ctx) return;
       [523.25, 659.25, 783.99].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();

@@ -2802,6 +2802,11 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 }
 .cc-day-cell {
   min-height: 110px;
+  /* FIX — the "black line" under entries was a horizontal scrollbar: grid cells refuse
+     to shrink below their content's width by default, so a long title pushed past the
+     cell edge. min-width: 0 lets the cell stay its column width and titles ellipsize. */
+  min-width: 0;
+  overflow: hidden;
   background: var(--gray-50);
   border: 1px solid var(--gray-200);
   border-radius: 8px;
@@ -2810,6 +2815,7 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   display: flex;
   flex-direction: column;
   gap: 4px;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .cc-day-cell:hover {
   background: white;
@@ -2850,10 +2856,15 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
 .cc-day-entries {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   max-height: 130px;
+  padding: 1px 1px 2px; /* room for the chip hover shadow */
+  scrollbar-width: none; /* no scrollbar line (Firefox) */
 }
+.cc-day-entries::-webkit-scrollbar { display: none; } /* no scrollbar line (Chrome/Safari) */
 
 /* FIX — Notion-style day cell header: date number + a small holiday ribbon when the
    day is a declared holiday, side by side instead of stacked. */
@@ -2888,56 +2899,130 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   border: 1.5px solid #be185d;
 }
 
-/* FIX — Notion-style compact "chip" for a day-cell entry, instead of a full card with
-   stacked badges. One line, colored left bar for content type, optional time. Cards this
-   dense stop the month grid from turning into a wall of text on a busy day. */
+/* FIX — entries as colored pills, tinted by content type (--chip is set per entry from
+   the content-type color: blue = long video, amber = short, pink = community, red = live).
+   Solid left accent + soft tinted fill + gentle lift on hover, and a quick "pop" when an
+   entry first appears. No horizontal overflow possible (min-width: 0 + ellipsis). */
 .cc-chip {
+  --chip: #64748b;
   display: flex;
   align-items: center;
-  gap: 4px;
-  background: white;
-  border: 1px solid var(--gray-200);
-  border-left: 3px solid var(--gray-300);
-  border-radius: 5px;
-  padding: 3px 6px;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: #ffffff; /* fallback for very old browsers */
+  background: color-mix(in srgb, var(--chip) 13%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--chip) 30%, #ffffff);
+  border-left: 4px solid var(--chip);
+  border-radius: 7px;
+  padding: 5px 7px;
   cursor: pointer;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--gray-800);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #1f2937;
   overflow: hidden;
   white-space: nowrap;
-  transition: transform 0.12s var(--ease-smooth), box-shadow 0.12s var(--ease-smooth);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  transition: transform 0.15s cubic-bezier(.2,.8,.2,1), box-shadow 0.15s ease, background 0.15s ease;
+  animation: cc-chip-pop 0.28s cubic-bezier(.2,.9,.3,1.3) both;
+  -webkit-tap-highlight-color: transparent;
 }
 .cc-chip:hover {
-  transform: translateX(1px);
-  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--chip) 22%, #ffffff);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--chip) 28%, transparent);
+}
+.cc-chip:active {
+  transform: translateY(0) scale(0.98);
+}
+@keyframes cc-chip-pop {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
 }
 .cc-chip-time {
-  font-size: 8px;
-  font-weight: 700;
-  color: var(--gray-500);
+  font-size: 9px;
+  font-weight: 800;
+  color: color-mix(in srgb, var(--chip) 70%, #111827);
   flex-shrink: 0;
 }
 .cc-chip-icon {
   flex-shrink: 0;
+  font-size: 10px;
 }
 .cc-chip-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Up to 2 lines before cutting off, so titles stay readable in a narrow day cell. */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 .cc-chip.cc-posted {
-  opacity: 0.65;
+  opacity: 0.6;
+}
+.cc-chip.cc-posted .cc-chip-title {
+  text-decoration: line-through;
+  text-decoration-color: rgba(31, 41, 55, 0.35);
+}
+/* A just-added entry that the server hasn't confirmed yet — gently pulses until it lands. */
+.cc-chip.cc-chip-saving {
+  animation: cc-chip-pop 0.28s cubic-bezier(.2,.9,.3,1.3) both, cc-chip-saving 1.2s ease-in-out 0.3s infinite;
+}
+@keyframes cc-chip-saving {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 .cc-chip-more {
-  border-left-color: var(--gray-300);
-  color: var(--gray-500);
-  font-weight: 700;
+  --chip: #94a3b8;
+  color: var(--gray-600);
+  font-weight: 800;
   justify-content: center;
-  background: var(--gray-50);
+  background: var(--gray-100);
+  border-color: var(--gray-200);
+  border-left-color: var(--gray-300);
 }
 .cc-chip-more:hover {
-  background: var(--gray-100);
+  background: var(--gray-200);
+}
+
+/* Live / Syncing indicator in the calendar header */
+.cc-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+.cc-sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fde68a;
+}
+.cc-sync-live .cc-sync-dot {
+  background: #4ade80;
+  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+  animation: cc-sync-pulse 2s ease-out infinite;
+}
+.cc-sync-offline .cc-sync-dot { background: #fca5a5; }
+.cc-sync-syncing .cc-sync-dot,
+.cc-sync-idle .cc-sync-dot { animation: cc-chip-saving 1s ease-in-out infinite; }
+@keyframes cc-sync-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+  70% { box-shadow: 0 0 0 7px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
 }
 
 /* Manage Channels admin panel */
@@ -3176,4 +3261,241 @@ button, select, input, .task-card, .status-card, .icon-btn, .team-chat-item, .em
   height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* ================================================================
+   MY RECURRING TASKS manager
+   ================================================================ */
+.routine-modal {
+  max-width: 760px;
+  width: 100%;
+}
+.routine-header {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 60%, var(--primary-light) 100%) !important;
+}
+.routine-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.routine-scope {
+  display: inline-flex;
+  background: var(--gray-100);
+  border-radius: 999px;
+  padding: 3px;
+}
+.routine-scope button {
+  border: none;
+  background: transparent;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.routine-scope button.active {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+.routine-hint {
+  font-size: 12px;
+  color: var(--gray-500);
+  font-weight: 600;
+}
+.routine-board-btn {
+  font-size: 12px !important;
+  padding: 7px 12px !important;
+}
+.routine-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.routine-summary span {
+  background: #f0fdfa;
+  border: 1px solid #ccfbf1;
+  color: var(--primary-dark);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+}
+.routine-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.routine-card {
+  background: white;
+  border: 1px solid var(--gray-200);
+  border-left: 5px solid var(--primary-light);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: box-shadow 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+  animation: cc-chip-pop 0.25s ease both;
+}
+.routine-card:hover {
+  box-shadow: 0 6px 16px rgba(15, 118, 110, 0.12);
+}
+.routine-card.routine-paused {
+  border-left-color: var(--gray-300);
+  background: var(--gray-50);
+}
+.routine-card.routine-scheduled {
+  border-left-color: var(--accent-gold);
+}
+.routine-card.routine-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.routine-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.routine-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--gray-800);
+  line-height: 1.35;
+  word-break: break-word;
+}
+.routine-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.routine-status-active { background: #dcfce7; color: #166534; }
+.routine-status-paused { background: var(--gray-200); color: var(--gray-600); }
+.routine-status-scheduled { background: #fef3c7; color: #92400e; }
+.routine-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.routine-chip {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-600);
+  background: var(--gray-100);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.routine-duration {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.routine-duration > div {
+  background: var(--gray-50);
+  border: 1px solid var(--gray-100);
+  border-radius: 8px;
+  padding: 7px 9px;
+  min-width: 0;
+}
+.routine-duration label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--gray-500);
+  margin-bottom: 2px;
+}
+.routine-duration strong {
+  display: block;
+  font-size: 12px;
+  color: var(--gray-800);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.routine-progress {
+  height: 6px;
+  background: var(--gray-100);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+.routine-progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.routine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.routine-btn {
+  border: 1px solid var(--gray-200);
+  background: white;
+  color: var(--gray-700);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.routine-btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
+.routine-btn:active { transform: scale(0.97); }
+.routine-btn:disabled { opacity: 0.5; cursor: default; }
+.routine-btn-pause { color: #92400e; border-color: #fde68a; background: #fffbeb; }
+.routine-btn-pause:hover { background: #fef3c7; border-color: #fcd34d; }
+.routine-btn-resume { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+.routine-btn-resume:hover { background: #dcfce7; border-color: #86efac; }
+.routine-btn-remove { color: var(--danger); border-color: #fecaca; background: #fff5f5; margin-left: auto; }
+.routine-btn-remove:hover { background: #fee2e2; border-color: #fca5a5; }
+.routine-edit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  background: #f0fdfa;
+  border: 1px solid #ccfbf1;
+  border-radius: 10px;
+}
+.routine-edit-row label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+.routine-edit-row input[type="date"] {
+  flex: 1;
+  min-width: 150px;
+}
+.routine-empty {
+  text-align: center;
+  padding: 36px 10px;
+  color: var(--gray-500);
+}
+.routine-empty-icon {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+.routine-empty-sub {
+  font-size: 12px;
+  margin-top: 4px;
+}
+@media (max-width: 640px) {
+  .routine-duration { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .routine-btn-remove { margin-left: 0; }
 }

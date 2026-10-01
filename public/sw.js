@@ -1,11 +1,10 @@
 // WTC Management Hub — Service Worker
-// FILE LOCATION: save this as  public/sw.js  (same place the old one lived — it's
-// registered from index.html as '/sw.js', which Vite serves straight from /public).
+// FILE LOCATION: public/sw.js (registered from index.html as '/sw.js').
 //
-// FIX — added real Web Push handling. This is what lets a call/task/meeting alert wake
-// the app even when the tab is closed or the phone is locked: the browser itself runs
-// this file in the background and shows a system notification the instant a push
-// arrives, without needing the page to be open or polling anything.
+// Handles Web Push. Two jobs on every push:
+//   1. Show a system notification (works even if the app is closed / phone locked).
+//   2. Hand the push straight to any OPEN copy of the app (postMessage), so an open app
+//      reacts instantly — e.g. starts ringing for a call — with no server round-trip.
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -15,9 +14,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// Bare network passthrough — this app doesn't do offline caching, so the service
-// worker's only real job is enabling installability + push. Not defining a fetch
-// handler at all is also fine, but this keeps behavior explicit.
+// No offline caching in this app — the service worker exists for installability + push.
 self.addEventListener('fetch', () => {});
 
 self.addEventListener('push', (event) => {
@@ -26,33 +23,55 @@ self.addEventListener('push', (event) => {
     data = { title: 'WTC Hub', body: event.data ? event.data.text() : '' };
   }
 
+  const isCall = data.tag === 'wtc-call';
   const title = data.title || 'WTC Management Hub';
+  const extra = data.data || {};
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    // Distinct vibration pattern for calls vs everything else, so even with the
-    // screen off, a call feels different in your pocket from a task ping.
-    vibrate: data.tag === 'wtc-call' ? [300, 150, 300, 150, 300, 150, 300] : [200, 100, 200],
-    tag: data.tag || 'wtc-notify',
-    // A call notification stays on screen until acted on instead of auto-dismissing.
-    requireInteraction: data.tag === 'wtc-call',
-    data: { url: data.url || '/' }
+    // Distinct vibration for calls vs everything else, so a call feels different in
+    // your pocket even with the screen off.
+    vibrate: isCall ? [400, 150, 400, 150, 400, 150, 400, 150, 400] : [200, 100, 200],
+    // Each call gets its own tag so two calls never silently replace each other;
+    // renotify makes the phone buzz/sound again even if a similar alert is showing.
+    tag: isCall && extra.callId ? 'wtc-call-' + extra.callId : (data.tag || 'wtc-notify'),
+    renotify: true,
+    requireInteraction: isCall,
+    silent: false,
+    data: { url: data.url || '/', push: data }
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil((async () => {
+    // Tell every open copy of the app right away (this is what makes an open app ring
+    // within a second instead of waiting for its next check).
+    try {
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clientList.forEach((client) => {
+        try { client.postMessage({ type: 'wtc-push', push: data }); } catch (e) {}
+      });
+    } catch (e) {}
+    await self.registration.showNotification(title, options);
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+  const info = event.notification.data || {};
+  const targetUrl = info.url || '/';
+  const push = info.push || {};
 
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if ('focus' in client) return client.focus();
+  event.waitUntil((async () => {
+    const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clientList) {
+      if ('focus' in client) {
+        try { await client.focus(); } catch (e) {}
+        // Already-open app: tell it what was tapped (open the task / show the call).
+        try { client.postMessage({ type: 'wtc-notification-click', push: push }); } catch (e) {}
+        return;
       }
-      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
-    })
-  );
+    }
+    // App not open: launch it straight onto the right place (?task=ID opens that task).
+    if (self.clients.openWindow) await self.clients.openWindow(targetUrl);
+  })());
 });

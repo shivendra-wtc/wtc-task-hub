@@ -33,11 +33,23 @@ module.exports = async function handler(req, res) {
     if (!subscription || !subscription.endpoint) {
       return res.status(400).json({ ok: false, error: 'Missing subscription' });
     }
-    await webpush.sendNotification(subscription, JSON.stringify(payload || {}));
+    // Calls are sent with HIGH urgency — without this, Android's battery-saver ("doze")
+    // can hold a push back for minutes, which is one cause of "sometimes it never rang".
+    // A call push also expires after 60s (no point ringing a phone for a call that's over).
+    const isCall = payload && payload.tag === 'wtc-call';
+    await webpush.sendNotification(subscription, JSON.stringify(payload || {}), {
+      urgency: isCall ? 'high' : 'normal',
+      TTL: isCall ? 60 : 86400
+    });
     return res.status(200).json({ ok: true });
   } catch (error) {
     // A 404/410 here just means that device's subscription expired (uninstalled the
-    // app, cleared site data, etc.) — not worth treating as a hard failure.
-    return res.status(200).json({ ok: false, error: String(error && error.message || error) });
+    // app, cleared site data, etc.). statusCode is passed back so the backend can
+    // delete that dead subscription and stop wasting time pushing to it.
+    return res.status(200).json({
+      ok: false,
+      statusCode: (error && error.statusCode) || 0,
+      error: String((error && error.message) || error)
+    });
   }
 };

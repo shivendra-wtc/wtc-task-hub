@@ -159,17 +159,17 @@ const DEFAULT_TEAM = [
   { id: 'shivendrawtc77', name: 'Shivendra Singh', displayName: 'Shivendra Singh', role: 'Sr. Social Media Manager', avatar: 'SS', quoteType: 'manager', isAdmin: true, active: true },
   { id: 'deeksha', name: 'Deeksha', displayName: 'Deeksha', role: 'Content Writer', avatar: 'DJ', quoteType: 'social_media', active: true },
   { id: 'nidhi', name: 'Nidhi', displayName: 'Nidhi', role: 'MFG', avatar: 'NV', quoteType: 'social_media', active: true },
-  { id: 'samanta', name: 'Samanta', displayName: 'Samanta', role: 'Social Media Exec & Design', avatar: 'SP', quoteType: 'social_media', active: true },
   { id: 'muskan', name: 'Muskan', displayName: 'Muskan', role: 'Devastram', avatar: 'MC', quoteType: 'social_media', active: true },
   { id: 'sanjeevani', name: 'Sanjeevani', displayName: 'Sanjeevani', role: 'PR Manager', avatar: 'SJ', quoteType: 'pr', active: true },
   { id: 'pari', name: 'Pari', displayName: 'Pari', role: 'HR', avatar: 'PA', quoteType: 'hr', isHR: true, active: true },
   { id: 'charu', name: 'Charu', displayName: 'Charu', role: 'Social Media Exec & Design', avatar: 'CN', quoteType: 'social_media', active: true },
   { id: 'naman', name: 'Naman', displayName: 'Naman', role: 'Video Editor', avatar: 'NJ', quoteType: 'video_editor', active: true },
   { id: 'jagdish', name: 'Jagdish', displayName: 'Jagdish', role: 'Team Member', avatar: 'JS', quoteType: 'social_media', active: true }
-  // Saraswati, Khushi and Karan removed permanently — they left the organization.
-  // Run removeDepartedMembers() once in the Apps Script editor to also purge them
-  // from the live TeamConfig sheet (see Code.gs).
+  // Saraswati, Khushi, Karan and Samanta removed permanently — they left the
+  // organization. The backend's getTeam() also hides them automatically (see
+  // DEPARTED_MEMBER_IDS_ in Code.gs), so no manual step is needed.
 ];
+const DEPARTED_MEMBER_IDS = ['saraswati', 'khushi', 'karan', 'samanta'];
 
 // FIX — reusable multi-select checklist dropdown, replacing the old single-select native
 // <select> filters. Lets people check multiple options at once (e.g. "Not Started" AND
@@ -276,7 +276,12 @@ function App() {
   };
 
   // ---- FIX #13: team is now live state, loaded from the backend TeamConfig sheet ----
-  const [team, setTeam] = useState(() => cacheGet('team') || DEFAULT_TEAM);
+  // Departed members are also stripped from any team list cached on this device from an
+  // earlier visit, so they vanish instantly instead of after the first background reload.
+  const [team, setTeam] = useState(() => {
+    const cached = cacheGet('team');
+    return cached ? cached.filter(m => !DEPARTED_MEMBER_IDS.includes(String(m.id).toLowerCase())) : DEFAULT_TEAM;
+  });
   // FIX — if we already have a cached team list, treat it as "loaded" immediately so the
   // dashboard renders right away instead of showing the loading screen — loadTeam() still
   // runs in the background to fetch and apply anything that's actually changed.
@@ -461,7 +466,16 @@ function App() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   // ---- Content Calendar ----
   const [showContentCalendar, setShowContentCalendar] = useState(false);
-  const [contentEntries, setContentEntries] = useState([]);
+  // Starts from the copy saved on this device last time, so the calendar is never empty
+  // on open — fresh data then loads silently in the background (see loadContentCalendar).
+  const [contentEntries, setContentEntries] = useState(() => {
+    try {
+      const raw = localStorage.getItem('wtc_cache_content_entries');
+      const parsed = raw ? JSON.parse(raw) : null;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) { return []; }
+  });
+  const [contentSyncState, setContentSyncState] = useState('idle'); // idle | syncing | live | offline
   const [contentGroupTab, setContentGroupTab] = useState('Akshat Gupta');
   const now2_ = new Date();
   const [contentCalYear, setContentCalYear] = useState(now2_.getFullYear());
@@ -498,6 +512,11 @@ function App() {
   // ---- Team Meet ----
   const [meetings, setMeetings] = useState([]);
   const [showMeetings, setShowMeetings] = useState(false);
+  // ---- My Recurring Tasks manager ----
+  const [showMyRoutines, setShowMyRoutines] = useState(false);
+  const [routineScope, setRoutineScope] = useState('mine'); // 'mine' | 'all' (admins only)
+  const [routineEndDraft, setRoutineEndDraft] = useState({}); // taskId -> end date being edited
+  const [routineBusyId, setRoutineBusyId] = useState(null);
   const [showNewMeetingForm, setShowNewMeetingForm] = useState(false);
   const [meetingSaving, setMeetingSaving] = useState(false);
   const [meetingAssignees, setMeetingAssignees] = useState([]);
@@ -1032,25 +1051,62 @@ function App() {
     if (currentUser) loadMeetings();
   }, [currentUser]);
 
+  // ============================================================
+  // FIX — CALLS UNDER 2 SECONDS. Three paths now ring the phone, whichever is first wins
+  // (seenCallIds makes sure the same call never rings twice):
+  //   1. PUSH → the service worker hands the push straight to this open app
+  //      (handlePushMessage below) and it rings instantly, no server round-trip at all.
+  //   2. POLL → every 2s while the app is on screen. This used to run every 1s for every
+  //      person and was the main thing overloading the backend for the whole team. The
+  //      backend now answers it from memory in a fraction of a second, so 2s is both
+  //      faster in practice AND far lighter.
+  //   3. RETURN → the moment the app comes back to the foreground (visibility effect).
+  // Refs (not state) are read inside these handlers so they always see the latest
+  // values; stale-closure bugs were one reason calls to some people never showed.
+  // ============================================================
+  const incomingCallRef = useRef(null);
+  useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
+  const currentUserNameRef = useRef(null);
+  useEffect(() => { currentUserNameRef.current = currentUserInfo?.name || null; }, [currentUserInfo?.name]);
+
+  const ringIncomingCall = (call) => {
+    if (!call || !call.callId) return;
+    if (incomingCallRef.current) return; // already showing a ring — don't interrupt it
+    if (seenCallIds.current.has(call.callId)) return;
+    // Ignore stale calls (e.g. a delayed push for a call that's already over).
+    const ageSecs = call.timestamp ? (Date.now() - new Date(call.timestamp).getTime()) / 1000 : 0;
+    if (ageSecs > 120) return;
+    seenCallIds.current.add(call.callId);
+    const fresh = { callId: call.callId, from: call.from, type: call.type, timestamp: call.timestamp };
+    incomingCallRef.current = fresh;
+    setIncomingCall(fresh);
+    startRinging();
+    if (document.visibilityState !== 'visible') {
+      fireDesktopNotification('📞 Incoming Call', `${fresh.from} — ${fresh.type}`);
+    }
+    if (incomingCallTimeoutRef.current) clearTimeout(incomingCallTimeoutRef.current);
+    // Auto-mark as Missed if not answered.
+    incomingCallTimeoutRef.current = setTimeout(() => {
+      respondToIncomingCall(fresh.callId, 'Missed', true);
+    }, 45000);
+  };
+
+  const callPollInFlightRef = useRef(false);
   const checkIncomingCalls = async () => {
-    if (!currentUserInfo || incomingCall) return; // don't interrupt an already-showing ring
+    const myName = currentUserNameRef.current;
+    if (!myName || incomingCallRef.current || callPollInFlightRef.current) return;
+    callPollInFlightRef.current = true;
     try {
-      const response = await fetch(API_URL + '?action=getIncomingCalls&userName=' + encodeURIComponent(currentUserInfo.name));
+      const response = await fetch(API_URL + '?action=getIncomingCalls&userName=' + encodeURIComponent(myName));
       const data = await response.json();
-      if (data.status === 'ok' && data.calls.length > 0) {
+      if (data.status === 'ok' && data.calls && data.calls.length > 0) {
         const fresh = data.calls.find(c => !seenCallIds.current.has(c.callId));
-        if (fresh) {
-          seenCallIds.current.add(fresh.callId);
-          setIncomingCall(fresh);
-          startRinging();
-          fireDesktopNotification('📞 Incoming Call', `${fresh.from} — ${fresh.type}`);
-          // 30-second auto-timeout if ignored
-          incomingCallTimeoutRef.current = setTimeout(() => {
-            respondToIncomingCall(fresh.callId, 'Missed', true);
-          }, 45000);
-        }
+        if (fresh) ringIncomingCall(fresh);
       }
-    } catch (error) {}
+    } catch (error) {
+    } finally {
+      callPollInFlightRef.current = false;
+    }
   };
 
   const respondToIncomingCall = (callId, response, isTimeout) => {
@@ -1058,8 +1114,9 @@ function App() {
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'respondToCall', callId, userName: currentUserInfo.name, response })
+      body: JSON.stringify({ action: 'respondToCall', callId, userName: currentUserNameRef.current || currentUserInfo?.name, response })
     });
+    incomingCallRef.current = null;
     setIncomingCall(null);
   };
 
@@ -1072,55 +1129,65 @@ function App() {
     setCallRecipients(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
   };
 
+  // FIX — "sometimes nothing shows after I press call": the caller's screen used to wait
+  // for the whole server round-trip (sheet writes + pushes) before showing anything, and
+  // if that request was slow or failed, the calling screen never appeared at all. The
+  // call ID is now created right here, the "Calling..." tracker shows INSTANTLY, and the
+  // request goes out in the background (retried once automatically if it fails).
   const sendCall = async (callType) => {
     if (callRecipients.length === 0) { alert('Select at least one person to call!'); return; }
+    const recipients = [...callRecipients];
+    const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     setShowCallCompose(false);
-    try {
-      const response = await fetch(API_URL + '?action=startCall&from=' + encodeURIComponent(currentUserInfo.name) +
-        '&to=' + encodeURIComponent(callRecipients.join(',')) + '&callType=' + encodeURIComponent(callType));
-      const data = await response.json();
-      if (data.status === 'ok') {
-        setOutgoingCall({ callId: data.callId, callType, recipients: callRecipients.map(r => ({ to: r, response: 'Ringing' })) });
-      }
-    } catch (error) {}
+    setOutgoingCall({ callId, callType, recipients: recipients.map(r => ({ to: r, response: 'Ringing' })) });
+
+    const url = API_URL + '?action=startCall&from=' + encodeURIComponent(currentUserInfo.name) +
+      '&to=' + encodeURIComponent(recipients.join(',')) + '&callType=' + encodeURIComponent(callType) +
+      '&callId=' + encodeURIComponent(callId);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.status === 'ok') return;
+      } catch (error) {}
+      await new Promise(r => setTimeout(r, 700));
+    }
+    // Both attempts failed — say so on the tracker instead of pretending it's ringing.
+    setOutgoingCall(prev => prev && prev.callId === callId
+      ? { ...prev, recipients: prev.recipients.map(r => ({ ...r, response: 'Failed' })) }
+      : prev);
   };
 
-  // While the sender has the live status tracker open, poll every 3s so accept/decline
-  // shows up quickly without needing a full page refresh.
+  // Caller's live status — every 1.5s (the backend answers this from memory now).
   useEffect(() => {
     if (outgoingCall?.callId) {
+      let cancelled = false;
       const poll = async () => {
         try {
           const response = await fetch(API_URL + '?action=getCallStatus&callId=' + encodeURIComponent(outgoingCall.callId));
           const data = await response.json();
-          if (data.status === 'ok') {
-            setOutgoingCall(prev => prev ? { ...prev, recipients: data.recipients } : prev);
+          // Only apply real data — an empty list just means the call is still being
+          // registered, and must not wipe out the "Ringing" rows already on screen.
+          if (!cancelled && data.status === 'ok' && Array.isArray(data.recipients) && data.recipients.length > 0) {
+            setOutgoingCall(prev => prev && prev.callId === outgoingCall.callId ? { ...prev, recipients: data.recipients } : prev);
           }
         } catch (error) {}
       };
-      poll();
-      const interval = setInterval(poll, 3000);
-      return () => clearInterval(interval);
+      const first = setTimeout(poll, 800);
+      const interval = setInterval(poll, 1500);
+      return () => { cancelled = true; clearTimeout(first); clearInterval(interval); };
     }
   }, [outgoingCall?.callId]);
 
-  // FIX — tightened again from 1.5s to 1s per request, as the incremental stopgap while
-  // polling is still the underlying mechanism. Ceiling: this cannot get calls reliably
-  // under ~1s because it's still round-trip-to-Apps-Script polling, not push delivery —
-  // true near-instant ringing needs a push-based rebuild (service worker + a push
-  // provider), which is a separate, bigger project outside a polling tune-up like this one.
-  // Separate from the main 15s background sync interval.
-  // FIX — currentUserInfo?.name is in the dependency array on purpose: without it, if team
-  // data (from loadTeam) resolves even a moment AFTER this effect's first run, the interval
-  // callback stays permanently stuck with the stale "not loaded yet" closure forever (since
-  // nothing else in the array ever changes), and checkIncomingCalls silently no-ops on every
-  // single tick. This is exactly why calls to newer team members weren't arriving.
+  // Fallback poll — every 2s, only while the app is actually on screen (a hidden tab is
+  // throttled by the browser anyway; push + the visibility check cover that case).
   useEffect(() => {
-    if (currentUser) {
-      const interval = setInterval(checkIncomingCalls, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [currentUser, incomingCall, currentUserInfo?.name]);
+    if (!currentUser) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') checkIncomingCalls();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [currentUser]);
 
   // FIX — EXPERT FIX for unreliable/late/missed calls. The root cause: browsers heavily
   // throttle JS timers in BACKGROUND tabs (sometimes to once a minute or less), so the 3s
@@ -1218,7 +1285,8 @@ function App() {
         // restored here, so admins can always get back in to fix the sheet properly.
         const liveIds = new Set(data.team.map(m => m.id));
         const missingDefaults = DEFAULT_TEAM.filter(m => !liveIds.has(m.id));
-        const merged = [...data.team, ...missingDefaults];
+        const merged = [...data.team, ...missingDefaults]
+          .filter(m => !DEPARTED_MEMBER_IDS.includes(String(m.id).toLowerCase()));
         setTeam(merged);
         cacheSet('team', merged); // FIX — powers instant load on the next visit
       }
@@ -1807,9 +1875,49 @@ function App() {
   // — a separate effect below watches for that and clears it automatically. A
   // "task_completed" notification (sent to the original assigner) has no further state
   // to wait on, so it still dismisses immediately on click, same as before.
+  // FIX — "clicking an assigned-task notification shows No tasks". Three separate causes:
+  //   1. Filters were reset to ['All'], but the filters became multi-select lists where an
+  //      EMPTY list means "show everything" — ['All'] meant "status must literally equal
+  //      'All'", which matches nothing, so the board went blank. Now reset to [].
+  //   2. Non-admins could be on the wrong tab (e.g. "Assigned by Me" for a task assigned
+  //      TO them). It now switches to whichever tab actually contains that task, and opens
+  //      the collapsed "Older Routine Tasks" section if the task lives in there.
+  //   3. The notification can arrive a few seconds before the task list refreshes, so the
+  //      card didn't exist yet. It now refreshes the list and waits for the card to appear.
+  const tasksRef = useRef([]);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+  const [pendingNavTaskId, setPendingNavTaskId] = useState(null);
+  const pendingNavIdRef = useRef(null);
+  useEffect(() => { pendingNavIdRef.current = pendingNavTaskId; }, [pendingNavTaskId]);
+  const highlightTimeoutRef = useRef(null);
+
+  const revealTaskCard = (task) => {
+    if (isAdmin) {
+      setTaskViewMode('all');
+      setManagerView('all');
+    } else {
+      const assignedToMe = isTaskAssignedToMe(task);
+      const assignedByMe = task.assignedBy === currentUserInfo?.name;
+      setTaskViewMode(assignedToMe ? 'assigned' : (assignedByMe ? 'by_me' : 'assigned'));
+    }
+    if (task.isStale) setShowOlderRoutine(true);
+    setHighlightTaskId(task.id);
+    let tries = 0;
+    const tryScroll = () => {
+      const el = document.getElementById('task-card-' + task.id);
+      if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      tries += 1;
+      if (tries < 20) setTimeout(tryScroll, 150);
+    };
+    setTimeout(tryScroll, 120);
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    highlightTimeoutRef.current = setTimeout(() => setHighlightTaskId(null), 5000);
+  };
+
   const navigateToTask = (taskId) => {
-    // NEW — close every other overlay/modal too, not just the inbox, so a notification
-    // click always lands you on the task list no matter what was open when it fired.
+    if (taskId === undefined || taskId === null || taskId === '') return;
+    // Close every other overlay/modal too, so a notification click always lands you on
+    // the task list no matter what was open when it fired.
     setShowInbox(false);
     setShowChat(false);
     setShowArchive(false);
@@ -1817,18 +1925,96 @@ function App() {
     setShowTeamManager(false);
     setShowNoticeBoard(false);
     setShowHolidayCalendar(false);
-    if (isAdmin) { setTaskViewMode('all'); setManagerView('all'); }
-    setFilterStatus(['All']);
-    setFilterChannel(['All']);
-    setFilterCategory(['All']);
-    setFilterTaskType(['All']);
-    setHighlightTaskId(taskId);
-    setTimeout(() => {
-      const el = document.getElementById('task-card-' + taskId);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 150);
-    setTimeout(() => setHighlightTaskId(null), 4000);
+    setShowMyRoutines(false);
+    setFilterStatus([]);
+    setFilterChannel([]);
+    setFilterCategory([]);
+    setFilterTaskType([]);
+    const task = tasksRef.current.find(t => String(t.id) === String(taskId));
+    if (task) {
+      setPendingNavTaskId(null);
+      revealTaskCard(task);
+    } else {
+      setPendingNavTaskId(String(taskId));
+      loadTasksBackground();
+      setTimeout(loadTasksBackground, 2500);
+      setTimeout(loadTasksBackground, 6000);
+      const waitingFor = String(taskId);
+      setTimeout(() => {
+        if (pendingNavIdRef.current === waitingFor) {
+          setPendingNavTaskId(null);
+          pushNotif('ℹ️ That task is no longer on the board (it was completed and archived).');
+        }
+      }, 12500);
+    }
   };
+
+  // Finishes a navigation that was waiting for the task list to catch up.
+  useEffect(() => {
+    if (!pendingNavTaskId) return;
+    const task = tasks.find(t => String(t.id) === pendingNavTaskId);
+    if (task) {
+      setPendingNavTaskId(null);
+      revealTaskCard(task);
+    }
+  }, [tasks, pendingNavTaskId]);
+
+  // ============================================================
+  // Messages from the service worker (see public/sw.js):
+  //   'wtc-push'               — a push just arrived while this app is open
+  //   'wtc-notification-click' — the user tapped a system notification
+  // A call push rings immediately from its own data (no server round-trip). Any other
+  // push refreshes the inbox/tasks right away instead of waiting for the 15s cycle.
+  // The handler lives in a ref so the single listener always runs the latest code.
+  // ============================================================
+  const handlePushMessageRef = useRef(null);
+  handlePushMessageRef.current = (msg) => {
+    if (!msg || !msg.type) return;
+    const push = msg.push || {};
+    const extra = push.data || {};
+    if (extra.kind === 'call' && extra.callId) {
+      ringIncomingCall({ callId: extra.callId, from: extra.from, type: extra.type, timestamp: extra.timestamp });
+      return;
+    }
+    const isMeeting = extra.type === 'new_meeting' || String(extra.taskId || '').startsWith('meeting_');
+    if (msg.type === 'wtc-push') {
+      loadInboxBackground();
+      loadTasksBackground();
+      if (isMeeting) loadMeetingsBackground();
+      return;
+    }
+    if (msg.type === 'wtc-notification-click') {
+      if (isMeeting) { openMeetings(); return; }
+      if (extra.taskId) navigateToTask(extra.taskId);
+    }
+  };
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const listener = (event) => {
+      try { if (handlePushMessageRef.current) handlePushMessageRef.current(event.data); } catch (e) {}
+    };
+    navigator.serviceWorker.addEventListener('message', listener);
+    return () => navigator.serviceWorker.removeEventListener('message', listener);
+  }, []);
+
+  // A tapped notification can also launch the app fresh as /?task=ID — open that task
+  // once the task list has loaded, then tidy the address bar so a refresh won't re-jump.
+  const startupTaskHandledRef = useRef(false);
+  useEffect(() => {
+    if (startupTaskHandledRef.current || !currentUser) return;
+    let taskParam = null;
+    try { taskParam = new URLSearchParams(window.location.search).get('task'); } catch (e) {}
+    if (!taskParam) { startupTaskHandledRef.current = true; return; }
+    if (tasks.length === 0) return; // wait for the first task load
+    startupTaskHandledRef.current = true;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('task');
+      window.history.replaceState({}, '', url.toString());
+    } catch (e) {}
+    if (taskParam.startsWith('meeting_')) openMeetings();
+    else navigateToTask(taskParam);
+  }, [currentUser, tasks]);
 
   const handleInboxItemClick = (item) => {
     if (item.type === 'task_completed' || item.type === 'new_meeting') {
@@ -2134,17 +2320,99 @@ function App() {
 
   // ============================================================
   // CONTENT CALENDAR — everyone reads/writes; entries auto-create a linked Task.
-  // FIX — speed complaint: the calendar was only ever refreshed by a 15s poll, so any
-  // edit you made felt "stuck" until the next tick. Every save/delete below now updates
-  // contentEntries in local state immediately (optimistic UI) — the poll below is now
-  // purely a backup for catching a teammate's edits, tightened to 6s.
+  // FIX — "takes 10+ seconds to reflect / some people see nothing". Causes and fixes:
+  //   • Empty for some people: a single failed request left the list empty with no
+  //     retry. Now: the last copy is saved on each device and shown instantly, the data
+  //     is preloaded right after login (before anyone even opens the calendar), and a
+  //     failed load retries automatically.
+  //   • Slow to reflect: the backend now answers from memory (see Code.gs), the open
+  //     calendar refreshes every 4s, and it refreshes the instant the app comes back
+  //     to the foreground.
+  //   • Entries "disappearing then coming back": a refresh that landed before the server
+  //     had finished saving would wipe the just-added entry off the screen. Your own
+  //     unconfirmed adds/edits/deletes are now kept on screen until the server confirms
+  //     them (pendingContentRef), so nothing ever flickers.
+  //   • Out-of-order replies: an older, slower reply can no longer overwrite a newer one.
   // ============================================================
-  const loadContentCalendar = async () => {
+  const pendingContentRef = useRef({ adds: [], edits: {}, deletes: {} });
+  const contentReqSeqRef = useRef(0);
+  const contentInFlightRef = useRef(false);
+  const contentLastJsonRef = useRef('');
+  const CONTENT_MATCH_FIELDS = ['channelGroup', 'channels', 'contentType', 'title', 'date', 'time', 'assignedTo',
+    'editingStatus', 'videoStatus', 'priority', 'finalLink', 'thumbnailLink', 'designLink', 'rawLink', 'draftLink',
+    'description', 'notes'];
+
+  const mergeWithPendingContent = (serverEntries) => {
+    const pending = pendingContentRef.current;
+    const now = Date.now();
+    let merged = serverEntries;
+
+    // Deletes: hide until the server stops returning the entry (max 60s).
+    Object.keys(pending.deletes).forEach(id => {
+      const stillThere = serverEntries.some(e => String(e.id) === id);
+      if (!stillThere || now - pending.deletes[id] > 60000) delete pending.deletes[id];
+    });
+    if (Object.keys(pending.deletes).length > 0) {
+      merged = merged.filter(e => !pending.deletes[String(e.id)]);
+    }
+
+    // Edits: keep showing your edit until the server has it (max 60s).
+    Object.keys(pending.edits).forEach(id => {
+      const edit = pending.edits[id];
+      const serverEntry = serverEntries.find(e => String(e.id) === id);
+      const confirmed = serverEntry && CONTENT_MATCH_FIELDS.every(f =>
+        edit.payload[f] === undefined || String(serverEntry[f] ?? '') === String(edit.payload[f] ?? ''));
+      if (!serverEntry || confirmed || now - edit.ts > 60000) delete pending.edits[id];
+    });
+    if (Object.keys(pending.edits).length > 0) {
+      merged = merged.map(e => pending.edits[String(e.id)] ? { ...e, ...pending.edits[String(e.id)].payload } : e);
+    }
+
+    // Adds: keep the local copy until a matching server entry exists (max 90s).
+    const claimed = new Set();
+    pending.adds = pending.adds.filter(add => {
+      const match = serverEntries.find(e => !claimed.has(String(e.id)) &&
+        e.title === add.entry.title && String(e.date).slice(0, 10) === add.entry.date &&
+        e.channelGroup === add.entry.channelGroup && e.createdBy === add.entry.createdBy);
+      if (match) { claimed.add(String(match.id)); return false; }
+      return now - add.ts < 90000;
+    });
+    if (pending.adds.length > 0) merged = [...merged, ...pending.adds.map(a => a.entry)];
+    return merged;
+  };
+
+  const loadContentCalendar = async (attempt = 0) => {
+    if (contentInFlightRef.current && attempt === 0) return;
+    contentInFlightRef.current = true;
+    const seq = ++contentReqSeqRef.current;
+    if (attempt === 0) setContentSyncState(prev => (prev === 'live' ? 'live' : 'syncing'));
+    let failed = false;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const abortTimer = controller ? setTimeout(() => controller.abort(), 15000) : null;
     try {
-      const response = await fetch(API_URL + '?action=getContentCalendar');
+      const response = await fetch(API_URL + '?action=getContentCalendar', controller ? { signal: controller.signal } : undefined);
       const data = await response.json();
-      if (data.status === 'ok') setContentEntries(data.entries);
-    } catch (e) {}
+      if (data.status !== 'ok' || !Array.isArray(data.entries)) throw new Error(data.message || 'bad response');
+      if (seq === contentReqSeqRef.current) { // ignore replies overtaken by a newer request
+        const merged = mergeWithPendingContent(data.entries);
+        const json = JSON.stringify(merged);
+        if (json !== contentLastJsonRef.current) {
+          contentLastJsonRef.current = json;
+          setContentEntries(merged);
+        }
+        try { localStorage.setItem('wtc_cache_content_entries', JSON.stringify(data.entries)); } catch (e) {}
+        setContentSyncState('live');
+      }
+    } catch (e) {
+      failed = true;
+    } finally {
+      if (abortTimer) clearTimeout(abortTimer);
+      contentInFlightRef.current = false;
+    }
+    if (failed) {
+      if (attempt < 2) setTimeout(() => loadContentCalendar(attempt + 1), attempt === 0 ? 700 : 1800);
+      else setContentSyncState('offline');
+    }
   };
 
   const loadContentChannels = async () => {
@@ -2165,14 +2433,28 @@ function App() {
     loadContentChannels();
   };
 
-  // Real-time while open — tightened from 15s to 6s, purely as a backup to the
-  // optimistic local updates (see handleSaveContentEntry/handleDeleteContentEntry).
+  // Preload right after login, so the data is already there when the calendar opens.
   useEffect(() => {
-    if (showContentCalendar) {
-      const interval = setInterval(loadContentCalendar, 6000);
-      return () => clearInterval(interval);
-    }
-  }, [showContentCalendar]);
+    if (currentUser) loadContentCalendar();
+  }, [currentUser]);
+
+  // Refresh rhythm: every 4s while the calendar is open, every 60s in the background
+  // (so the saved copy stays fresh), and only while the app is actually on screen.
+  useEffect(() => {
+    if (!currentUser) return;
+    const everyMs = showContentCalendar ? 4000 : 60000;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadContentCalendar();
+    }, everyMs);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && showContentCalendar) loadContentCalendar();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [currentUser, showContentCalendar]);
 
   const handleAddChannel = () => {
     const group = (newChannelGroup || '').trim();
@@ -2257,6 +2539,11 @@ function App() {
     setContentSaving(true);
 
     const isNew = !editingContentEntry.id;
+    if (!isNew && String(editingContentEntry.id).startsWith('tmp_')) {
+      setContentSaving(false);
+      alert('This entry is still being saved — please try again in a couple of seconds.');
+      return;
+    }
     const payload = {
       channelGroup: contentGroupTab,
       channels: contentForm.channels,
@@ -2284,13 +2571,18 @@ function App() {
     // for the real server ID transparently (same date/title, so nothing visibly jumps).
     if (isNew) {
       const tempId = 'tmp_' + Date.now();
-      setContentEntries(prev => [...prev, { ...payload, id: tempId, createdDate: new Date().toISOString().slice(0, 10) }]);
+      const localEntry = { ...payload, id: tempId, createdDate: new Date().toISOString().slice(0, 10) };
+      pendingContentRef.current.adds.push({ entry: localEntry, ts: Date.now() });
+      contentLastJsonRef.current = '';
+      setContentEntries(prev => [...prev, localEntry]);
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addContentEntry', entry: payload })
       });
     } else {
+      pendingContentRef.current.edits[String(editingContentEntry.id)] = { payload, ts: Date.now() };
+      contentLastJsonRef.current = '';
       setContentEntries(prev => prev.map(e => e.id === editingContentEntry.id ? { ...e, ...payload } : e));
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
@@ -2300,15 +2592,26 @@ function App() {
     }
     setEditingContentEntry(null);
     setContentSaving(false);
+    // Follow-up refreshes to pick up the server's confirmed copy (and the real ID) fast.
+    setTimeout(() => loadContentCalendar(), 1500);
+    setTimeout(() => loadContentCalendar(), 4000);
     setTimeout(() => {
       loadContentCalendar();
-      if (!isNew) loadTasksBackground(); // linked task status may have changed
-    }, 1200);
+      loadTasksBackground(); // linked task created/updated
+    }, 8000);
   };
 
   const handleDeleteContentEntry = () => {
     if (!editingContentEntry?.id) return;
+    if (String(editingContentEntry.id).startsWith('tmp_')) {
+      alert('This entry is still being saved — please try again in a couple of seconds.');
+      return;
+    }
     if (!confirm('Delete this content entry? (The linked task, if any, will stay on the task board.)')) return;
+    pendingContentRef.current.deletes[String(editingContentEntry.id)] = Date.now();
+    contentLastJsonRef.current = '';
+    delete pendingContentRef.current.edits[String(editingContentEntry.id)];
+    setTimeout(() => loadContentCalendar(), 2000);
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
@@ -2335,6 +2638,141 @@ function App() {
     holidays.forEach(h => { holidaySet[h.date] = h.name; });
     return { entriesThisGroup, cells, holidaySet };
   }, [contentGroupTab, contentEntries, contentCalYear, contentCalMonth, holidays]);
+
+  // ============================================================
+  // MY RECURRING TASKS — everyone (including Shivendra/PC) can see and manage the
+  // recurring tasks that belong to them: ones assigned TO them or BY them. Admins can
+  // also switch to "Whole team". For each one: how often it repeats, when it started,
+  // when it ends (its duration), days left, how many copies are open/done — and
+  // Pause / Resume / Change end date / Remove.
+  // How it works underneath: a recurring task's End Date controls whether new copies
+  // keep being created (empty = forever, a past date = paused). See updateRoutine in
+  // Code.gs, which also re-checks permission on the server side.
+  // ============================================================
+  const localDateKey_ = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const openMyRoutines = () => {
+    setRoutineEndDraft({});
+    setShowMyRoutines(true);
+    loadTasksBackground();
+  };
+
+  const myRoutineRows = useMemo(() => {
+    if (!currentUserInfo) return [];
+    const me = currentUserInfo.name;
+    const todayKey = localDateKey_(new Date());
+    const templates = tasks.filter(t => t.taskType === 'Routine');
+    const scoped = (isAdmin && routineScope === 'all')
+      ? templates
+      : templates.filter(t => isTaskAssignedToMe(t) || t.assignedBy === me);
+    const rank = { active: 0, scheduled: 1, paused: 2 };
+    return scoped.map(t => {
+      const end = t.endDate ? String(t.endDate).slice(0, 10) : '';
+      const start = t.startDate ? String(t.startDate).slice(0, 10) : '';
+      let status = 'active';
+      if (end && end < todayKey) status = 'paused';
+      else if (start && start > todayKey) status = 'scheduled';
+      const copies = tasks.filter(c => c.taskType === 'Routine Instance' &&
+        c.taskDetails === t.taskDetails && c.assignedTo === t.assignedTo);
+      const openCopies = copies.filter(c => c.status !== 'Completed').length;
+      const doneCopies = copies.filter(c => c.status === 'Completed').length;
+      let daysLeft = null;
+      if (end && end >= todayKey) {
+        daysLeft = Math.round((new Date(end + 'T12:00:00') - new Date(todayKey + 'T12:00:00')) / 86400000);
+      }
+      let totalDays = null;
+      if (start && end) {
+        totalDays = Math.round((new Date(end + 'T12:00:00') - new Date(start + 'T12:00:00')) / 86400000) + 1;
+      }
+      return { task: t, start, end, status, openCopies, doneCopies, daysLeft, totalDays };
+    }).sort((a, b) => (rank[a.status] - rank[b.status]) ||
+      String(a.task.taskDetails).localeCompare(String(b.task.taskDetails)));
+  }, [tasks, currentUserInfo, routineScope, isAdmin]);
+
+  const describeRoutineFrequency = (t, start) => {
+    if (t.frequency === 'Weekly' && start) {
+      return 'Every ' + new Date(start + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long' });
+    }
+    if (t.frequency === 'Monthly' && start) {
+      const day = new Date(start + 'T12:00:00').getDate();
+      const suffix = (day % 10 === 1 && day !== 11) ? 'st' : (day % 10 === 2 && day !== 12) ? 'nd' : (day % 10 === 3 && day !== 13) ? 'rd' : 'th';
+      return `Every month on the ${day}${suffix}`;
+    }
+    return 'Every day';
+  };
+
+  const formatNiceDate = (key) => key
+    ? new Date(key + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+    : '';
+
+  // Shared sender: updates the task locally first (instant), then saves to the server.
+  const saveRoutineEndDate = (task, endDate, doneMessage) => {
+    setRoutineBusyId(task.id);
+    setTasks(prev => prev.map(t => String(t.id) === String(task.id) ? { ...t, endDate } : t));
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'updateRoutine', taskId: task.id, updates: { endDate }, userName: currentUserInfo.name })
+    });
+    setRoutineEndDraft(prev => { const next = { ...prev }; delete next[task.id]; return next; });
+    if (doneMessage) pushNotif(doneMessage);
+    setTimeout(() => { loadTasksBackground(); setRoutineBusyId(null); }, 1500);
+  };
+
+  const pauseRoutine = (task) => {
+    if (!confirm(`Pause "${task.taskDetails}"?\n\nNo new copies will be created until you resume it. Copies already on the board stay.`)) return;
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    saveRoutineEndDate(task, localDateKey_(y), '⏸️ Recurring task paused');
+  };
+
+  const resumeRoutine = (task) => {
+    saveRoutineEndDate(task, '', '▶️ Recurring task resumed — it will run with no end date');
+  };
+
+  const saveRoutineDuration = (task) => {
+    const draft = routineEndDraft[task.id];
+    if (draft === undefined) return;
+    if (draft && task.startDate && draft < String(task.startDate).slice(0, 10)) {
+      alert('The end date can’t be before the start date.');
+      return;
+    }
+    saveRoutineEndDate(task, draft, draft ? `📅 Will now run until ${formatNiceDate(draft)}` : '♾️ Will now run with no end date');
+  };
+
+  const removeRoutine = (row) => {
+    const task = row.task;
+    if (!confirm(`Remove the recurring task "${task.taskDetails}" permanently?\n\nIt will stop repeating and disappear from this list.`)) return;
+    let removeOpenCopies = false;
+    if (row.openCopies > 0) {
+      removeOpenCopies = confirm(`It also has ${row.openCopies} unfinished cop${row.openCopies === 1 ? 'y' : 'ies'} on the board.\n\nOK = remove those too\nCancel = keep them on the board`);
+    }
+    setRoutineBusyId(task.id);
+    setTasks(prev => prev.filter(t => {
+      if (String(t.id) === String(task.id)) return false;
+      if (removeOpenCopies && t.taskType === 'Routine Instance' && t.taskDetails === task.taskDetails &&
+        t.assignedTo === task.assignedTo && t.status !== 'Completed') return false;
+      return true;
+    }));
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteRoutine', taskId: task.id, userName: currentUserInfo.name, removeOpenCopies })
+    });
+    pushNotif('🗑️ Recurring task removed');
+    setTimeout(() => { loadTasksBackground(); setRoutineBusyId(null); }, 1500);
+  };
+
+  // "Track" — jump to the board filtered to recurring tasks, so every copy is visible.
+  const viewRoutineCopiesOnBoard = () => {
+    setShowMyRoutines(false);
+    setFilterStatus([]);
+    setFilterChannel([]);
+    setFilterCategory([]);
+    setFilterTaskType(['Routine']);
+    setShowOlderRoutine(true);
+  };
 
   const unreadInbox = inbox.filter(i => i.read === 'No').length;
   const unreadChats = chats.filter(c => c.read === 'No' && c.to === currentUserInfo?.name).length;
@@ -2512,10 +2950,13 @@ function App() {
                 📋
               </button>
               <button className="icon-btn icon-amber" onClick={openHolidayCalendar} title="Holiday Calendar">
-                🗓️
+                🏖️
               </button>
               <button className="icon-btn icon-emerald" onClick={openMeetings} title="Team Meet">
                 🤝
+              </button>
+              <button className="icon-btn icon-violet" onClick={openMyRoutines} title="My Recurring Tasks — pause, resume, set duration, remove">
+                🔁
               </button>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
@@ -2798,6 +3239,125 @@ function App() {
         </div>
       )}
 
+      {/* MY RECURRING TASKS — everyone manages their own recurring tasks here. */}
+      {showMyRoutines && (
+        <div className="modal-overlay" onClick={() => setShowMyRoutines(false)}>
+          <div className="modal-content routine-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header routine-header">
+              <h3>🔁 My Recurring Tasks</h3>
+              <button className="modal-close" onClick={() => setShowMyRoutines(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="routine-toolbar">
+                {isAdmin ? (
+                  <div className="routine-scope">
+                    <button className={routineScope === 'mine' ? 'active' : ''} onClick={() => setRoutineScope('mine')}>Mine</button>
+                    <button className={routineScope === 'all' ? 'active' : ''} onClick={() => setRoutineScope('all')}>Whole team</button>
+                  </div>
+                ) : (
+                  <span className="routine-hint">Recurring tasks assigned to you or by you</span>
+                )}
+                <button className="btn-secondary routine-board-btn" onClick={viewRoutineCopiesOnBoard}>📋 See all copies on the board</button>
+              </div>
+
+              <div className="routine-summary">
+                <span><strong>{myRoutineRows.filter(r => r.status === 'active').length}</strong> active</span>
+                <span><strong>{myRoutineRows.filter(r => r.status === 'paused').length}</strong> paused / ended</span>
+                <span><strong>{myRoutineRows.reduce((n, r) => n + r.openCopies, 0)}</strong> open copies</span>
+              </div>
+
+              {myRoutineRows.length === 0 ? (
+                <div className="routine-empty">
+                  <div className="routine-empty-icon">🔁</div>
+                  <p>No recurring tasks {routineScope === 'all' ? 'in the team' : 'for you'} yet.</p>
+                  <p className="routine-empty-sub">Create one from “+ New Task” → Routine.</p>
+                </div>
+              ) : (
+                <div className="routine-list">
+                  {myRoutineRows.map(row => {
+                    const t = row.task;
+                    const draft = routineEndDraft[t.id];
+                    const editing = draft !== undefined;
+                    const busy = String(routineBusyId) === String(t.id);
+                    return (
+                      <div key={t.id} className={`routine-card routine-${row.status} ${busy ? 'routine-busy' : ''}`}>
+                        <div className="routine-card-top">
+                          <div className="routine-title">{t.taskDetails}</div>
+                          <span className={`routine-status routine-status-${row.status}`}>
+                            {row.status === 'active' ? '● Active' : row.status === 'scheduled' ? '◷ Starts soon' : '⏸ Paused'}
+                          </span>
+                        </div>
+
+                        <div className="routine-meta">
+                          <span className="routine-chip">🔄 {describeRoutineFrequency(t, row.start)}</span>
+                          <span className="routine-chip">👤 {t.assignedTo}</span>
+                          {t.assignedBy && <span className="routine-chip">✍️ by {t.assignedBy}</span>}
+                        </div>
+
+                        <div className="routine-duration">
+                          <div>
+                            <label>Started</label>
+                            <strong>{row.start ? formatNiceDate(row.start) : '—'}</strong>
+                          </div>
+                          <div>
+                            <label>Ends</label>
+                            <strong>{row.end ? formatNiceDate(row.end) : 'No end date'}</strong>
+                          </div>
+                          <div>
+                            <label>{row.status === 'paused' ? 'Status' : 'Time left'}</label>
+                            <strong>
+                              {row.status === 'paused' ? 'Not repeating'
+                                : row.daysLeft === null ? 'Ongoing'
+                                : row.daysLeft === 0 ? 'Last day today'
+                                : `${row.daysLeft} day${row.daysLeft === 1 ? '' : 's'}`}
+                            </strong>
+                          </div>
+                          <div>
+                            <label>Copies</label>
+                            <strong>{row.openCopies} open · {row.doneCopies} done</strong>
+                          </div>
+                        </div>
+
+                        {row.totalDays && row.status !== 'paused' && row.daysLeft !== null && (
+                          <div className="routine-progress" title={`${row.totalDays - row.daysLeft} of ${row.totalDays} days done`}>
+                            <div style={{ width: `${Math.min(100, Math.max(3, ((row.totalDays - row.daysLeft) / row.totalDays) * 100))}%` }}></div>
+                          </div>
+                        )}
+
+                        {editing ? (
+                          <div className="routine-edit-row">
+                            <label>Run until</label>
+                            <input
+                              type="date"
+                              min={row.start || undefined}
+                              value={draft}
+                              onChange={(e) => setRoutineEndDraft(prev => ({ ...prev, [t.id]: e.target.value }))}
+                            />
+                            <button className="btn-secondary" onClick={() => setRoutineEndDraft(prev => ({ ...prev, [t.id]: '' }))}>♾️ No end</button>
+                            <button className="btn-success" onClick={() => saveRoutineDuration(t)} disabled={busy}>Save</button>
+                            <button className="btn-secondary" onClick={() => setRoutineEndDraft(prev => { const n = { ...prev }; delete n[t.id]; return n; })}>Cancel</button>
+                          </div>
+                        ) : (
+                          <div className="routine-actions">
+                            {row.status === 'paused' ? (
+                              <button className="routine-btn routine-btn-resume" onClick={() => resumeRoutine(t)} disabled={busy}>▶️ Resume</button>
+                            ) : (
+                              <button className="routine-btn routine-btn-pause" onClick={() => pauseRoutine(t)} disabled={busy}>⏸️ Pause</button>
+                            )}
+                            <button className="routine-btn" onClick={() => setRoutineEndDraft(prev => ({ ...prev, [t.id]: row.end || '' }))} disabled={busy}>📅 Change duration</button>
+                            <button className="routine-btn routine-btn-remove" onClick={() => removeRoutine(row)} disabled={busy}>🗑️ Remove</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TEAM MEET — anyone can schedule a meeting and assign anyone; assigned people
           (and the creator) get a 5-minute-before alarm (see effect above). */}
       {showMeetings && (
@@ -2929,6 +3489,10 @@ function App() {
           <div className="modal-content xl" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header cc-header">
               <h3>🗓️ Content Calendar</h3>
+              <span className={`cc-sync cc-sync-${contentSyncState}`} title="Calendar sync status">
+                <span className="cc-sync-dot"></span>
+                {contentSyncState === 'live' ? 'Live' : contentSyncState === 'offline' ? 'Reconnecting…' : 'Syncing…'}
+              </span>
               {canManageTeam && (
                 <button className="btn-secondary cc-manage-btn" onClick={() => setShowManageChannels(true)}>⚙️ Manage Channels</button>
               )}
@@ -2999,8 +3563,8 @@ function App() {
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-chip ${isPublished ? 'cc-posted' : ''}`}
-                                  style={{ borderLeftColor: typeInfo.color }}
+                                  className={`cc-chip ${isPublished ? 'cc-posted' : ''} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''}`}
+                                  style={{ '--chip': typeInfo.color }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
                                   title={entry.title}
                                 >
@@ -3407,13 +3971,13 @@ function App() {
               <div className="call-status-list">
                 {outgoingCall.recipients.map(r => {
                   const member = team.find(t => t.name === r.to);
-                  const icon = r.response === 'Accepted' ? '✅' : r.response === 'Declined' ? '❌' : r.response === 'Missed' ? '⌛' : '📞';
-                  const cls = r.response === 'Accepted' ? 'accepted' : r.response === 'Declined' ? 'declined' : r.response === 'Missed' ? 'missed' : 'ringing';
+                  const icon = r.response === 'Accepted' ? '✅' : r.response === 'Declined' ? '❌' : r.response === 'Missed' ? '⌛' : r.response === 'Failed' ? '⚠️' : '📞';
+                  const cls = r.response === 'Accepted' ? 'accepted' : r.response === 'Declined' ? 'declined' : (r.response === 'Missed' || r.response === 'Failed') ? 'missed' : 'ringing';
                   return (
                     <div key={r.to} className={`call-status-row ${cls}`}>
                       <span className="chat-avatar">{member?.avatar || r.to.substring(0, 2)}</span>
                       <span className="call-status-name">{member?.displayName || r.to}</span>
-                      <span className="call-status-badge">{icon} {r.response === 'Ringing' ? 'Ringing...' : r.response}</span>
+                      <span className="call-status-badge">{icon} {r.response === 'Ringing' ? 'Ringing...' : r.response === 'Failed' ? 'Not sent — check internet & try again' : r.response}</span>
                     </div>
                   );
                 })}

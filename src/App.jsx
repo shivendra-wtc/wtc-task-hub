@@ -171,6 +171,45 @@ const DEFAULT_TEAM = [
 ];
 const DEPARTED_MEMBER_IDS = ['saraswati', 'khushi', 'karan', 'samanta'];
 
+// Turns whatever was typed into a safe, openable web address: adds https:// when missing
+// (people often paste "drive.google.com/…"), and refuses anything that isn't http/https.
+function toOpenableUrl(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return '';
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : 'https://' + v;
+  try {
+    const u = new URL(withScheme);
+    return (u.protocol === 'https:' || u.protocol === 'http:') ? u.href : '';
+  } catch (e) { return ''; }
+}
+
+// Link input with an "Open ↗" button. target="_blank" opens the link in a separate
+// browser tab (in the installed desktop/phone app it opens in the normal browser), so the
+// app itself stays exactly where it was. noopener/noreferrer keep the opened page from
+// controlling or reading the app's tab.
+function LinkField({ value, onChange, placeholder }) {
+  const href = toOpenableUrl(value);
+  return (
+    <div className="link-field">
+      <input type="text" value={value} onChange={onChange} placeholder={placeholder} />
+      {href ? (
+        <a className="link-open-btn" href={href} target="_blank" rel="noopener noreferrer" title={href}>Open ↗</a>
+      ) : (
+        <span className="link-open-btn disabled" aria-hidden="true">Open ↗</span>
+      )}
+    </div>
+  );
+}
+
+// Every link field on a content entry, in the order people work through them.
+const CONTENT_LINK_FIELDS = [
+  { key: 'rawLink', label: 'Raw', icon: '🎞️' },
+  { key: 'draftLink', label: 'Draft', icon: '✂️' },
+  { key: 'finalLink', label: 'Final Edit', icon: '🎬' },
+  { key: 'thumbnailLink', label: 'Thumbnail', icon: '🖼️' },
+  { key: 'designLink', label: 'Design', icon: '🎨' }
+];
+
 // FIX — reusable multi-select checklist dropdown, replacing the old single-select native
 // <select> filters. Lets people check multiple options at once (e.g. "Not Started" AND
 // "In Progress" simultaneously) instead of being limited to one value.
@@ -643,16 +682,52 @@ function App() {
     }
   };
 
-  // FIX — real Web Push subscription. This is what makes calls/alerts actually wake the
-  // device instead of depending on a browser tab's polling timer staying alive. Runs
-  // once permission is granted and we know who's logged in; safe to call repeatedly —
-  // if a subscription already exists, the browser just hands the same one back.
-  const subscribeToPush = async (userName) => {
+  // ============================================================
+  // PUSH REGISTRATION (what lets a call reach a phone that's locked / app closed).
+  // FIX — this used to fail silently. It now records exactly what happened on THIS device
+  // (myPushState), shown in the 📡 Call Alerts panel and the "turn on call alerts" banner,
+  // so a device that can't receive calls says why instead of just never ringing:
+  //   registered | not-allowed (never asked) | blocked (denied in browser settings)
+  //   | unsupported (e.g. iPhone outside the home-screen app) | error (+ the reason)
+  // ============================================================
+  const [myPushState, setMyPushState] = useState({ status: 'unknown', detail: '' });
+  const [pushBannerDismissed, setPushBannerDismissed] = useState(false);
+
+  const describeDevice = () => {
     try {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-      if (!userName) return;
-      const registration = await navigator.serviceWorker.ready;
+      const ua = navigator.userAgent || '';
+      const os = /iPhone|iPad|iPod/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android phone'
+        : /Windows/.test(ua) ? 'Windows PC' : /Mac OS X/.test(ua) ? 'Mac' : 'Device';
+      const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome'
+        : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'browser';
+      const app = isRunningStandalone() ? 'installed app' : browser;
+      return `${os} · ${app}`;
+    } catch (e) { return 'Device'; }
+  };
+
+  const subscribeToPush = async (userName) => {
+    if (!userName) return;
+    if (typeof Notification === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setMyPushState({ status: 'unsupported', detail: /iPhone|iPad/.test(navigator.userAgent || '')
+        ? 'On iPhone, call alerts only work in the app added to the Home Screen (Safari → Share → Add to Home Screen).'
+        : 'This browser does not support call alerts.' });
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      setMyPushState({ status: 'blocked', detail: 'Notifications are blocked for this site in the browser settings.' });
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      setMyPushState({ status: 'not-allowed', detail: 'Notifications have not been allowed on this device yet.' });
+      return;
+    }
+    try {
+      // navigator.serviceWorker.ready never resolves if the service worker failed to
+      // start, which used to hang here forever with no message. Give it 10 seconds.
+      const registration = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('The app’s background service did not start. Close and reopen the app.')), 10000))
+      ]);
       let subscription = await registration.pushManager.getSubscription();
       if (!subscription) {
         subscription = await registration.pushManager.subscribe({
@@ -660,14 +735,14 @@ function App() {
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
         });
       }
-      fetch(API_URL, {
+      await fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'savePushSubscription', userName, subscription: subscription.toJSON() })
+        body: JSON.stringify({ action: 'savePushSubscription', userName, subscription: subscription.toJSON(), device: describeDevice() })
       });
+      setMyPushState({ status: 'registered', detail: describeDevice() });
     } catch (e) {
-      // Most common cause: permission was granted but the service worker isn't ready
-      // yet on first load — subscribeToPush gets called again once currentUser settles.
+      setMyPushState({ status: 'error', detail: String((e && e.message) || e) });
     }
   };
 
@@ -675,17 +750,17 @@ function App() {
     if (typeof Notification === 'undefined') return;
     Notification.requestPermission().then(perm => {
       setNotifPermission(perm);
-      if (perm === 'granted') subscribeToPush(currentUserInfo?.name);
+      subscribeToPush(currentUserInfo?.name);
     });
   };
 
   // Covers the case where permission was already granted in an earlier session — no
   // button click to hook into, so subscribe as soon as we know who's logged in.
+  // Re-registers on every app open (keeps LastSeen fresh) and whenever the permission
+  // changes — e.g. someone allows notifications from the browser's own settings.
   useEffect(() => {
-    if (currentUserInfo?.name && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      subscribeToPush(currentUserInfo.name);
-    }
-  }, [currentUserInfo?.name]);
+    if (currentUserInfo?.name) subscribeToPush(currentUserInfo.name);
+  }, [currentUserInfo?.name, notifPermission]);
 
   const sendTestNotification = () => {
     fireDesktopNotification('WTC Task Hub', '🔔 Test notification — if you see this in your OS notification tray, desktop alerts are working correctly.');
@@ -1120,9 +1195,58 @@ function App() {
     setIncomingCall(null);
   };
 
+  // ============================================================
+  // 📡 CALL ALERTS CHECK (PC/Shivendra) — shows, per person, which of their devices are
+  // registered to receive call alerts and when each was last seen, and can send a test
+  // alert that reports back exactly what happened. Loaded whenever the call picker opens
+  // so each avatar can show a green/grey dot ("can receive alerts" / "no phone registered").
+  // ============================================================
+  const [pushStatus, setPushStatus] = useState(null);
+  const [showCallAlerts, setShowCallAlerts] = useState(false);
+  const [pushTestResults, setPushTestResults] = useState({});
+
+  const loadPushStatus = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getPushStatus');
+      const data = await response.json();
+      if (data.status === 'ok') setPushStatus(data.people || {});
+    } catch (e) {}
+  };
+
+  const sendTestAlert = async (name) => {
+    setPushTestResults(prev => ({ ...prev, [name]: { kind: 'pending', text: 'Sending test alert…' } }));
+    let result;
+    try {
+      const response = await fetch(API_URL + '?action=testPush&userName=' + encodeURIComponent(name) +
+        '&from=' + encodeURIComponent(currentUserInfo?.name || ''));
+      const data = await response.json();
+      const report = data.report || { byUser: {}, fatal: null };
+      const u = (report.byUser || {})[name] || { devices: 0, delivered: 0, errors: [] };
+      result = report.fatal
+        ? { kind: 'error', text: 'Not sent: ' + report.fatal }
+        : u.delivered > 0
+          ? { kind: 'ok', text: `Sent to ${u.delivered} of ${u.devices} device${u.devices === 1 ? '' : 's'}. Ask ${name} if it appeared.` +
+              (u.errors.length ? ' Problems: ' + u.errors.join(' · ') : '') }
+          : u.devices === 0
+            ? { kind: 'warn', text: 'No device registered — they need to open the app and allow notifications.' }
+            : { kind: 'error', text: u.errors.join(' · ') || 'Failed for an unknown reason.' };
+    } catch (e) {
+      result = { kind: 'error', text: 'Could not reach the server: ' + String((e && e.message) || e) };
+    }
+    setPushTestResults(prev => ({ ...prev, [name]: result }));
+    loadPushStatus();
+  };
+
+  const openCallAlerts = () => {
+    setPushTestResults({});
+    setShowCallAlerts(true);
+    loadPushStatus();
+  };
+
   const openCallCompose = () => {
     setCallRecipients([]);
     setShowCallCompose(true);
+    loadPushStatus();
   };
 
   const toggleCallRecipient = (name) => {
@@ -1148,7 +1272,24 @@ function App() {
       try {
         const response = await fetch(url);
         const data = await response.json();
-        if (data.status === 'ok') return;
+        if (data.status === 'ok') {
+          // Delivery report from the server: for each person, how many of their devices the
+          // alert actually reached, or exactly why it didn't. Shown on the tracker below.
+          const report = data.push || { byUser: {}, fatal: null };
+          const alerts = {};
+          recipients.forEach(name => {
+            const r = (report.byUser || {})[name] || { devices: 0, delivered: 0, errors: [] };
+            alerts[name] = report.fatal
+              ? { kind: 'error', text: 'Alert not sent: ' + report.fatal }
+              : r.delivered > 0
+                ? { kind: 'ok', text: `📱 Alert sent to ${r.delivered} device${r.delivered === 1 ? '' : 's'}` }
+                : r.devices === 0
+                  ? { kind: 'warn', text: 'No phone registered — rings only if their app is open. Ask them to allow notifications.' }
+                  : { kind: 'error', text: 'Alert failed: ' + (r.errors[0] || 'unknown error') };
+          });
+          setOutgoingCall(prev => prev && prev.callId === callId ? { ...prev, alerts } : prev);
+          return;
+        }
       } catch (error) {}
       await new Promise(r => setTimeout(r, 700));
     }
@@ -2652,43 +2793,84 @@ function App() {
   const localDateKey_ = (d) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+  // FIX — the list now comes from the server's getRoutines, which reads EVERY row
+  // including archived ones. Before, it was built from the task board's data, which leaves
+  // out archived rows — and a recurring task gets archived 24h after anyone marks its main
+  // card "Completed", even though it keeps creating copies. So live recurring tasks were
+  // missing from the list. Falls back to the board's data only if the server can't answer.
+  const [serverRoutines, setServerRoutines] = useState(null);
+  const [routinesLoading, setRoutinesLoading] = useState(false);
+
+  const loadRoutines = async (scope) => {
+    const myName = currentUserInfo?.name;
+    if (!myName) return;
+    setRoutinesLoading(true);
+    try {
+      const response = await fetch(API_URL + '?action=getRoutines&userName=' + encodeURIComponent(myName) +
+        '&scope=' + encodeURIComponent(scope || routineScope));
+      const data = await response.json();
+      if (data.status === 'ok' && Array.isArray(data.routines)) setServerRoutines(data.routines);
+    } catch (e) {
+    } finally {
+      setRoutinesLoading(false);
+    }
+  };
+
+  // Load once after login (powers the 🔁 badge), and again whenever the scope changes.
+  useEffect(() => {
+    if (currentUserInfo?.name) loadRoutines(routineScope);
+  }, [currentUserInfo?.name, routineScope]);
+
   const openMyRoutines = () => {
     setRoutineEndDraft({});
     setShowMyRoutines(true);
-    loadTasksBackground();
+    loadRoutines(routineScope);
   };
 
   const myRoutineRows = useMemo(() => {
     if (!currentUserInfo) return [];
     const me = currentUserInfo.name;
     const todayKey = localDateKey_(new Date());
-    const templates = tasks.filter(t => t.taskType === 'Routine');
-    const scoped = (isAdmin && routineScope === 'all')
-      ? templates
-      : templates.filter(t => isTaskAssignedToMe(t) || t.assignedBy === me);
-    const rank = { active: 0, scheduled: 1, paused: 2 };
-    return scoped.map(t => {
+    const rank = { active: 0, scheduled: 1, paused: 2, ended: 3 };
+
+    let source;
+    if (serverRoutines) {
+      source = serverRoutines.map(r => ({ task: r, hasSchedule: r.hasSchedule !== false, open: r.openCopies || 0, done: r.doneCopies || 0 }));
+    } else {
+      const templates = tasks.filter(t => t.taskType === 'Routine');
+      const scoped = (isAdmin && routineScope === 'all')
+        ? templates
+        : templates.filter(t => isTaskAssignedToMe(t) || t.assignedBy === me);
+      source = scoped.map(t => {
+        const copies = tasks.filter(c => c.taskType === 'Routine Instance' &&
+          c.taskDetails === t.taskDetails && c.assignedTo === t.assignedTo);
+        return { task: t, hasSchedule: true, open: copies.filter(c => c.status !== 'Completed').length, done: copies.filter(c => c.status === 'Completed').length };
+      });
+    }
+
+    return source.map(({ task: t, hasSchedule, open, done }) => {
       const end = t.endDate ? String(t.endDate).slice(0, 10) : '';
       const start = t.startDate ? String(t.startDate).slice(0, 10) : '';
       let status = 'active';
-      if (end && end < todayKey) status = 'paused';
+      if (!hasSchedule) status = 'ended';
+      else if (end && end < todayKey) status = 'paused';
       else if (start && start > todayKey) status = 'scheduled';
-      const copies = tasks.filter(c => c.taskType === 'Routine Instance' &&
-        c.taskDetails === t.taskDetails && c.assignedTo === t.assignedTo);
-      const openCopies = copies.filter(c => c.status !== 'Completed').length;
-      const doneCopies = copies.filter(c => c.status === 'Completed').length;
       let daysLeft = null;
-      if (end && end >= todayKey) {
+      if (hasSchedule && end && end >= todayKey) {
         daysLeft = Math.round((new Date(end + 'T12:00:00') - new Date(todayKey + 'T12:00:00')) / 86400000);
       }
       let totalDays = null;
-      if (start && end) {
+      if (hasSchedule && start && end) {
         totalDays = Math.round((new Date(end + 'T12:00:00') - new Date(start + 'T12:00:00')) / 86400000) + 1;
       }
-      return { task: t, start, end, status, openCopies, doneCopies, daysLeft, totalDays };
+      return { task: t, hasSchedule, start, end, status, openCopies: open, doneCopies: done, daysLeft, totalDays };
     }).sort((a, b) => (rank[a.status] - rank[b.status]) ||
       String(a.task.taskDetails).localeCompare(String(b.task.taskDetails)));
-  }, [tasks, currentUserInfo, routineScope, isAdmin]);
+  }, [serverRoutines, tasks, currentUserInfo, routineScope, isAdmin]);
+
+  // Badge on the 🔁 button: how many of MY recurring tasks are currently running.
+  const activeRoutineCount = myRoutineRows.filter(r => r.status === 'active' &&
+    (routineScope === 'mine' || isTaskAssignedToMe(r.task) || r.task.assignedBy === currentUserInfo?.name)).length;
 
   const describeRoutineFrequency = (t, start) => {
     if (t.frequency === 'Weekly' && start) {
@@ -2710,6 +2892,7 @@ function App() {
   const saveRoutineEndDate = (task, endDate, doneMessage) => {
     setRoutineBusyId(task.id);
     setTasks(prev => prev.map(t => String(t.id) === String(task.id) ? { ...t, endDate } : t));
+    setServerRoutines(prev => prev ? prev.map(r => String(r.id) === String(task.id) ? { ...r, endDate } : r) : prev);
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
@@ -2717,7 +2900,7 @@ function App() {
     });
     setRoutineEndDraft(prev => { const next = { ...prev }; delete next[task.id]; return next; });
     if (doneMessage) pushNotif(doneMessage);
-    setTimeout(() => { loadTasksBackground(); setRoutineBusyId(null); }, 1500);
+    setTimeout(() => { loadTasksBackground(); loadRoutines(); setRoutineBusyId(null); }, 1500);
   };
 
   const pauseRoutine = (task) => {
@@ -2749,6 +2932,7 @@ function App() {
       removeOpenCopies = confirm(`It also has ${row.openCopies} unfinished cop${row.openCopies === 1 ? 'y' : 'ies'} on the board.\n\nOK = remove those too\nCancel = keep them on the board`);
     }
     setRoutineBusyId(task.id);
+    setServerRoutines(prev => prev ? prev.filter(r => String(r.id) !== String(task.id)) : prev);
     setTasks(prev => prev.filter(t => {
       if (String(t.id) === String(task.id)) return false;
       if (removeOpenCopies && t.taskType === 'Routine Instance' && t.taskDetails === task.taskDetails &&
@@ -2761,7 +2945,7 @@ function App() {
       body: JSON.stringify({ action: 'deleteRoutine', taskId: task.id, userName: currentUserInfo.name, removeOpenCopies })
     });
     pushNotif('🗑️ Recurring task removed');
-    setTimeout(() => { loadTasksBackground(); setRoutineBusyId(null); }, 1500);
+    setTimeout(() => { loadTasksBackground(); loadRoutines(); setRoutineBusyId(null); }, 1500);
   };
 
   // "Track" — jump to the board filtered to recurring tasks, so every copy is visible.
@@ -2955,8 +3139,9 @@ function App() {
               <button className="icon-btn icon-emerald" onClick={openMeetings} title="Team Meet">
                 🤝
               </button>
-              <button className="icon-btn icon-violet" onClick={openMyRoutines} title="My Recurring Tasks — pause, resume, set duration, remove">
+              <button className={`icon-btn icon-violet routine-icon-btn ${activeRoutineCount > 0 ? 'has-routines' : ''}`} onClick={openMyRoutines} title={`My Recurring Tasks${activeRoutineCount ? ` — ${activeRoutineCount} running` : ''} — pause, resume, set duration, remove`}>
                 🔁
+                {activeRoutineCount > 0 && <span className="routine-badge">{activeRoutineCount}</span>}
               </button>
               {canManageTeam && (
                 <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
@@ -2999,6 +3184,32 @@ function App() {
           </div>
         </div>
       </header>
+
+      {/* Shown only while THIS device can't receive call alerts, with the exact fix. */}
+      {!pushBannerDismissed && ['not-allowed', 'blocked', 'unsupported', 'error'].includes(myPushState.status) && (
+        <div className={`push-banner push-banner-${myPushState.status}`} role="status">
+          <span className="push-banner-icon">📞</span>
+          <div className="push-banner-text">
+            <strong>
+              {myPushState.status === 'not-allowed' ? 'Turn on call alerts for this device'
+                : myPushState.status === 'blocked' ? 'Call alerts are blocked on this device'
+                : 'This device can’t receive call alerts'}
+            </strong>
+            <span>
+              {myPushState.status === 'not-allowed' ? 'So calls reach you even when the app is closed or your phone is locked.'
+                : myPushState.status === 'blocked' ? 'Open the site settings (🔒 next to the address, or Settings → Apps on a phone) → Notifications → Allow, then reopen the app.'
+                : myPushState.detail}
+            </span>
+          </div>
+          {myPushState.status === 'not-allowed' && (
+            <button className="btn-success push-banner-btn" onClick={requestNotifPermission}>Allow alerts</button>
+          )}
+          {myPushState.status === 'error' && (
+            <button className="btn-secondary push-banner-btn" onClick={() => subscribeToPush(currentUserInfo?.name)}>Try again</button>
+          )}
+          <button className="push-banner-close" onClick={() => setPushBannerDismissed(true)} aria-label="Hide">✕</button>
+        </div>
+      )}
 
       {showInbox && (
         <div className="side-panel">
@@ -3262,10 +3473,11 @@ function App() {
 
               <div className="routine-summary">
                 <span><strong>{myRoutineRows.filter(r => r.status === 'active').length}</strong> active</span>
-                <span><strong>{myRoutineRows.filter(r => r.status === 'paused').length}</strong> paused / ended</span>
+                <span><strong>{myRoutineRows.filter(r => r.status === 'paused' || r.status === 'ended').length}</strong> paused / past</span>
                 <span><strong>{myRoutineRows.reduce((n, r) => n + r.openCopies, 0)}</strong> open copies</span>
               </div>
 
+              {routinesLoading && serverRoutines === null && <p className="empty-text">Loading every recurring task…</p>}
               {myRoutineRows.length === 0 ? (
                 <div className="routine-empty">
                   <div className="routine-empty-icon">🔁</div>
@@ -3284,29 +3496,30 @@ function App() {
                         <div className="routine-card-top">
                           <div className="routine-title">{t.taskDetails}</div>
                           <span className={`routine-status routine-status-${row.status}`}>
-                            {row.status === 'active' ? '● Active' : row.status === 'scheduled' ? '◷ Starts soon' : '⏸ Paused'}
+                            {row.status === 'active' ? '● Active' : row.status === 'scheduled' ? '◷ Starts soon' : row.status === 'ended' ? '◼ Past' : '⏸ Paused'}
                           </span>
                         </div>
 
                         <div className="routine-meta">
                           <span className="routine-chip">🔄 {describeRoutineFrequency(t, row.start)}</span>
                           <span className="routine-chip">👤 {t.assignedTo}</span>
+                          {t.archived && <span className="routine-chip" title="Its main card was marked Completed on the board, so it was hidden there — it still repeats.">📦 hidden from board</span>}
                           {t.assignedBy && <span className="routine-chip">✍️ by {t.assignedBy}</span>}
                         </div>
 
                         <div className="routine-duration">
                           <div>
-                            <label>Started</label>
+                            <label>{row.hasSchedule ? 'Started' : 'First copy'}</label>
                             <strong>{row.start ? formatNiceDate(row.start) : '—'}</strong>
                           </div>
                           <div>
-                            <label>Ends</label>
+                            <label>{row.hasSchedule ? 'Ends' : 'Last copy'}</label>
                             <strong>{row.end ? formatNiceDate(row.end) : 'No end date'}</strong>
                           </div>
                           <div>
-                            <label>{row.status === 'paused' ? 'Status' : 'Time left'}</label>
+                            <label>{row.status === 'paused' || row.status === 'ended' ? 'Status' : 'Time left'}</label>
                             <strong>
-                              {row.status === 'paused' ? 'Not repeating'
+                              {row.status === 'ended' ? 'Old series — no longer repeating' : row.status === 'paused' ? 'Not repeating'
                                 : row.daysLeft === null ? 'Ongoing'
                                 : row.daysLeft === 0 ? 'Last day today'
                                 : `${row.daysLeft} day${row.daysLeft === 1 ? '' : 's'}`}
@@ -3324,7 +3537,9 @@ function App() {
                           </div>
                         )}
 
-                        {editing ? (
+                        {!row.hasSchedule ? (
+                          <div className="routine-past-note">Its schedule was deleted earlier, so it can’t be paused or resumed — shown here for your record.</div>
+                        ) : editing ? (
                           <div className="routine-edit-row">
                             <label>Run until</label>
                             <input
@@ -3572,6 +3787,7 @@ function App() {
                                   {entry.time && <span className="cc-chip-time">{entry.time}</span>}
                                   <span className="cc-chip-icon">{typeInfo.icon}</span>
                                   <span className="cc-chip-title">{entry.title}</span>
+                                  {CONTENT_LINK_FIELDS.some(f => toOpenableUrl(entry[f.key])) && <span className="cc-chip-link" title="Has links — open the day to use them">🔗</span>}
                                 </div>
                               );
                             })}
@@ -3624,6 +3840,17 @@ function App() {
                             <span className="cc-badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>{typeInfo.icon} {typeInfo.value}</span>
                             <span className="cc-badge" style={{ background: videoInfo.color + '22', color: videoInfo.color }}>{videoInfo.icon} {videoInfo.value}</span>
                           </div>
+                          {CONTENT_LINK_FIELDS.some(f => toOpenableUrl(entry[f.key])) && (
+                            <div className="cc-entry-links">
+                              {CONTENT_LINK_FIELDS.map(f => {
+                                const href = toOpenableUrl(entry[f.key]);
+                                return href ? (
+                                  <a key={f.key} className="cc-link-chip" href={href} target="_blank" rel="noopener noreferrer"
+                                    title={href} onClick={(e) => e.stopPropagation()}>{f.icon} {f.label} ↗</a>
+                                ) : null;
+                              })}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -3753,26 +3980,26 @@ function App() {
                   <div className="form-row">
                     <div className="form-group">
                       <label>Raw Footage Link</label>
-                      <input type="text" value={contentForm.rawLink} onChange={(e) => setContentForm({ ...contentForm, rawLink: e.target.value })} placeholder="https://..." />
+                      <LinkField value={contentForm.rawLink} onChange={(e) => setContentForm({ ...contentForm, rawLink: e.target.value })} placeholder="https://..." />
                     </div>
                     <div className="form-group">
                       <label>Draft/Editing Link</label>
-                      <input type="text" value={contentForm.draftLink} onChange={(e) => setContentForm({ ...contentForm, draftLink: e.target.value })} placeholder="https://..." />
+                      <LinkField value={contentForm.draftLink} onChange={(e) => setContentForm({ ...contentForm, draftLink: e.target.value })} placeholder="https://..." />
                     </div>
                   </div>
                   <div className="form-row">
                     <div className="form-group">
                       <label>Final Editing Link</label>
-                      <input type="text" value={contentForm.finalLink} onChange={(e) => setContentForm({ ...contentForm, finalLink: e.target.value })} placeholder="https://... (fully cut file, ready to publish)" />
+                      <LinkField value={contentForm.finalLink} onChange={(e) => setContentForm({ ...contentForm, finalLink: e.target.value })} placeholder="https://... (fully cut file, ready to publish)" />
                     </div>
                     <div className="form-group">
                       <label>Thumbnail Link</label>
-                      <input type="text" value={contentForm.thumbnailLink} onChange={(e) => setContentForm({ ...contentForm, thumbnailLink: e.target.value })} placeholder="https://..." />
+                      <LinkField value={contentForm.thumbnailLink} onChange={(e) => setContentForm({ ...contentForm, thumbnailLink: e.target.value })} placeholder="https://..." />
                     </div>
                   </div>
                   <div className="form-group">
                     <label>Design Link</label>
-                    <input type="text" value={contentForm.designLink} onChange={(e) => setContentForm({ ...contentForm, designLink: e.target.value })} placeholder="https://... (Canva/Figma/PSD source, etc.)" />
+                    <LinkField value={contentForm.designLink} onChange={(e) => setContentForm({ ...contentForm, designLink: e.target.value })} placeholder="https://... (Canva/Figma/PSD source, etc.)" />
                   </div>
 
                   <div className="form-group">
@@ -3914,6 +4141,61 @@ function App() {
         </div>
       )}
 
+      {/* 📡 CALL ALERTS CHECK — who can receive call alerts, and a test button per person */}
+      {showCallAlerts && canCall && (
+        <div className="modal-overlay" onClick={() => setShowCallAlerts(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>📡 Call Alerts</h3>
+              <button className="modal-close" onClick={() => setShowCallAlerts(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <p className="reminder-window-hint">
+                A call reaches someone whose app is closed or phone is locked only if one of their devices is registered here.
+                Press <strong>Send test</strong> to check a person right now — the result says exactly what happened.
+              </p>
+              {pushStatus === null ? (
+                <p className="empty-text">Loading…</p>
+              ) : (
+                <div className="push-list">
+                  {activeTeam.filter(m => m.id !== currentUser).map(member => {
+                    const devices = pushStatus[member.name] || [];
+                    const test = pushTestResults[member.name];
+                    return (
+                      <div key={member.id} className={`push-row ${devices.length ? 'has' : 'none'}`}>
+                        <div className="push-row-main">
+                          <span className="chat-avatar">{member.avatar}</span>
+                          <div className="push-row-info">
+                            <strong>{member.displayName}</strong>
+                            {devices.length === 0 ? (
+                              <span className="push-row-sub warn">No device registered</span>
+                            ) : devices.map((d, i) => (
+                              <span key={i} className="push-row-sub">
+                                📱 {d.device}{d.lastSeen ? ` · last seen ${new Date(d.lastSeen).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
+                              </span>
+                            ))}
+                          </div>
+                          <button className="btn-secondary push-test-btn" onClick={() => sendTestAlert(member.name)} disabled={test && test.kind === 'pending'}>
+                            {test && test.kind === 'pending' ? 'Sending…' : 'Send test'}
+                          </button>
+                        </div>
+                        {test && test.kind !== 'pending' && (
+                          <div className={`push-test-result ${test.kind}`}>{test.text}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="push-self">
+                <strong>This device:</strong>{' '}
+                {myPushState.status === 'registered' ? `✅ registered (${myPushState.detail})` : `⚠️ ${myPushState.detail || 'checking…'}`}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CALL COMPOSE — pick recipients, then choose the call type */}
       {showCallCompose && canCall && (
         <div className="modal-overlay" onClick={() => setShowCallCompose(false)}>
@@ -3941,14 +4223,22 @@ function App() {
                       key={member.id}
                       className={`avatar-select ${callRecipients.includes(member.name) ? 'checked' : ''}`}
                       onClick={() => toggleCallRecipient(member.name)}
-                      title={member.displayName}
+                      title={`${member.displayName}${pushStatus ? ((pushStatus[member.name] || []).length ? ' — can receive call alerts' : ' — no phone registered for alerts') : ''}`}
                     >
                       {member.avatar}
+                      {pushStatus && (
+                        <span className={`push-dot ${(pushStatus[member.name] || []).length ? 'on' : 'off'}`}></span>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
               <p className="reminder-window-hint">This rings on their dashboard with a full-screen alert and sound — not an actual audio/video call, just a fast way to summon someone.</p>
+              <div className="push-legend">
+                <span><span className="push-dot on static"></span> phone registered for call alerts</span>
+                <span><span className="push-dot off static"></span> not registered (rings only if their app is open)</span>
+                <button type="button" className="link-btn" onClick={() => { setShowCallCompose(false); openCallAlerts(); }}>📡 Check call alerts</button>
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowCallCompose(false)}>Cancel</button>
@@ -3978,6 +4268,9 @@ function App() {
                       <span className="chat-avatar">{member?.avatar || r.to.substring(0, 2)}</span>
                       <span className="call-status-name">{member?.displayName || r.to}</span>
                       <span className="call-status-badge">{icon} {r.response === 'Ringing' ? 'Ringing...' : r.response === 'Failed' ? 'Not sent — check internet & try again' : r.response}</span>
+                      {outgoingCall.alerts && outgoingCall.alerts[r.to] && (
+                        <span className={`call-alert-note call-alert-${outgoingCall.alerts[r.to].kind}`}>{outgoingCall.alerts[r.to].text}</span>
+                      )}
                     </div>
                   );
                 })}

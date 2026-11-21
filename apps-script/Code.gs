@@ -1374,6 +1374,26 @@ function repairTeamConfig() {
 // physically delete their TeamConfig rows too (optional cleanup, not required).
 const DEPARTED_MEMBER_IDS_ = ["saraswati", "khushi", "karan", "samanta"];
 
+// The core team lives only in the app's built-in list (DEFAULT_TEAM in App.jsx), not in
+// the TeamConfig sheet — the app merges them in on screen. The server-side attendance
+// checker needs the same full list, so it uses this instead of the sheet alone.
+const DEFAULT_TEAM_ = [
+  { id: "pcwtc45", name: "PC", isAdmin: true },
+  { id: "shivendrawtc77", name: "Shivendra Singh", isAdmin: true },
+  { id: "deeksha", name: "Deeksha" }, { id: "nidhi", name: "Nidhi" }, { id: "muskan", name: "Muskan" },
+  { id: "sanjeevani", name: "Sanjeevani" }, { id: "pari", name: "Pari", isHR: true }, { id: "charu", name: "Charu" },
+  { id: "naman", name: "Naman" }, { id: "jagdish", name: "Jagdish" }
+];
+function allTeam_() {
+  const live = JSON.parse(getTeam().getContent()).team || [];
+  const have = {};
+  live.forEach(m => { have[String(m.id)] = true; });
+  DEFAULT_TEAM_.forEach(d => {
+    if (!have[d.id] && DEPARTED_MEMBER_IDS_.indexOf(d.id) === -1) live.push({ id: d.id, name: d.name, isAdmin: !!d.isAdmin, isHR: !!d.isHR, active: true });
+  });
+  return live;
+}
+
 function getTeam() {
   const sheet = getTeamConfigSheet_();
   const data = sheet.getDataRange().getValues();
@@ -2353,7 +2373,7 @@ function ensureShiftConfig_() {
   const rows = sheet.getDataRange().getValues();
   const have = {};
   for (let i = 1; i < rows.length; i++) if (rows[i][0]) have[String(rows[i][0])] = true;
-  const team = JSON.parse(getTeam().getContent()).team || [];
+  const team = allTeam_();
   const missing = team.filter(m => m.active !== false && !m.isAdmin && !have[String(m.id)]);
   if (missing.length === 0) return;
   const recent = readRecentAttendance_(getAttendanceSheet_(), 4000).values;
@@ -2409,7 +2429,7 @@ function saveShift(targetId, shiftStart, shiftEnd, userId) {
       return jsonResponse({status: "ok"});
     }
   }
-  const team = JSON.parse(getTeam().getContent()).team || [];
+  const team = allTeam_();
   const member = team.find(m => m.id === targetId);
   const r = sheet.getLastRow() + 1;
   sheet.getRange(r, 3, 1, 2).setNumberFormat('@');
@@ -2469,7 +2489,7 @@ function attendanceWatchdog() {
     const attSheet = getAttendanceSheet_();
     const recent = readRecentAttendance_(attSheet, 2500).values;
     const shifts = getShiftMap_();
-    const team = (JSON.parse(getTeam().getContent()).team || []).filter(m => m.active !== false && !m.isAdmin);
+    const team = (allTeam_()).filter(m => m.active !== false && !m.isAdmin);
     const flagSheet = getFlagsSheet_();
     const existing = readFlags_();
     const ctx = { flagKeys: {}, newFlags: [], newAttRows: [], pushes: [], nextFlagId: 1 };
@@ -2655,7 +2675,7 @@ function requestCorrection(flagId, userId, note, correctedTime) {
   sheet.getRange(flag.row, 10, 1, 2).setValues([[String(note || "").slice(0, 500), String(correctedTime || "")]]);
   // Tell HR + admins (in-app + push)
   try {
-    const team = JSON.parse(getTeam().getContent()).team || [];
+    const team = allTeam_();
     team.filter(m => ATT_MANAGER_IDS_.indexOf(m.id) !== -1 && m.id !== userId).forEach(m => {
       addToInbox(m.name, { type: "correction", taskId: "flag_" + flag.id, from: flag.name,
         title: (FLAG_LABELS_[flag.type] || flag.type) + " on " + flag.date + " — " + String(note || "").slice(0, 80), priority: "Medium" });

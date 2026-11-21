@@ -359,16 +359,25 @@ const CONTENT_FORMATS = [
 // Block colour of a calendar entry = platform + format, so a YouTube long video, a
 // YouTube Short, an Instagram Reel, a Carousel, a Facebook post… each look different.
 const BLOCK_COLORS = {
-  instagram: { 'Short (Vertical)': '#E1306C', 'Carousel': '#8134AF', 'Static Post': '#F77737', 'Story': '#F5A623', 'Live Stream': '#C13584', default: '#E1306C' },
-  youtube: { 'Long Format Video': '#FF0000', 'Short (Vertical)': '#282828', 'Community Post': '#B45309', 'Live Stream': '#B91C1C', default: '#FF0000' },
-  facebook: { 'Short (Vertical)': '#00A3FF', 'Long Format Video': '#1877F2', 'Story': '#5B8DEF', default: '#1877F2' },
-  spotify: { default: '#1DB954' },
+  instagram: { 'Short (Vertical)': '#D6249F', 'Carousel': '#7C3AED', 'Static Post': '#0D9488', 'Story': '#EAB308', 'Live Stream': '#BE185D', default: '#D6249F' },
+  youtube: { 'Long Format Video': '#E53935', 'Short (Vertical)': '#F97316', 'Community Post': '#B45309', 'Live Stream': '#B91C1C', default: '#E53935' },
+  facebook: { 'Short (Vertical)': '#0EA5E9', 'Long Format Video': '#1D4ED8', 'Story': '#6366F1', default: '#2563EB' },
+  spotify: { default: '#16A34A' },
   linkedin: { default: '#0A66C2' },
-  x: { default: '#111111' },
-  threads: { default: '#555555' },
+  x: { default: '#475569' },
+  threads: { default: '#64748B' },
   pinterest: { default: '#E60023' },
   other: { default: '#64748b' }
 };
+// The "Live post link" field exists from 22 Nov 2026 — older entries aren't counted as missing it.
+const LIVE_LINK_SINCE = '2026-11-22';
+// "19:30" → "7:30p" — short enough to always fit inside a calendar block.
+function fmtClockShort(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return hhmm || '';
+  const h = Number(m[1]);
+  return `${((h + 11) % 12) + 1}${m[2] === '00' ? '' : ':' + m[2]}${h >= 12 ? 'p' : 'a'}`;
+}
 function blockColor(contentType, channel) {
   const set = BLOCK_COLORS[platformOf(channel)] || BLOCK_COLORS.other;
   return set[contentType] || set.default;
@@ -718,6 +727,8 @@ function App() {
   });
   const [ccPlatformFilter, setCcPlatformFilter] = useState('all');
   const [ccSearch, setCcSearch] = useState('');
+  const [ccView, setCcView] = useState(() => { try { return localStorage.getItem('wtc_cc_view') || 'month'; } catch (e) { return 'month'; } });
+  useEffect(() => { try { localStorage.setItem('wtc_cc_view', ccView); } catch (e) {} }, [ccView]);
   // Which day (within the currently open group/month) is expanded to show every entry —
   // the month cell itself only shows a few compact chips, Notion-style.
   const [expandedContentDay, setExpandedContentDay] = useState(null);
@@ -796,7 +807,7 @@ function App() {
   const needsPwaSetup = teamLoaded && !currentUser;
   const isInvalidUser = teamLoaded && !!currentUser && !currentUserInfo;
   const displayName = currentUserInfo?.displayName || '';
-  const greeting = displayName ? getTimeBasedGreeting(displayName) : '';
+  const greeting = displayName ? getTimeBasedGreeting(String(displayName).split(' ')[0]) : '';
   const todayQuote = currentUser ? getTodayQuote(currentUser) : '';
   const formattedDate = getFormattedDate();
   // Only PC and Shivendra ever see the Team Management panel — checked by fixed login id, not by role text.
@@ -3822,13 +3833,13 @@ function App() {
             <img src="/wtc-logo-tight.png" alt="Write Track Creations" className="logo-premium" />
             <div className="brand-info">
               <h1 className="brand-title">WTC Hub</h1>
-              <p className="brand-subtitle">{currentUserInfo?.displayName} · {currentUserInfo?.role}</p>
+              <p className="brand-subtitle">{currentUserInfo?.role}</p>
             </div>
           </div>
 
           <div className="header-center">
             <p className="greeting-text">{greeting}</p>
-            <p className="date-text">{formattedDate}</p>
+            <p className="date-text">{new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
           </div>
 
           <div className="header-actions-premium">
@@ -4446,7 +4457,7 @@ function App() {
                 const overdue = inMonth.filter(e => e.videoStatus !== 'Published' && String(e.date).slice(0, 10) < todayKey).length;
                 const missingLink = inMonth.filter(e => e.videoStatus !== 'Published' && (e.editingStatus === 'Approved') && !toOpenableUrl(e.finalLink)).length;
                 const mismatched = inMonth.filter(e => platformMismatch(e)).length;
-                const noLive = inMonth.filter(e => e.videoStatus === 'Published' && !toOpenableUrl(e.liveLink)).length;
+                const noLive = inMonth.filter(e => e.videoStatus === 'Published' && String(e.date).slice(0, 10) >= LIVE_LINK_SINCE && !toOpenableUrl(e.liveLink)).length;
                 const noTime = inMonth.filter(e => e.videoStatus !== 'Published' && !e.time).length;
                 return (
                   <div className="cc-stats">
@@ -4499,66 +4510,80 @@ function App() {
                   contentCalGridData (useMemo'd in the component body, see above) means it
                   only recomputes when the entries, tab, month, year, or holidays actually
                   change — which is the real reason it now feels fast. */}
-              {(() => {
-                const { entriesThisGroup, cells, holidaySet } = contentCalGridData;
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const MAX_CHIPS = 3;
+              <div className="cc-viewbar">
+                <div className="cc-view-toggle">
+                  <button className={ccView === 'month' ? 'active' : ''} onClick={() => setCcView('month')}>Month</button>
+                  <button className={ccView === 'agenda' ? 'active' : ''} onClick={() => setCcView('agenda')}>List</button>
+                </div>
+                <span className="cc-viewbar-hint">Tap a day to add · tap an entry to open it</span>
+              </div>
 
+              {ccView === 'month' && (() => {
+                const { entriesThisGroup, cells, holidaySet } = contentCalGridData;
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const MAX_CHIPS = 3;
                 return (
-                  <div className="cc-calendar-grid">
+                  <div className="cc-calendar-grid cc-v15">
                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                      <div key={d} className="cc-day-header">{d}</div>
+                      <div key={d} className={`cc-day-header ${d === 'Sun' ? 'cc-sun' : ''}`}>{d}</div>
                     ))}
                     {cells.map((day, idx) => {
                       if (day === null) return <div key={idx} className="cc-day-cell cc-day-empty"></div>;
                       const dateStr = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                       const dayEntries = entriesThisGroup.filter(e => String(e.date).slice(0, 10) === dateStr)
-                        .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+                        .sort((a, b) => (a.time || '99').localeCompare(b.time || '99'));
                       const isToday = dateStr === todayStr;
+                      const isPast = dateStr < todayStr;
                       const holidayName = holidaySet[dateStr];
                       const visibleEntries = dayEntries.slice(0, MAX_CHIPS);
                       const extraCount = dayEntries.length - visibleEntries.length;
+                      const doneCount = dayEntries.filter(e => e.videoStatus === 'Published').length;
                       return (
                         <div
                           key={idx}
-                          className={`cc-day-cell ${isToday ? 'cc-today' : ''} ${holidayName ? 'cc-holiday' : ''}`}
+                          className={`cc-day-cell ${isToday ? 'cc-today' : ''} ${isPast ? 'cc-past' : ''} ${holidayName ? 'cc-holiday' : ''} ${idx % 7 === 0 ? 'cc-sunday' : ''}`}
                           onClick={() => openNewContentEntry(dateStr)}
                         >
                           <div className="cc-day-top">
-                            {isToday ? <span className="cc-day-num-today">{day}</span> : <span className="cc-day-num">{day}</span>}
-                            {holidayName && <span className="cc-holiday-ribbon" title={holidayName}>{holidayName}</span>}
+                            <span className={isToday ? 'cc-day-num-today' : 'cc-day-num'}>{day}</span>
+                            {dayEntries.length > 0 && (
+                              <span className={`cc-day-count ${doneCount === dayEntries.length ? 'all-done' : ''}`} title={`${doneCount} of ${dayEntries.length} published`}>
+                                {doneCount === dayEntries.length ? '✓ ' : ''}{doneCount}/{dayEntries.length}
+                              </span>
+                            )}
+                            <span className="cc-day-add" title="Add content">＋</span>
                           </div>
+                          {holidayName && <div className="cc-holiday-ribbon" title={holidayName}>🎉 {holidayName}</div>}
                           <div className="cc-day-entries">
                             {visibleEntries.map(entry => {
                               const fmt = formatInfo(entry.contentType, entry.channels);
                               const pk = platformOf(entry.channels);
                               const isPublished = entry.videoStatus === 'Published';
                               const stage = contentStageOf(entry);
+                              const warn = platformMismatch(entry);
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-chip cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''} ${platformMismatch(entry) ? 'cc-chip-warn' : ''}`}
+                                  className={`cc-chip cc-evt cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''} ${warn ? 'cc-chip-warn' : ''}`}
                                   style={{ '--chip': blockColor(entry.contentType, entry.channels) }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
-                                  title={`${entry.title} · ${entry.channels} · ${fmt.text} · ${entry.videoStatus || 'Not Started'}${platformMismatch(entry) ? ' · ⚠ ' + platformMismatch(entry) : ''}`}
+                                  title={`${entry.title}\n${entry.channels} · ${fmt.text}${entry.time ? ' · ' + entry.time : ''}\n${entry.videoStatus || 'Not Started'} · ${entry.assignedTo || ''}${warn ? '\n⚠ ' + warn : ''}`}
                                 >
-                                  <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={9} /></span>
-                                  <span className="cc-chip-body">
-                                    <span className="cc-chip-title">{platformMismatch(entry) && <span className="cc-warn-dot" title={platformMismatch(entry)}>⚠</span>}{entry.title}{isPublished && <span className="cc-pub-tick" title="Published">✓</span>}</span>
-                                    <span className="cc-chip-meta">
-                                      <span className="cc-format-tag" style={{ '--fmt': fmt.color }}>{fmt.text}</span>
-                                      {entry.time && <span className="cc-chip-time">{entry.time}</span>}
-                                      {CONTENT_LINK_FIELDS.some(f => toOpenableUrl(entry[f.key])) && <span className="cc-chip-link">🔗</span>}
-                                    </span>
-                                  </span>
+                                  <div className="cc-evt-row">
+                                    <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={9} /></span>
+                                    <span className="cc-format-tag">{({ 'Long video': 'Long', 'Community post': 'Community', 'Short video': 'Short' })[fmt.text] || fmt.text}</span>
+                                    {entry.time && <span className="cc-chip-time">{fmtClockShort(entry.time)}</span>}
+                                    {isPublished ? <span className="cc-done" title="Published">✓</span>
+                                      : stage === 'sched' ? <span className="cc-stage-dot st-sched" title="Scheduled"></span>
+                                      : stage === 'edit' ? <span className="cc-stage-dot st-edit" title={entry.editingStatus}></span> : null}
+                                  </div>
+                                  <div className="cc-chip-title">{warn && <span className="cc-warn-dot">⚠ </span>}{entry.title}</div>
                                 </div>
                               );
                             })}
                             {extraCount > 0 && (
-                              <div
-                                className="cc-chip cc-chip-more"
-                                onClick={(e) => { e.stopPropagation(); setExpandedContentDay({ dateStr, day }); }}
-                              >
+                              <div className="cc-chip cc-chip-more" onClick={(e) => { e.stopPropagation(); setExpandedContentDay({ dateStr, day }); }}>
                                 +{extraCount} more
                               </div>
                             )}
@@ -4566,6 +4591,52 @@ function App() {
                         </div>
                       );
                     })}
+                  </div>
+                );
+              })()}
+
+              {ccView === 'agenda' && (() => {
+                const { entriesThisGroup, holidaySet } = contentCalGridData;
+                const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const byDay = {};
+                entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix).forEach(e => { (byDay[String(e.date).slice(0, 10)] = byDay[String(e.date).slice(0, 10)] || []).push(e); });
+                const days = Object.keys(byDay).sort();
+                if (!days.length) return <div className="inbox-empty"><p>Nothing planned this month</p><span>Switch to Month and tap a day to add content.</span></div>;
+                return (
+                  <div className="cc-agenda">
+                    {days.map(d => (
+                      <div key={d} className={`cc-ag-day ${d === todayStr ? 'today' : ''} ${d < todayStr ? 'past' : ''}`}>
+                        <div className="cc-ag-date">
+                          <strong>{new Date(d + 'T12:00:00').getDate()}</strong>
+                          <span>{new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', month: 'short' })}</span>
+                          {holidaySet[d] && <em>🎉 {holidaySet[d]}</em>}
+                        </div>
+                        <div className="cc-ag-items">
+                          {byDay[d].sort((a, b) => (a.time || '99').localeCompare(b.time || '99')).map(entry => {
+                            const fmt = formatInfo(entry.contentType, entry.channels);
+                            const pk = platformOf(entry.channels);
+                            const stage = contentStageOf(entry);
+                            const warn = platformMismatch(entry);
+                            return (
+                              <div key={entry.id} className={`cc-ag-item cc-st-${stage}`} style={{ '--chip': blockColor(entry.contentType, entry.channels) }} onClick={() => openEditContentEntry(entry)}>
+                                <span className="cc-ag-time">{entry.time ? fmtClockShort(entry.time) : '—'}</span>
+                                <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={10} /></span>
+                                <div className="cc-ag-main">
+                                  <div className="cc-ag-title">{warn && <span className="cc-warn-dot" title={warn}>⚠ </span>}{entry.title}</div>
+                                  <div className="cc-ag-sub">{entry.channels} · <span className="cc-format-tag">{fmt.text}</span> · 👤 {entry.assignedTo || '—'}</div>
+                                </div>
+                                <span className={`cc-ag-status st-${stage}`}>{stage === 'pub' ? '✓ Published' : stage === 'sched' ? 'Scheduled' : stage === 'edit' ? (entry.editingStatus || 'Editing') : 'Planned'}</span>
+                                <span className="cc-ag-links">
+                                  {CONTENT_LINK_FIELDS.map(f => { const href = toOpenableUrl(entry[f.key]); return href ? <a key={f.key} href={href} target="_blank" rel="noopener noreferrer" title={f.label} onClick={(e) => e.stopPropagation()}>{f.icon}</a> : null; })}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 );
               })()}

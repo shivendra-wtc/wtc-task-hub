@@ -81,6 +81,8 @@ function doGetRouter_(e) {
   if (action === "remindTask") return remindTask(e.parameter.taskId, e.parameter.from);
   if (action === "getDiscipline") return getDiscipline(e.parameter.userId, e.parameter.year, e.parameter.month, e.parameter.scope);
   if (action === "getSettings") return getSettings();
+  if (action === "getTargets") return getTargets(e.parameter.userId);
+  if (action === "getAttendanceReport") return getAttendanceReport(e.parameter.viewerId, e.parameter.year, e.parameter.month);
   if (action === "updateAttendanceSync") return updateAttendance(e.parameter.userId, e.parameter.userName, e.parameter.status);
   return jsonResponse({status: "ok", message: "WTC API v13 running"});
 }
@@ -113,7 +115,7 @@ function doPost(e) {
     if (action === "deleteContentEntry") return deleteContentEntry(data.id);
     if (action === "addMeeting") return addMeeting(data.meeting);
     if (action === "deleteMeeting") return deleteMeeting(data.meetingId);
-    if (action === "addContentChannel") return addContentChannel(data.groupName, data.channelName);
+    if (action === "addContentChannel") return addContentChannel(data.groupName, data.channelName, data.platform);
     if (action === "deleteContentChannel") return deleteContentChannel(data.groupName, data.channelName);
     if (action === "addHoliday") return addHoliday(data.date, data.name);
     if (action === "deleteHoliday") return deleteHoliday(data.id);
@@ -123,6 +125,12 @@ function doPost(e) {
     if (action === "resolveFlag") return resolveFlag(data.flagId, data.decision, data.resolverId, data.resolverName);
     if (action === "saveSetting") return saveSetting(data.key, data.value, data.userId);
     if (action === "saveShift") return saveShift(data.targetId, data.shiftStart, data.shiftEnd, data.userId);
+    if (action === "updateContentChannel") return updateContentChannel(data.groupName, data.oldName, data.newName, data.platform, data.newGroup, data.userId);
+    if (action === "saveTarget") return saveTarget(data.target, data.userId, data.userName);
+    if (action === "updateTargetProgress") return updateTargetProgress(data.id, data.achieved, data.note, data.userId, data.userName);
+    if (action === "deleteTarget") return deleteTarget(data.id, data.userId);
+    if (action === "markLeave") return markLeave(data.userIds, data.fromDate, data.toDate, data.leaveType, data.note, data.markerId, data.markerName);
+    if (action === "cancelLeave") return cancelLeave(data.id, data.markerId);
     return jsonResponse({status: "error", message: "Unknown action"});
   } catch (error) {
     return jsonResponse({status: "error", message: error.toString()});
@@ -1696,8 +1704,14 @@ function getContentSheet_() {
   // FIX — "can't find the Drive links in the sheet": the link columns are spread across
   // J, K, R, S and U and some still had old/blank headers. Give every link column a clear
   // 🔗 header so they're easy to spot. Only writes when a header is actually different.
-  const LINK_HEADERS = { 10: "🔗 Final Editing Link", 11: "🔗 Thumbnail Link", 18: "🔗 Raw Footage Link", 19: "🔗 Draft/Editing Link", 21: "🔗 Design Link" };
-  const header = sheet.getRange(1, 1, 1, 21).getValues()[0];
+  // v14 — a "Live Post Link" column (V) and an "All Links" column (W) that gathers every
+  // link of the row in one cell, so all links can be found in one place in the sheet.
+  if (sheet.getLastColumn() < 23) {
+    sheet.getRange(1, 22, 1, 2).setValues([["🔗 Live Post Link", "🔗 ALL LINKS (auto)"]]);
+    backfillAllLinks_(sheet);
+  }
+  const LINK_HEADERS = { 10: "🔗 Final Editing Link", 11: "🔗 Thumbnail Link", 18: "🔗 Raw Footage Link", 19: "🔗 Draft/Editing Link", 21: "🔗 Design Link", 22: "🔗 Live Post Link", 23: "🔗 ALL LINKS (auto)" };
+  const header = sheet.getRange(1, 1, 1, 23).getValues()[0];
   Object.keys(LINK_HEADERS).forEach(col => {
     if (header[col - 1] !== LINK_HEADERS[col]) sheet.getRange(1, Number(col)).setValue(LINK_HEADERS[col]);
   });
@@ -1711,6 +1725,18 @@ function getContentSheet_() {
 // UTC string directly, so every date silently shifted back a day. This formats it back to
 // a clean "yyyy-MM-dd" string in the SAME timezone it was created in, so it always matches
 // what was actually typed in, no matter how Sheets stored it internally.
+// Every link of a content row, one per line, labelled — for the "ALL LINKS" column.
+function allLinksText_(row) {
+  const parts = [["Final", 9], ["Thumbnail", 10], ["Raw", 17], ["Draft", 18], ["Design", 20], ["Live", 21]];
+  return parts.map(p => { const v = String(row[p[1]] || "").trim(); return v ? p[0] + ": " + v : ""; }).filter(x => x).join("\n");
+}
+function backfillAllLinks_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return;
+  const rows = sheet.getRange(2, 1, last - 1, 22).getValues();
+  sheet.getRange(2, 23, last - 1, 1).setValues(rows.map(r => [allLinksText_(r)]));
+}
+
 function formatDateSafe_(value) {
   if (value instanceof Date) {
     return Utilities.formatDate(value, "Asia/Kolkata", "yyyy-MM-dd");
@@ -1766,7 +1792,8 @@ function buildContentEntries_() {
       rawLink: data[i][17] || "",
       draftLink: data[i][18] || "",
       time: formatTimeSafe_(data[i][19]),
-      designLink: data[i][20] || ""
+      designLink: data[i][20] || "",
+      liveLink: data[i][21] || ""
     });
   }
   return entries;
@@ -1845,14 +1872,16 @@ function addContentEntry(entry) {
   const newRow = sheet.getLastRow() + 1;
   sheet.getRange(newRow, 6).setNumberFormat('@');
   sheet.getRange(newRow, 20).setNumberFormat('@');
-  sheet.getRange(newRow, 1, 1, 21).setValues([[
+  const newValues = [
     newId, entry.channelGroup, entry.channels, entry.contentType, entry.title, entry.date,
     entry.assignedTo, entry.videoStatus || "Not Started", entry.priority || "Medium",
     entry.finalLink || "", entry.thumbnailLink || "", entry.description || "", entry.notes || "",
     "", entry.createdBy, todayStr,
     entry.editingStatus || "Not Started", entry.rawLink || "", entry.draftLink || "",
-    entry.time || "", entry.designLink || ""
-  ]]);
+    entry.time || "", entry.designLink || "", entry.liveLink || ""
+  ];
+  newValues.push(allLinksText_(newValues));
+  sheet.getRange(newRow, 1, 1, 23).setValues([newValues]);
   refreshContentCache_();
 
   // FIX — task integration: this entry automatically creates a real Task, so it shows up
@@ -1893,7 +1922,7 @@ function addContentEntry(entry) {
 const CONTENT_FIELD_COLS_ = {
   channels: 3, contentType: 4, title: 5, date: 6, assignedTo: 7, videoStatus: 8,
   priority: 9, finalLink: 10, thumbnailLink: 11, description: 12, notes: 13,
-  editingStatus: 17, rawLink: 18, draftLink: 19, time: 20, designLink: 21
+  editingStatus: 17, rawLink: 18, draftLink: 19, time: 20, designLink: 21, liveLink: 22
 };
 
 function updateContentEntry(id, updates, userName) {
@@ -1907,7 +1936,7 @@ function updateContentEntry(id, updates, userName) {
   }
   if (rowNum === -1) return jsonResponse({status: "error", message: "Content entry not found"});
 
-  const range = sheet.getRange(rowNum, 1, 1, 21);
+  const range = sheet.getRange(rowNum, 1, 1, 23);
   const row = range.getValues()[0];
   const linkedTaskId = row[13];
   const wasPublished = row[7] === "Published";
@@ -1919,6 +1948,7 @@ function updateContentEntry(id, updates, userName) {
   if (row[19] instanceof Date) row[19] = formatTimeSafe_(row[19]);
   sheet.getRange(rowNum, 6).setNumberFormat('@');
   sheet.getRange(rowNum, 20).setNumberFormat('@');
+  row[22] = allLinksText_(row);
   range.setValues([row]);
   refreshContentCache_();
 
@@ -1992,28 +2022,76 @@ function getContentChannelsSheet_() {
   return sheet;
 }
 
+const CHANNEL_PLATFORMS_ = ["instagram", "youtube", "facebook", "spotify", "linkedin", "x", "threads", "pinterest", "other"];
+
+function ensureChannelPlatformCol_(sheet) {
+  if (sheet.getLastColumn() < 5) sheet.getRange(1, 5).setValue("Platform");
+}
+
 function getContentChannels() {
   const sheet = getContentChannelsSheet_();
+  ensureChannelPlatformCol_(sheet);
   const data = sheet.getDataRange().getValues();
   const groups = {}; // { groupName: [channelName, ...] } — insertion order preserved
   const order = [];
+  const platforms = {}; // channelName → platform chosen in Manage Channels ("" = automatic)
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0] || !data[i][1]) continue;
     const g = data[i][1], c = data[i][2];
     if (!groups[g]) { groups[g] = []; order.push(g); }
-    if (c) groups[g].push(c);
+    if (c) {
+      groups[g].push(c);
+      if (data[i][4]) platforms[c] = String(data[i][4]).toLowerCase();
+    }
   }
-  return jsonResponse({status: "ok", groups: groups, groupOrder: order});
+  return jsonResponse({status: "ok", groups: groups, groupOrder: order, platforms: platforms});
 }
 
-function addContentChannel(groupName, channelName) {
+function addContentChannel(groupName, channelName, platform) {
   const sheet = getContentChannelsSheet_();
+  ensureChannelPlatformCol_(sheet);
   const data = sheet.getDataRange().getValues();
   let maxId = 0;
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] && parseInt(data[i][0]) > maxId) maxId = parseInt(data[i][0]);
+    if (data[i][1] === groupName && data[i][2] === channelName) return jsonResponse({status: "ok", duplicate: true});
   }
-  sheet.appendRow([maxId + 1, groupName, channelName || "", data.length]);
+  const p = CHANNEL_PLATFORMS_.indexOf(String(platform || "").toLowerCase()) !== -1 ? String(platform).toLowerCase() : "";
+  sheet.appendRow([maxId + 1, groupName, channelName || "", data.length, p]);
+  return jsonResponse({status: "ok"});
+}
+
+// v14 — rename a channel, move it to another group and/or set its platform. Calendar
+// entries that use the old name (in that group) are renamed too, so nothing gets lost.
+function updateContentChannel(groupName, oldName, newName, platform, newGroup, userId) {
+  if (ATT_MANAGER_IDS_.indexOf(userId) === -1) return jsonResponse({status: "error", message: "Not allowed"});
+  newName = String(newName || oldName).trim();
+  newGroup = String(newGroup || groupName).trim();
+  if (!newName || !newGroup) return jsonResponse({status: "error", message: "Name required"});
+  const sheet = getContentChannelsSheet_();
+  ensureChannelPlatformCol_(sheet);
+  const data = sheet.getDataRange().getValues();
+  let found = false;
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][1] === groupName && data[i][2] === oldName) {
+      const p = CHANNEL_PLATFORMS_.indexOf(String(platform || "").toLowerCase()) !== -1 ? String(platform).toLowerCase() : "";
+      sheet.getRange(i + 1, 2, 1, 2).setValues([[newGroup, newName]]);
+      sheet.getRange(i + 1, 5).setValue(p);
+      found = true;
+      break;
+    }
+  }
+  if (!found) return jsonResponse({status: "error", message: "Channel not found"});
+  if (newName !== oldName || newGroup !== groupName) {
+    const cs = getContentSheet_();
+    const last = cs.getLastRow();
+    if (last >= 2) {
+      const vals = cs.getRange(2, 2, last - 1, 2).getValues();
+      let changed = false;
+      vals.forEach(v => { if (v[0] === groupName && v[1] === oldName) { v[0] = newGroup; v[1] = newName; changed = true; } });
+      if (changed) { cs.getRange(2, 2, last - 1, 2).setValues(vals); refreshContentCache_(); }
+    }
+  }
   return jsonResponse({status: "ok"});
 }
 
@@ -2535,14 +2613,18 @@ function remindOnce_(ctx, kind, dateKey, member, title, body) {
 // day we are allowed to judge (24*60 for a finished day).
 function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
   const live = !isFinal || dateKey === getIndiaDate();
+  if (!ctx.leaves) { try { ctx.leaves = leaveMap_(); } catch (e) { ctx.leaves = {}; } }
   team.forEach(member => {
+    const leaveType = ctx.leaves[dateKey + "|" + member.id] || "";
+    if (leaveType && leaveType !== "Work From Home" && leaveType !== "Half Day") return; // on leave — no flags, no reminders
+    const halfDay = leaveType === "Half Day";
     const shift = shifts[member.id] || { start: "10:00", end: "19:00" };
     const startMin = hhmmToMin_(shift.start), endMin = hhmmToMin_(shift.end);
     const info = byUser[member.id];
     const events = info ? info.events.slice() : [];
 
     if (events.length === 0) {
-      if (live && !isFinal && nowMin >= startMin + 20 && nowMin < endMin) {
+      if (live && !isFinal && !halfDay && nowMin >= startMin + 20 && nowMin < endMin) {
         remindOnce_(ctx, "signin", dateKey, member, "🕘 You haven't signed in", "Your shift started at " + shift.start + ". Open WTC Hub and tap Sign In.");
       }
       return;
@@ -2552,7 +2634,7 @@ function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
     const firstWork = events.find(e => e.status === "Working" || e.status === "Meeting");
     if (firstWork) {
       const late = istMinutes_(firstWork.time) - startMin;
-      if (late > LATE_GRACE_MIN_) {
+      if (late > LATE_GRACE_MIN_ && !halfDay) {
         addFlag_(ctx, dateKey, member.id, member.name, "LATE", "Signed in at " + fmt12_(firstWork.time) + " (shift starts " + shift.start + ")", late);
       }
     }
@@ -2572,7 +2654,7 @@ function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
       }
     });
 
-    if (lunches.length === 0) {
+    if (lunches.length === 0 && !halfDay) {
       if (live && !isFinal && nowMin >= 13 * 60 + 40 && nowMin < LUNCH_END_MIN_) {
         remindOnce_(ctx, "lunchwin", dateKey, member, "🍽️ Mark your lunch", "Lunch can be marked only until 2:00 PM. If not marked, 30 minutes are deducted automatically.");
       }
@@ -2609,7 +2691,7 @@ function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
     }
 
     // HOURS (judged once the day is over)
-    if (isFinal && firstWork) {
+    if (isFinal && firstWork && !halfDay) {
       const hours = workingMsOf_(events, null) / 3600000;
       if (hours < MIN_WORK_HOURS_) {
         addFlag_(ctx, dateKey, member.id, member.name, "SHORT_HOURS", "Worked " + Math.floor(hours) + "h " + Math.round((hours % 1) * 60) + "m (minimum " + MIN_WORK_HOURS_ + "h)", Math.round((MIN_WORK_HOURS_ - hours) * 60));
@@ -2816,5 +2898,311 @@ function setupWtcTriggers() {
   ensureShiftConfig_();
   getFlagsSheet_();
   getSettingsSheet_();
+  getTargetsSheet_();
+  getLeavesSheet_();
   Logger.log("WTC triggers ready: " + ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()).join(", "));
+}
+
+// ============================================================
+// v14 — TARGETS
+// • Everyone can set targets for themselves.
+// • PC, Shivendra and HR (Pari) can also assign targets to anyone.
+// • PC and Shivendra see every target. Everyone else sees only their own targets and
+//   the ones they assigned (so HR sees what she assigned, not everybody's).
+// Progress is a number (e.g. 18 of 30 reels) with a short history of updates.
+// ============================================================
+const TARGET_HEADERS_ = ["ID", "Title", "Details", "Owner ID", "Owner", "Assigned By ID", "Assigned By",
+  "Period", "Start", "Due", "Target", "Unit", "Achieved", "Status", "Created", "Updated", "Log"];
+
+function getTargetsSheet_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName("Targets");
+  if (!sheet) {
+    sheet = ss.insertSheet("Targets");
+    sheet.appendRow(TARGET_HEADERS_);
+    sheet.getRange(2, 9, sheet.getMaxRows() - 1, 2).setNumberFormat('@');
+  }
+  return sheet;
+}
+
+function readTargets_() {
+  const rows = getTargetsSheet_().getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0]) continue;
+    let log = [];
+    try { log = JSON.parse(r[16] || "[]"); } catch (e) {}
+    out.push({ row: i + 1, id: String(r[0]), title: r[1], details: r[2], ownerId: String(r[3]), owner: r[4],
+      assignedById: String(r[5]), assignedBy: r[6], period: r[7], start: formatDateSafe_(r[8]), due: formatDateSafe_(r[9]),
+      target: Number(r[10]) || 0, unit: r[11] || "", achieved: Number(r[12]) || 0, status: r[13] || "Active",
+      created: r[14] instanceof Date ? r[14].toISOString() : String(r[14] || ""), updated: r[15] instanceof Date ? r[15].toISOString() : String(r[15] || ""), log: log });
+  }
+  return out;
+}
+
+function canSeeTarget_(t, userId) {
+  return APP_ADMIN_IDS_.indexOf(userId) !== -1 || t.ownerId === userId || t.assignedById === userId;
+}
+
+function getTargets(userId) {
+  if (!userId) return jsonResponse({status: "error", message: "Missing user"});
+  const list = readTargets_().filter(t => canSeeTarget_(t, userId));
+  list.forEach(t => delete t.row);
+  return jsonResponse({status: "ok", targets: list, canSeeAll: APP_ADMIN_IDS_.indexOf(userId) !== -1});
+}
+
+// target: {id?, title, details, ownerIds:[...], period, start, due, target, unit}
+function saveTarget(target, userId, userName) {
+  if (!target || !String(target.title || "").trim()) return jsonResponse({status: "error", message: "Title required"});
+  const isManager = ATT_MANAGER_IDS_.indexOf(userId) !== -1;
+  const isAdmin = APP_ADMIN_IDS_.indexOf(userId) !== -1;
+  const sheet = getTargetsSheet_();
+  const now = getIndiaTimeISO();
+  const team = allTeam_();
+  const nameOf = id => { const m = team.find(x => x.id === id); return m ? m.name : id; };
+
+  if (target.id) {
+    const t = readTargets_().find(x => x.id === String(target.id));
+    if (!t) return jsonResponse({status: "error", message: "Target not found"});
+    if (!(isAdmin || t.assignedById === userId)) return jsonResponse({status: "error", message: "Only the person who set this target can edit it"});
+    sheet.getRange(t.row, 9, 1, 2).setNumberFormat('@');
+    sheet.getRange(t.row, 2, 1, 2).setValues([[String(target.title).trim(), target.details || ""]]);
+    sheet.getRange(t.row, 8, 1, 5).setValues([[target.period || t.period, target.start || t.start, target.due || t.due, Number(target.target) || t.target, target.unit || t.unit]]);
+    const status = t.status === "Cancelled" ? t.status : (t.achieved >= (Number(target.target) || t.target) ? "Achieved" : "Active");
+    sheet.getRange(t.row, 14, 1, 3).setValues([[status, t.created, now]]);
+    return jsonResponse({status: "ok", id: t.id});
+  }
+
+  const owners = (target.ownerIds && target.ownerIds.length ? target.ownerIds : [userId]).map(String);
+  if (!isManager && owners.some(o => o !== userId)) return jsonResponse({status: "error", message: "You can only set targets for yourself"});
+  let next = nextIdFromTail_(sheet);
+  const rows = owners.map(ownerId => [next++, String(target.title).trim(), target.details || "", ownerId, nameOf(ownerId), userId, userName || nameOf(userId),
+    target.period || "Monthly", target.start || getIndiaDate(), target.due || getIndiaDate(), Number(target.target) || 1, target.unit || "",
+    0, "Active", now, now, "[]"]);
+  const r = sheet.getLastRow() + 1;
+  sheet.getRange(r, 9, rows.length, 2).setNumberFormat('@');
+  sheet.getRange(r, 1, rows.length, TARGET_HEADERS_.length).setValues(rows);
+  rows.forEach(row => {
+    if (row[3] !== userId) {
+      try { addToInbox(row[4], { type: "new_target", taskId: "target_" + row[0], from: row[6], title: row[1] + " — " + row[10] + " " + row[11] + " by " + row[9], priority: "High" }); } catch (e) {}
+    }
+  });
+  return jsonResponse({status: "ok", ids: rows.map(x => x[0])});
+}
+
+function updateTargetProgress(id, achieved, note, userId, userName) {
+  const t = readTargets_().find(x => x.id === String(id));
+  if (!t) return jsonResponse({status: "error", message: "Target not found"});
+  if (!(t.ownerId === userId || t.assignedById === userId || APP_ADMIN_IDS_.indexOf(userId) !== -1)) return jsonResponse({status: "error", message: "Not allowed"});
+  const value = Math.max(0, Number(achieved) || 0);
+  const log = (t.log || []).concat([{ at: getIndiaTimeISO(), by: userName || userId, value: value, note: String(note || "").slice(0, 200) }]).slice(-50);
+  const wasAchieved = t.status === "Achieved";
+  const status = value >= t.target ? "Achieved" : (t.status === "Cancelled" ? "Cancelled" : "Active");
+  const sheet = getTargetsSheet_();
+  sheet.getRange(t.row, 13, 1, 2).setValues([[value, status]]);
+  sheet.getRange(t.row, 16, 1, 2).setValues([[getIndiaTimeISO(), JSON.stringify(log)]]);
+  if (status === "Achieved" && !wasAchieved && t.assignedById !== t.ownerId) {
+    try { addToInbox(t.assignedBy, { type: "target_achieved", taskId: "target_" + t.id, from: t.owner, title: t.title + " — " + value + "/" + t.target + " " + t.unit, priority: "Medium" }); } catch (e) {}
+  }
+  return jsonResponse({status: "ok", targetStatus: status});
+}
+
+function deleteTarget(id, userId) {
+  const t = readTargets_().find(x => x.id === String(id));
+  if (!t) return jsonResponse({status: "error", message: "Target not found"});
+  if (!(t.assignedById === userId || APP_ADMIN_IDS_.indexOf(userId) !== -1)) return jsonResponse({status: "error", message: "Not allowed"});
+  getTargetsSheet_().deleteRow(t.row);
+  return jsonResponse({status: "ok"});
+}
+
+// ============================================================
+// v14 — LEAVE + ATTENDANCE REVIEW (HR, PC, Shivendra)
+// HR marks leave for a person (one or many days). On a leave day the attendance checker
+// gives no flags or reminders to that person (Half Day: no late / short-hours / lunch
+// flags), and any flag already given for that day is excused automatically.
+// The review report shows every person, every day of a month, with totals that help at
+// salary time. Nothing is ever deleted — a leave is "Cancelled", not removed.
+// ============================================================
+const LEAVE_TYPES_ = ["Casual Leave", "Sick Leave", "Paid Leave", "Unpaid Leave", "Half Day", "Work From Home", "Official Duty", "Comp Off"];
+const LEAVE_HEADERS_ = ["ID", "Date", "User ID", "Name", "Type", "Note", "Marked By", "Marked At", "Status"];
+
+function getLeavesSheet_() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName("Leaves");
+  if (!sheet) {
+    sheet = ss.insertSheet("Leaves");
+    sheet.appendRow(LEAVE_HEADERS_);
+    sheet.getRange(2, 2, sheet.getMaxRows() - 1, 1).setNumberFormat('@');
+  }
+  return sheet;
+}
+
+function readLeaves_() {
+  const rows = getLeavesSheet_().getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (!rows[i][0]) continue;
+    out.push({ row: i + 1, id: String(rows[i][0]), date: formatDateSafe_(rows[i][1]), userId: String(rows[i][2]), name: rows[i][3],
+      type: rows[i][4], note: rows[i][5], markedBy: rows[i][6], markedAt: rows[i][7] instanceof Date ? rows[i][7].toISOString() : String(rows[i][7] || ""),
+      status: rows[i][8] || "Active" });
+  }
+  return out;
+}
+
+// { "yyyy-MM-dd|userId": type } for active leaves
+function leaveMap_() {
+  const map = {};
+  readLeaves_().forEach(l => { if (l.status !== "Cancelled") map[l.date + "|" + l.userId] = l.type; });
+  return map;
+}
+
+function markLeave(userIds, fromDate, toDate, leaveType, note, markerId, markerName) {
+  if (ATT_MANAGER_IDS_.indexOf(markerId) === -1) return jsonResponse({status: "error", message: "Only HR, PC or Shivendra can mark leave"});
+  if (LEAVE_TYPES_.indexOf(leaveType) === -1) return jsonResponse({status: "error", message: "Unknown leave type"});
+  const ids = (userIds || []).map(String).filter(x => x);
+  if (!ids.length || !/^\d{4}-\d{2}-\d{2}$/.test(String(fromDate))) return jsonResponse({status: "error", message: "Pick people and a date"});
+  const to = /^\d{4}-\d{2}-\d{2}$/.test(String(toDate)) ? String(toDate) : String(fromDate);
+  if (to < fromDate) return jsonResponse({status: "error", message: "End date is before start date"});
+  const days = [];
+  for (let d = new Date(fromDate + "T12:00:00+05:30"); dateKey_(d) <= to && days.length < 62; d = addDays_(d, 1)) {
+    const k = dateKey_(d);
+    if (isWorkingDay_(k)) days.push(k);
+  }
+  if (!days.length) return jsonResponse({status: "error", message: "Those dates are Sundays/holidays"});
+  const team = allTeam_();
+  const sheet = getLeavesSheet_();
+  const existing = readLeaves_();
+  let next = nextIdFromTail_(sheet);
+  const now = getIndiaTimeISO();
+  const newRows = [];
+  ids.forEach(uid => {
+    const m = team.find(x => x.id === uid);
+    days.forEach(k => {
+      const old = existing.find(l => l.date === k && l.userId === uid && l.status !== "Cancelled");
+      if (old) sheet.getRange(old.row, 5, 1, 5).setValues([[leaveType, note || "", markerName || markerId, now, "Active"]]);
+      else newRows.push([next++, k, uid, m ? m.name : uid, leaveType, note || "", markerName || markerId, now, "Active"]);
+    });
+  });
+  if (newRows.length) {
+    const r = sheet.getLastRow() + 1;
+    sheet.getRange(r, 2, newRows.length, 1).setNumberFormat('@');
+    sheet.getRange(r, 1, newRows.length, LEAVE_HEADERS_.length).setValues(newRows);
+  }
+  // Excuse flags already given on those days (WFH still follows the normal rules).
+  if (leaveType !== "Work From Home") {
+    const halfOnly = leaveType === "Half Day";
+    const fsheet = getFlagsSheet_();
+    readFlags_().forEach(f => {
+      if (ids.indexOf(f.userId) === -1 || days.indexOf(f.date) === -1) return;
+      if (f.status === "Excused") return;
+      if (halfOnly && ["LATE", "SHORT_HOURS", "LUNCH_NOT_MARKED"].indexOf(f.type) === -1) return;
+      fsheet.getRange(f.row, 8).setValue("Excused");
+      fsheet.getRange(f.row, 12, 1, 2).setValues([["Leave: " + leaveType + " (" + (markerName || markerId) + ")", now]]);
+    });
+  }
+  ids.forEach(uid => {
+    const m = team.find(x => x.id === uid);
+    if (m) { try { addToInbox(m.name, { type: "attendance", taskId: "leave", from: markerName || "HR", title: leaveType + " marked for " + (days.length === 1 ? days[0] : days[0] + " to " + days[days.length - 1]), priority: "Medium" }, { noPush: true }); } catch (e) {} }
+  });
+  return jsonResponse({status: "ok", days: days.length});
+}
+
+function cancelLeave(id, markerId) {
+  if (ATT_MANAGER_IDS_.indexOf(markerId) === -1) return jsonResponse({status: "error", message: "Not allowed"});
+  const l = readLeaves_().find(x => x.id === String(id));
+  if (!l) return jsonResponse({status: "error", message: "Leave not found"});
+  getLeavesSheet_().getRange(l.row, 9).setValue("Cancelled");
+  return jsonResponse({status: "ok"});
+}
+
+// Month review for HR / PC / Shivendra: every person × every day, plus salary-time totals.
+function getAttendanceReport(viewerId, year, month) {
+  if (ATT_MANAGER_IDS_.indexOf(viewerId) === -1) return jsonResponse({status: "error", message: "Not allowed"});
+  const y = parseInt(year, 10), m = parseInt(month, 10);
+  const prefix = y + "-" + String(m).padStart(2, "0");
+  const daysIn = daysInMonth_(y, m - 1);
+  const today = getIndiaDate();
+  const nowMs = Date.now();
+  const team = allTeam_().filter(x => x.active !== false && !x.isAdmin);
+  const shifts = getShiftMap_();
+  const leaves = readLeaves_().filter(l => l.date.indexOf(prefix) === 0);
+  const leaveBy = {};
+  leaves.forEach(l => { if (l.status !== "Cancelled") leaveBy[l.date + "|" + l.userId] = l; });
+  const flags = readFlags_().filter(f => f.date.indexOf(prefix) === 0);
+  const holidays = getHolidayDateSet_();
+
+  const events = {}; // uid|date → [{status,time}]
+  const att = getAttendanceSheet_();
+  const last = att.getLastRow();
+  if (last >= 2) {
+    att.getRange(2, 1, last - 1, 5).getValues().forEach(r => {
+      if (!r[1]) return;
+      const t = r[4] instanceof Date ? r[4] : new Date(r[4]);
+      if (isNaN(t.getTime())) return;
+      const k = Utilities.formatDate(t, "Asia/Kolkata", "yyyy-MM-dd");
+      if (k.indexOf(prefix) !== 0) return;
+      const key = r[1] + "|" + k;
+      (events[key] = events[key] || []).push({ status: String(r[3]), time: t });
+    });
+  }
+
+  const people = team.map(mem => {
+    const shift = shifts[mem.id] || { start: "10:00", end: "19:00" };
+    const totals = { workingDays: 0, present: 0, absent: 0, halfDays: 0, leaveDays: 0, paidLeave: 0, unpaidLeave: 0, wfh: 0,
+      late: 0, workedMin: 0, strikes: 0, excused: 0, leavesByType: {} };
+    const days = [];
+    for (let d = 1; d <= daysIn; d++) {
+      const k = prefix + "-" + String(d).padStart(2, "0");
+      const ev = (events[mem.id + "|" + k] || []).sort((a, b) => a.time - b.time);
+      const leave = leaveBy[k + "|" + mem.id];
+      const working = isWorkingDay_(k);
+      const dayFlags = flags.filter(f => f.userId === mem.id && f.date === k);
+      const cell = { date: k, code: "", inAt: "", outAt: "", workedMin: 0, lunchMin: 0, leave: leave ? leave.type : "", leaveId: leave ? leave.id : "",
+        flags: dayFlags.map(f => ({ type: f.type, status: f.status, detail: f.detail })) };
+      if (ev.length) {
+        const first = ev.find(e => e.status === "Working" || e.status === "Meeting") || ev[0];
+        const lastEv = ev[ev.length - 1];
+        cell.inAt = Utilities.formatDate(first.time, "Asia/Kolkata", "HH:mm");
+        if (lastEv.status === "Signed Out") cell.outAt = Utilities.formatDate(lastEv.time, "Asia/Kolkata", "HH:mm");
+        const until = k === today ? new Date(nowMs) : null;
+        cell.workedMin = Math.round(workingMsOf_(ev, until) / 60000);
+        let lunch = 0;
+        ev.forEach((e, i) => { if (e.status === "Lunch Break") { const end = i + 1 < ev.length ? ev[i + 1].time : (k === today ? new Date(nowMs) : e.time); lunch += Math.max(0, end - e.time); } });
+        cell.lunchMin = Math.round(lunch / 60000);
+      }
+      if (!working) cell.code = holidays.has(k) ? "HOL" : "OFF";
+      else if (k > today) cell.code = leave ? "LV" : "FUT";
+      else if (leave && leave.type === "Work From Home") cell.code = "WFH";
+      else if (leave && leave.type === "Half Day") cell.code = "HD";
+      else if (leave) cell.code = "LV";
+      else if (ev.length) cell.code = "P";
+      else cell.code = k === today ? "NS" : "A";
+
+      if (working && k <= today) {
+        totals.workingDays++;
+        if (cell.code === "P" || cell.code === "WFH") totals.present++;
+        if (cell.code === "WFH") totals.wfh++;
+        if (cell.code === "HD") { totals.halfDays++; totals.present += 0.5; }
+        if (cell.code === "A") totals.absent++;
+        if (cell.code === "LV") {
+          totals.leaveDays++;
+          totals.leavesByType[leave.type] = (totals.leavesByType[leave.type] || 0) + 1;
+          if (leave.type === "Unpaid Leave") totals.unpaidLeave++; else totals.paidLeave++;
+        }
+      }
+      totals.workedMin += cell.workedMin;
+      dayFlags.forEach(f => {
+        if (f.status === "Excused") totals.excused++; else totals.strikes++;
+        if (f.type === "LATE" && f.status !== "Excused") totals.late++;
+      });
+      days.push(cell);
+    }
+    totals.strikeDeduction = Math.floor(totals.strikes / STRIKES_PER_HALF_DAY_) * 0.5;
+    totals.deductionDays = totals.absent + totals.unpaidLeave + totals.halfDays * 0.5 + totals.strikeDeduction;
+    totals.avgWorkedMin = totals.present > 0 ? Math.round(totals.workedMin / totals.present) : 0;
+    return { userId: mem.id, name: mem.name, shift: shift, days: days, totals: totals };
+  });
+  return jsonResponse({ status: "ok", year: y, month: m, people: people, leaveTypes: LEAVE_TYPES_,
+    leaves: leaves.map(l => { delete l.row; return l; }), rules: attendanceRules_() });
 }

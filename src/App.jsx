@@ -3,7 +3,7 @@ import { SiInstagram, SiYoutube, SiFacebook, SiSpotify, SiX, SiThreads, SiPinter
 import { FaLinkedin } from 'react-icons/fa'
 import {
   FiBell, FiX, FiCheckCircle, FiCalendar, FiEdit2, FiTrash2, FiClipboard, FiSun, FiUsers, FiRepeat,
-  FiPhone, FiMessageSquare, FiRefreshCw, FiPlus, FiShield, FiSettings, FiBellOff, FiClock, FiAlertTriangle
+  FiPhone, FiMessageSquare, FiRefreshCw, FiPlus, FiShield, FiSettings, FiBellOff, FiClock, FiAlertTriangle, FiTarget, FiDownload
 } from 'react-icons/fi'
 import { LuBellRing as FiBellRing } from 'react-icons/lu'
 import './App.css'
@@ -25,137 +25,205 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 const QUOTES = {
+  // v14 — fresh set of daily lines (one per day of the month, per role). Written for
+  // WTC; no famous-person attributions, so nothing can be misquoted.
   manager: [
-    "Great leaders create more leaders, not followers. — Tom Peters",
-    "Vision without execution is hallucination. — Thomas Edison",
-    "Management is doing things right; leadership is doing the right things. — Peter Drucker",
-    "Innovation distinguishes between a leader and a follower. — Steve Jobs",
-    "Leadership is not about being in charge. It's about taking care of those in your charge. — Simon Sinek",
-    "Success is not final, failure is not fatal. — Winston Churchill",
-    "Discipline is the bridge between goals and accomplishment. — Jim Rohn",
-    "The way to get started is to quit talking and begin doing. — Walt Disney",
-    "A goal without a plan is just a wish. — Antoine de Saint-Exupery",
-    "Great things never come from comfort zones.",
-    "The harder you work, the luckier you get. — Gary Player",
-    "Believe you can and you're halfway there. — Theodore Roosevelt",
-    "Effective leadership is putting first things first. — Stephen Covey",
-    "Quality is not an act, it is a habit. — Aristotle",
-    "Excellence is never an accident. — Aristotle",
-    "Do what you can, with what you have, where you are. — Theodore Roosevelt",
-    "The only way to do great work is to love what you do. — Steve Jobs",
-    "Success comes to those too busy to look for it. — Henry David Thoreau",
-    "Coming together is a beginning, staying together is success. — Henry Ford",
-    "Lead by example, not by command."
+    "Clear priorities make a calm team.",
+    "Plan the week on Monday, protect it till Saturday.",
+    "A good brief saves three rounds of edits.",
+    "Feedback early is kindness; feedback late is rework.",
+    "Your team moves at the speed of your decisions.",
+    "Celebrate the finished, not just the started.",
+    "One clear owner beats five helpful hands.",
+    "Deadlines are promises — keep fewer, keep all.",
+    "Numbers tell you what happened; people tell you why.",
+    "Remove one blocker today and the whole week runs faster.",
+    "Consistency builds the page; spikes only decorate it.",
+    "Ask 'what's stuck?' before 'what's done?'.",
+    "A calm voice in a busy room is leadership.",
+    "Delegate the task, keep the standard.",
+    "Every post is a promise to the audience. Keep it.",
+    "Good systems make good days ordinary.",
+    "Review the work, not the worker — then thank the worker.",
+    "If everything is urgent, nothing is planned.",
+    "Small daily wins compound into big monthly numbers.",
+    "Set the bar, show the way, then step aside.",
+    "Today's check-in prevents tomorrow's fire.",
+    "Trust is built on time — yours and theirs.",
+    "Teach once properly; it saves teaching ten times.",
+    "Measure what matters: reach, retention, results.",
+    "The best plans leave room for the best ideas.",
+    "A team that knows the goal needs less supervision.",
+    "Recognise effort in public, correct in private.",
+    "Fewer meetings, sharper decisions.",
+    "Quality is decided before the first frame is cut.",
+    "Lead the calendar or the calendar leads you.",
+    "End the day knowing tomorrow's first task."
   ],
   ceo: [
-    "The role of a CEO is to ask the right questions. — Ken Blanchard",
-    "Chase the vision, not the money. — Tony Hsieh",
-    "Innovation is saying no to a thousand things. — Steve Jobs",
-    "Culture eats strategy for breakfast. — Peter Drucker",
-    "The best way to predict the future is to create it. — Peter Drucker",
-    "A brand is like a reputation for a person. — Jeff Bezos",
-    "Move fast and break things. — Mark Zuckerberg",
-    "Ideas are commodities. Execution is not. — Michael Dell",
-    "Whether you think you can or can't, you're right. — Henry Ford",
-    "Business opportunities are like buses. — Richard Branson",
-    "Success is walking from failure to failure with no loss of enthusiasm. — Churchill",
-    "In the middle of every difficulty lies opportunity. — Einstein",
-    "The greatest glory lies in rising every time we fall. — Mandela",
-    "Get big quietly. — Chris Dixon",
-    "It's about making ideas happen. — Scott Belsky",
-    "Quit talking and begin doing. — Walt Disney",
-    "Try to become a person of value. — Einstein",
-    "Do what you feel in your heart to be right. — Eleanor Roosevelt",
-    "Self-education will make you a fortune. — Jim Rohn",
-    "Go where there is no path. — Ralph Waldo Emerson"
+    "Build the brand people trust before they need it.",
+    "Stories travel further than ads.",
+    "The vision is long; the execution is daily.",
+    "Every great channel was once a small, consistent one.",
+    "Invest in people — they invest in the work.",
+    "Bold ideas need careful execution.",
+    "Culture is what the team does when no one is watching.",
+    "Grow the audience, but deepen the connection.",
+    "A good company makes good work easy.",
+    "Decide with data, lead with values.",
+    "Today's discipline is tomorrow's reputation.",
+    "Protect the mission, adapt the method.",
+    "Great content is a long-term asset.",
+    "Hire for attitude, train for the craft.",
+    "Speed matters; direction matters more.",
+    "Make the next milestone visible to everyone.",
+    "The audience rewards honesty and consistency.",
+    "Simple systems scale; complicated ones break.",
+    "Lead with clarity and the team leads with confidence.",
+    "Every idea deserves a test, not a debate.",
+    "Our stories carry our culture — tell them well.",
+    "Profit follows trust.",
+    "Raise the standard one notch every month.",
+    "Celebrate the team that builds the wins.",
+    "Focus is choosing what not to do.",
+    "A strong team outlasts a strong trend.",
+    "The work speaks; let it speak clearly.",
+    "Learn fast, fix fast, move forward.",
+    "Big goals, small daily steps.",
+    "Make today count for the five-year plan.",
+    "Lead by example — the rest follows."
   ],
   social_media: [
-    "Content is king, but engagement is queen. — Mari Smith",
-    "Your brand is what people say when you're not in the room. — Jeff Bezos",
-    "Design is thinking made visual. — Saul Bass",
-    "Creativity takes courage. — Henri Matisse",
-    "Content is fire, social media is gasoline. — Jay Baer",
-    "Be so good they can't ignore you. — Steve Martin",
-    "Creativity is intelligence having fun. — Einstein",
-    "Every great design begins with an even better story.",
-    "Good design is good business.",
-    "The best marketing doesn't feel like marketing.",
-    "Storytelling is the most powerful way to put ideas into the world.",
-    "Make it simple. Make it memorable. — Leo Burnett",
-    "Marketing is about the stories you tell. — Seth Godin",
-    "Simplicity is the ultimate sophistication. — Da Vinci",
-    "Design is how it works. — Steve Jobs",
-    "The details make the design. — Charles Eames",
-    "Focus on how to be social. — Jay Baer",
-    "Social media is about the people.",
-    "Not to be different is virtually suicidal.",
-    "Great design speaks louder than words."
+    "Hook in the first second, value till the last.",
+    "Post for the viewer, not the algorithm.",
+    "Consistency is the cheapest growth hack.",
+    "One great reel beats five rushed ones.",
+    "Read the comments — your next idea is in there.",
+    "A clear caption is a second hook.",
+    "Save-worthy beats scroll-worthy.",
+    "Every story has a better first line. Find it.",
+    "Check the time, the tag and the link before you post.",
+    "Trends fade; trust stays.",
+    "Plan the content, then let the content surprise you.",
+    "Shares grow pages; saves grow loyalty.",
+    "Make it easy to understand in silence — add captions.",
+    "Thumbnail and title are a promise. Keep it.",
+    "Ask one question per post and listen to the answers.",
+    "Data shows what works; curiosity shows what's next.",
+    "Batch your work, protect your creativity.",
+    "Good content today is reach next month.",
+    "Be first with value, not just first with news.",
+    "Engage for ten minutes after you post.",
+    "Repurpose smart: one idea, many formats.",
+    "A calendar filled ahead is a mind at peace.",
+    "Retention is the real view count.",
+    "Write like you speak to one viewer.",
+    "Small accounts grow on care; big ones stay on it.",
+    "Test the hook, keep the story.",
+    "Facts checked, faith respected, story told.",
+    "Every scroll is a chance — earn the stop.",
+    "Reply like a person, not a page.",
+    "Finish today's post before chasing tomorrow's idea.",
+    "Clarity beats cleverness every time."
   ],
   video_editor: [
-    "Editing is where stories truly come alive.",
-    "Cut to the emotion, not the action. — Walter Murch",
-    "The best edit is the one you don't notice.",
-    "Every cut tells a story.",
-    "Master the rhythm, master the edit.",
-    "The frame is your canvas. Paint emotions.",
-    "Color tells the story words cannot.",
-    "Great editing is invisible.",
-    "Timing is everything in video editing.",
-    "Less is more in editing.",
-    "The magic happens in post-production.",
-    "You craft experiences, not just videos.",
-    "B-roll is the bridge between great shots.",
-    "Make every second count.",
-    "Transition with purpose, cut with reason.",
-    "Cinema is what's in the frame. — Scorsese",
-    "Sound design is half the experience.",
-    "Patience in editing equals perfection.",
-    "The soul of storytelling lies in the edit.",
-    "Render. Review. Refine. Repeat."
+    "Cut the boring parts — the audience will thank you.",
+    "The first three seconds decide the next thirty.",
+    "Sound sells the scene.",
+    "Rhythm is felt before it's noticed.",
+    "Every cut should have a reason.",
+    "Colour sets the mood before the story starts.",
+    "Subtitles are part of the design, not an afterthought.",
+    "Leave a little silence — it lets the moment land.",
+    "Export once, check twice.",
+    "A clean timeline is a fast timeline.",
+    "Name your files today, find them tomorrow.",
+    "Match the pace to the story, not the trend.",
+    "B-roll should explain, not just decorate.",
+    "Good editing is invisible; great editing is unforgettable.",
+    "Watch it once on a phone before you call it done.",
+    "Keep the loudest moment for the end.",
+    "Transitions serve the story, not the editor.",
+    "Back up the project before you save the day.",
+    "Trim one more second. Then check again.",
+    "The final link is done only when it's uploaded and shared.",
+    "Light, sound, story — in that order of checks.",
+    "A vertical frame needs a vertical idea.",
+    "Templates save time; taste saves the video.",
+    "Every frame is a chance to hold attention.",
+    "Feedback is free direction — use it.",
+    "Slow down to cut faster tomorrow.",
+    "Make the thumbnail moment inside the video.",
+    "Music sets the heartbeat of the edit.",
+    "Deliver on time, polish every time.",
+    "Your craft improves one project at a time.",
+    "When in doubt, cut it out."
   ],
   pr: [
-    "PR is what others say about you.",
-    "Build relationships, not just contacts.",
-    "Reputation takes years to build, minutes to destroy. — Warren Buffett",
-    "Trust is the foundation of all communication.",
-    "Your story is your strongest asset.",
-    "Make news, don't chase it.",
-    "Press releases tell, stories sell.",
-    "Be quotable. Be memorable. Be authentic.",
-    "Listen first, speak second. — Stephen Covey",
-    "PR is a marathon, not a sprint.",
-    "Relationships are the currency of PR.",
-    "Tell the truth, but tell it well.",
-    "Credibility is built one interaction at a time.",
-    "Empathy is the secret weapon of PR.",
-    "Authenticity wins in PR.",
-    "Your media list is your goldmine.",
-    "The best PR is great work.",
-    "Perception is reality in PR.",
-    "Great communicators build relationships.",
-    "Words have power to build or destroy."
+    "Relationships open doors that pitches can't.",
+    "Say it simply, say it truthfully.",
+    "A good story finds its own audience.",
+    "Follow up politely; follow through always.",
+    "Reputation is built in years and protected every day.",
+    "Know the journalist before you send the pitch.",
+    "Every mention starts with one honest email.",
+    "Prepare the answer before the question is asked.",
+    "Credibility is the best press release.",
+    "Turn every event into a story worth sharing.",
+    "Be useful to media and media will be useful to you.",
+    "Timing turns news into headlines.",
+    "Keep the message short enough to repeat.",
+    "Listen to the audience before you speak to it.",
+    "A thank-you note keeps a contact warm.",
+    "Facts first, flair second.",
+    "Partnerships grow when both sides win.",
+    "Your network is your quiet advantage.",
+    "Respond fast, respond calm.",
+    "Pitch the angle, not just the product.",
+    "Small coverage builds big credibility.",
+    "Protect the brand voice in every word.",
+    "Clarity wins attention in a crowded inbox.",
+    "Make every collaboration easy to say yes to.",
+    "Good PR tells the truth beautifully.",
+    "Track every pitch — patterns show the way.",
+    "Plan the launch, then plan the follow-up.",
+    "Media remembers who was reliable.",
+    "Stories about people move people.",
+    "Be the source others trust to call.",
+    "Today's contact can be tomorrow's feature."
   ],
   hr: [
-    "HR is about the business.",
-    "Take care of your employees. — Richard Branson",
-    "People never forget how you made them feel. — Maya Angelou",
-    "Culture eats strategy for breakfast. — Peter Drucker",
-    "Hire character. Train skill. — Peter Schutz",
-    "Talent wins games, teamwork wins championships. — Michael Jordan",
-    "Happy employees lead to happy customers.",
-    "Empathy is the greatest leadership skill.",
-    "Recruit for attitude, train for skill.",
-    "Engagement starts with empathy.",
-    "Your culture is your competitive advantage.",
-    "HR is the heart of every organization.",
-    "People work for purpose, not paychecks.",
-    "The strength of the team is each member.",
-    "Great vision without great people is irrelevant.",
-    "Be the leader you wish you had.",
-    "Employees are your most valuable asset.",
-    "How employees feel is how customers feel.",
-    "Motivation comes from working on things we care about.",
-    "People don't leave companies, they leave managers."
+    "Great teams are hired, grown and cared for.",
+    "Fair rules, applied kindly, build trust.",
+    "Discipline is support with structure.",
+    "Listen first; policies come second.",
+    "A smooth first week makes a loyal year.",
+    "Recognition costs little and returns a lot.",
+    "Clear expectations prevent most problems.",
+    "Every record kept today saves a dispute tomorrow.",
+    "Wellbeing is productivity's foundation.",
+    "Hire slowly, welcome warmly.",
+    "Feedback is a habit, not an annual event.",
+    "Be consistent — fairness is consistency.",
+    "People stay where they grow.",
+    "Solve the root, not just the complaint.",
+    "Culture lives in small daily actions.",
+    "Attendance is respect for the team's time.",
+    "Confidentiality is the core of trust.",
+    "Train the skill, celebrate the will.",
+    "A calm conversation fixes more than a strict memo.",
+    "Document fairly, decide fairly.",
+    "Every leave marked on time keeps salaries right.",
+    "Support the person, uphold the policy.",
+    "Good onboarding is the best retention plan.",
+    "Notice the quiet performers.",
+    "Clarity in rules, warmth in delivery.",
+    "Check in before people check out.",
+    "Growth plans keep good people growing here.",
+    "The best policy is one everyone understands.",
+    "Prevention beats correction.",
+    "Every voice in the team deserves to be heard.",
+    "A happy team is a productive team."
   ]
 };
 
@@ -214,7 +282,8 @@ const CONTENT_LINK_FIELDS = [
   { key: 'draftLink', label: 'Draft', icon: '✂️' },
   { key: 'finalLink', label: 'Final Edit', icon: '🎬' },
   { key: 'thumbnailLink', label: 'Thumbnail', icon: '🖼️' },
-  { key: 'designLink', label: 'Design', icon: '🎨' }
+  { key: 'designLink', label: 'Design', icon: '🎨' },
+  { key: 'liveLink', label: 'Live post', icon: '📢' }
 ];
 
 // FIX — reusable multi-select checklist dropdown, replacing the old single-select native
@@ -237,7 +306,12 @@ const PLATFORMS = {
   pinterest: { label: 'Pinterest', Icon: SiPinterest, color: '#E60023', bg: '#E60023' },
   other: { label: 'Other', Icon: null, color: '#64748b', bg: '#64748b' }
 };
-function platformOf(channel) {
+// Platform chosen per channel in Manage Channels (overrides the automatic guess).
+let PLATFORM_OVERRIDES = {};
+function setPlatformOverrides(map) { PLATFORM_OVERRIDES = map || {}; }
+function platformOf(channel, automaticOnly) {
+  const forced = automaticOnly ? '' : PLATFORM_OVERRIDES[String(channel || '').trim()];
+  if (forced && PLATFORMS[forced]) return forced;
   const c = String(channel || '').toLowerCase();
   if (/insta|\big\b|reel/.test(c)) return 'instagram';
   if (/\byt\b|youtube|shorts/.test(c)) return 'youtube';
@@ -282,6 +356,38 @@ const CONTENT_FORMATS = [
   { value: 'Live Stream', icon: '🔴', color: '#ef4444', label: () => 'Live' },
   { value: 'Podcast Episode', icon: '🎙️', color: '#22c55e', label: () => 'Podcast' }
 ];
+// Block colour of a calendar entry = platform + format, so a YouTube long video, a
+// YouTube Short, an Instagram Reel, a Carousel, a Facebook post… each look different.
+const BLOCK_COLORS = {
+  instagram: { 'Short (Vertical)': '#E1306C', 'Carousel': '#8134AF', 'Static Post': '#F77737', 'Story': '#F5A623', 'Live Stream': '#C13584', default: '#E1306C' },
+  youtube: { 'Long Format Video': '#FF0000', 'Short (Vertical)': '#282828', 'Community Post': '#B45309', 'Live Stream': '#B91C1C', default: '#FF0000' },
+  facebook: { 'Short (Vertical)': '#00A3FF', 'Long Format Video': '#1877F2', 'Story': '#5B8DEF', default: '#1877F2' },
+  spotify: { default: '#1DB954' },
+  linkedin: { default: '#0A66C2' },
+  x: { default: '#111111' },
+  threads: { default: '#555555' },
+  pinterest: { default: '#E60023' },
+  other: { default: '#64748b' }
+};
+function blockColor(contentType, channel) {
+  const set = BLOCK_COLORS[platformOf(channel)] || BLOCK_COLORS.other;
+  return set[contentType] || set.default;
+}
+// QC — the title names a different platform than the channel it is booked on
+// (e.g. title "AG YT" booked on "AG Insta").
+function platformMismatch(entry) {
+  const t = ' ' + String(entry.title || '').toLowerCase() + ' ';
+  const pf = platformOf(entry.channels);
+  const says = /\b(yt|youtube|shorts?)\b/.test(t) ? 'youtube'
+    : /\b(ig|insta|instagram|reels?)\b/.test(t) ? 'instagram'
+    : /\b(fb|facebook)\b/.test(t) ? 'facebook'
+    : /\b(spotify|podcast)\b/.test(t) ? 'spotify' : '';
+  if (!says || pf === 'other') return '';
+  if (says === pf) return '';
+  if (says === 'instagram' && pf === 'facebook' && /reel/.test(t)) return '';
+  return `Title says ${PLATFORMS[says].label} but it is booked on ${entry.channels} (${PLATFORMS[pf].label})`;
+}
+
 function formatInfo(contentType, channel) {
   const f = CONTENT_FORMATS.find(x => x.value === contentType) || { value: contentType || 'Other', icon: '📄', color: '#64748b', label: () => contentType || 'Other' };
   return { ...f, text: f.label(platformOf(channel)) };
@@ -593,16 +699,25 @@ function App() {
   const [contentForm, setContentForm] = useState({
     channels: '', contentType: 'Long Format Video', title: '', date: '', time: '',
     assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
-    finalLink: '', thumbnailLink: '', designLink: '', rawLink: '', draftLink: '', description: '', notes: ''
+    finalLink: '', thumbnailLink: '', designLink: '', rawLink: '', draftLink: '', liveLink: '', description: '', notes: ''
   });
   const [contentSaving, setContentSaving] = useState(false);
   // ---- Content Calendar: dynamic channel groups (PC/Shivendra/Pari can edit these
   // from the app now, instead of them being hardcoded — starts from the same defaults
   // that used to be hardcoded, so nothing changes until someone actually edits it) ----
   const [contentChannelGroups, setContentChannelGroups] = useState(DEFAULT_CONTENT_CHANNEL_GROUPS);
+  // Channels to pick on a task = every content-calendar channel (incl. new ones such as
+  // Facebook) + the older fixed list, without duplicates, "Other" last.
+  const allChannelOptions = Array.from(new Set([...Object.values(contentChannelGroups).flat(), ...channels.filter(c => c !== 'Other'), 'Other']));
   const [showManageChannels, setShowManageChannels] = useState(false);
   const [newChannelGroup, setNewChannelGroup] = useState('');
   const [newChannelName, setNewChannelName] = useState('');
+  const [newChannelPlatform, setNewChannelPlatform] = useState('');
+  const [channelPlatforms, setChannelPlatforms] = useState(() => {
+    try { const m = JSON.parse(localStorage.getItem('wtc_cache_channel_platforms') || '{}'); setPlatformOverrides(m); return m; } catch (e) { return {}; }
+  });
+  const [ccPlatformFilter, setCcPlatformFilter] = useState('all');
+  const [ccSearch, setCcSearch] = useState('');
   // Which day (within the currently open group/month) is expanded to show every entry —
   // the month cell itself only shows a few compact chips, Notion-style.
   const [expandedContentDay, setExpandedContentDay] = useState(null);
@@ -1600,6 +1715,8 @@ function App() {
       case 'missed_call': return { icon: '📞', title: `Missed call from ${item.from}`, toast: `📞 Missed call from ${item.from}` };
       case 'correction': return { icon: '📝', title: `${item.from} asked for an attendance correction`, toast: `📝 Correction request from ${item.from}` };
       case 'attendance': return { icon: '🕘', title: 'Attendance update', toast: `🕘 ${item.title}` };
+      case 'new_target': return { icon: '🎯', title: `${item.from} set you a target`, toast: `🎯 New target from ${item.from}: ${item.title}` };
+      case 'target_achieved': return { icon: '🏆', title: `${item.from} achieved a target`, toast: `🏆 ${item.from} achieved: ${item.title}` };
       default: return { icon: '📌', title: `New task from ${item.from}`, toast: `📌 New task from ${item.from}: ${item.title}` };
     }
   };
@@ -1846,11 +1963,13 @@ function App() {
   };
 
   const openDiscipline = (tab) => {
-    const t = tab === 'team' && canManageAttendance ? 'team' : 'mine';
+    const reviewTab = ['day', 'month', 'leaves', 'salary'].includes(tab);
+    const t = (tab === 'team' || reviewTab) && canManageAttendance ? tab : 'mine';
     setDisciplineTab(t);
     setCorrectionDraft(null);
     setShowDiscipline(true);
-    loadDiscipline(t);
+    if (reviewTab && canManageAttendance) loadReview();
+    else loadDiscipline(t);
   };
 
   const changeDiscMonth = (delta) => {
@@ -1858,7 +1977,8 @@ function App() {
     if (m > 12) { m = 1; y++; }
     if (m < 1) { m = 12; y--; }
     setDiscMonth(m); setDiscYear(y);
-    loadDiscipline(disciplineTab === 'team' ? 'team' : 'mine', y, m);
+    if (['day', 'month', 'leaves', 'salary'].includes(disciplineTab)) loadReview(y, m);
+    else loadDiscipline(disciplineTab === 'team' ? 'team' : 'mine', y, m);
   };
 
   const submitCorrection = () => {
@@ -1900,6 +2020,61 @@ function App() {
     pushNotif(`🕘 Shift saved for ${member.displayName}: ${fmtClock(d.start)} – ${fmtClock(d.end)}`);
   };
 
+  // ============================================================
+  // v14 — ATTENDANCE REVIEW + LEAVE (HR, PC, Shivendra): any day, any month, everyone.
+  // ============================================================
+  const LEAVE_TYPES = ['Casual Leave', 'Sick Leave', 'Paid Leave', 'Unpaid Leave', 'Half Day', 'Work From Home', 'Official Duty', 'Comp Off'];
+  const [review, setReview] = useState(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewDay, setReviewDay] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  const [leaveForm, setLeaveForm] = useState({ userIds: [], from: '', to: '', type: 'Casual Leave', note: '' });
+  const [reviewCell, setReviewCell] = useState(null);
+
+  const loadReview = async (year = discYear, month = discMonth) => {
+    if (!canManageAttendance) return;
+    setReviewLoading(true);
+    try {
+      const res = await fetch(API_URL + `?action=getAttendanceReport&viewerId=${encodeURIComponent(currentUser)}&year=${year}&month=${month}`);
+      const data = await res.json();
+      if (data.status === 'ok') setReview(data);
+    } catch (e) {} finally { setReviewLoading(false); }
+  };
+
+  const submitLeave = () => {
+    const f = leaveForm;
+    if (!f.userIds.length || !f.from) { alert('Choose the person and the date.'); return; }
+    if (f.to && f.to < f.from) { alert('The end date is before the start date.'); return; }
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'markLeave', userIds: f.userIds, fromDate: f.from, toDate: f.to || f.from, leaveType: f.type, note: f.note, markerId: currentUser, markerName: currentUserInfo?.name }) }).catch(() => {});
+    pushNotif(`🌴 ${f.type} marked for ${f.userIds.length} person(s)`);
+    setLeaveForm({ userIds: [], from: '', to: '', type: f.type, note: '' });
+    setTimeout(() => loadReview(), 2500);
+  };
+
+  const cancelLeaveRow = (l) => {
+    if (!window.confirm(`Cancel ${l.type} for ${l.name} on ${l.date}?`)) return;
+    setReview(prev => prev ? { ...prev, leaves: prev.leaves.map(x => x.id === l.id ? { ...x, status: 'Cancelled' } : x) } : prev);
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'cancelLeave', id: l.id, markerId: currentUser }) }).catch(() => {});
+    setTimeout(() => loadReview(), 2500);
+  };
+
+  const fmtMin = (m) => m ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : '—';
+
+  const downloadSalaryCsv = () => {
+    if (!review) return;
+    const head = ['Name', 'Working days', 'Present', 'Absent', 'Half days', 'Paid leave', 'Unpaid leave', 'WFH', 'Late marks', 'Strikes', 'Strike deduction (days)', 'Suggested deduction (days)', 'Total hours', 'Avg hours/day'];
+    const rows = review.people.map(p => [p.name, p.totals.workingDays, p.totals.present, p.totals.absent, p.totals.halfDays, p.totals.paidLeave, p.totals.unpaidLeave, p.totals.wfh,
+      p.totals.late, p.totals.strikes, p.totals.strikeDeduction, p.totals.deductionDays, (p.totals.workedMin / 60).toFixed(1), (p.totals.avgWorkedMin / 60).toFixed(1)]);
+    const csv = [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `WTC-attendance-${review.year}-${String(review.month).padStart(2, '0')}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+
   // Load my own record after login (powers the strikes line on the card), refresh every 10 min.
   useEffect(() => {
     if (!currentUser || (isAdmin && !isHR)) return;
@@ -1925,6 +2100,110 @@ function App() {
     }
     lunchNudgeRef.current[key] = fired;
   });
+
+  // ============================================================
+  // v14 — TARGETS. Everyone sets targets for themselves; PC, Shivendra and HR can also
+  // assign targets to anyone. PC and Shivendra see all targets; everyone else sees their
+  // own and the ones they assigned (the server enforces the same rule).
+  // ============================================================
+  const TARGET_UNITS = ['Reels', 'Videos', 'Shorts', 'Posts', 'Carousels', 'Thumbnails', 'Scripts', 'Tasks', 'Followers', 'Views', 'Hours', 'Leads', '%', 'Other'];
+  const [targets, setTargets] = useState([]);
+  const [targetsCanSeeAll, setTargetsCanSeeAll] = useState(false);
+  const [showTargets, setShowTargets] = useState(false);
+  const [targetView, setTargetView] = useState('mine'); // mine | assigned | all
+  const [targetPersonFilter, setTargetPersonFilter] = useState('all');
+  const [targetForm, setTargetForm] = useState(null);
+  const [progressDraft, setProgressDraft] = useState({}); // id -> { value, note }
+  const [targetHistoryOpen, setTargetHistoryOpen] = useState(null);
+  const canAssignTargets = canManageAttendance;
+
+  const loadTargets = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(API_URL + '?action=getTargets&userId=' + encodeURIComponent(currentUser));
+      const data = await res.json();
+      if (data.status === 'ok' && Array.isArray(data.targets)) { setTargets(data.targets); setTargetsCanSeeAll(!!data.canSeeAll); }
+    } catch (e) {}
+  };
+  useEffect(() => { if (currentUser) loadTargets(); }, [currentUser]);
+
+  const periodRange = (period, from) => {
+    const d = from ? new Date(from + 'T12:00:00') : new Date();
+    const key = (x) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    const start = new Date(d);
+    let end = new Date(d);
+    if (period === 'Daily') { /* same day */ }
+    else if (period === 'Weekly') { const day = start.getDay(); const toMon = day === 0 ? -6 : 1 - day; start.setDate(start.getDate() + toMon); end = new Date(start); end.setDate(start.getDate() + 5); }
+    else if (period === 'Monthly') { start.setDate(1); end = new Date(start.getFullYear(), start.getMonth() + 1, 0); }
+    else if (period === 'Quarterly') { start.setMonth(Math.floor(start.getMonth() / 3) * 3, 1); end = new Date(start.getFullYear(), start.getMonth() + 3, 0); }
+    else return null;
+    return { start: key(start), due: key(end) };
+  };
+
+  const openNewTarget = () => {
+    const r = periodRange('Monthly');
+    setTargetForm({ id: null, title: '', details: '', ownerIds: [currentUser], period: 'Monthly', start: r.start, due: r.due, target: '', unit: 'Reels' });
+  };
+
+  const saveTargetForm = () => {
+    const f = targetForm;
+    if (!f.title.trim()) { alert('Write what the target is.'); return; }
+    if (!(Number(f.target) > 0)) { alert('Enter a target number (e.g. 30).'); return; }
+    if (!f.due || f.due < f.start) { alert('Check the dates — the due date must be on or after the start.'); return; }
+    if (!f.ownerIds.length) { alert('Choose who this target is for.'); return; }
+    const payload = { id: f.id, title: f.title.trim(), details: f.details.trim(), ownerIds: f.ownerIds, period: f.period, start: f.start, due: f.due, target: Number(f.target), unit: f.unit };
+    if (f.id) {
+      setTargets(prev => prev.map(t => t.id === f.id ? { ...t, ...payload, status: t.achieved >= payload.target ? 'Achieved' : 'Active' } : t));
+    } else {
+      const temp = f.ownerIds.map((oid, i) => {
+        const m = team.find(x => x.id === oid);
+        return { ...payload, id: 'tmp_' + Date.now() + '_' + i, ownerId: oid, owner: m ? m.name : oid, assignedById: currentUser, assignedBy: currentUserInfo?.name, achieved: 0, status: 'Active', log: [], created: new Date().toISOString() };
+      });
+      setTargets(prev => [...temp, ...prev]);
+    }
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveTarget', target: payload, userId: currentUser, userName: currentUserInfo?.name }) }).catch(() => {});
+    setTargetForm(null);
+    pushNotif(f.id ? '🎯 Target updated' : `🎯 Target set${f.ownerIds.length > 1 ? ` for ${f.ownerIds.length} people` : ''}`);
+    setTimeout(loadTargets, 2500);
+  };
+
+  const saveProgress = (t) => {
+    const d = progressDraft[t.id];
+    if (!d || d.value === '' || isNaN(Number(d.value))) return;
+    if (String(t.id).startsWith('tmp_')) { alert('Still saving — try again in a moment.'); return; }
+    const value = Math.max(0, Number(d.value));
+    const achievedNow = value >= t.target && t.status !== 'Achieved';
+    setTargets(prev => prev.map(x => x.id === t.id ? { ...x, achieved: value, status: value >= x.target ? 'Achieved' : 'Active',
+      log: [...(x.log || []), { at: new Date().toISOString(), by: currentUserInfo?.name, value, note: d.note || '' }] } : x));
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'updateTargetProgress', id: t.id, achieved: value, note: d.note || '', userId: currentUser, userName: currentUserInfo?.name }) }).catch(() => {});
+    setProgressDraft(prev => { const n = { ...prev }; delete n[t.id]; return n; });
+    if (achievedNow) { triggerCelebration(); pushNotif('🏆 Target achieved — well done!'); }
+  };
+
+  const removeTarget = (t) => {
+    if (!window.confirm(`Delete the target "${t.title}"?`)) return;
+    setTargets(prev => prev.filter(x => x.id !== t.id));
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteTarget', id: t.id, userId: currentUser }) }).catch(() => {});
+  };
+
+  // On track / Behind / Overdue / Achieved, from how much time has passed vs. how much is done.
+  const targetHealth = (t) => {
+    if (t.status === 'Achieved' || t.achieved >= t.target) return { key: 'done', label: 'Achieved' };
+    const today = new Date(); today.setHours(12, 0, 0, 0);
+    const start = new Date(t.start + 'T12:00:00'), due = new Date(t.due + 'T12:00:00');
+    if (today > due) return { key: 'over', label: 'Missed / overdue' };
+    const span = Math.max(1, (due - start) / 86400000 + 1);
+    const passed = Math.min(span, Math.max(0, (today - start) / 86400000 + 1));
+    const expected = (passed / span) * t.target;
+    const daysLeft = Math.round((due - today) / 86400000);
+    if (t.achieved + 0.0001 >= expected * 0.9) return { key: 'ok', label: 'On track', daysLeft };
+    return { key: 'behind', label: `Behind (${Math.round(expected - t.achieved)} to catch up)`, daysLeft };
+  };
+
+  const myOpenTargets = targets.filter(t => t.ownerId === currentUser && t.status !== 'Achieved' && t.status !== 'Cancelled').length;
 
   // FIX #1 + #5 — Real-time calculation. Backend now stores correct UTC timestamps
   // (see Code.gs getIndiaTimeISO), so this math is finally trustworthy. Recomputed every
@@ -2541,6 +2820,7 @@ function App() {
     if (item.type === 'new_meeting' || String(item.taskId || '').startsWith('meeting_')) { openMeetings(); return; }
     if (item.type === 'correction' || item.type === 'attendance') { openDiscipline(item.type === 'correction' ? 'team' : 'mine'); return; }
     if (item.type === 'missed_call') return;
+    if (item.type === 'new_target' || item.type === 'target_achieved') { setShowTargets(true); setTargetView(item.type === 'new_target' ? 'mine' : 'assigned'); loadTargets(); return; }
     if (item.taskId) navigateToTask(item.taskId);
   };
 
@@ -2856,7 +3136,7 @@ function App() {
   const contentLastJsonRef = useRef('');
   const CONTENT_MATCH_FIELDS = ['channelGroup', 'channels', 'contentType', 'title', 'date', 'time', 'assignedTo',
     'editingStatus', 'videoStatus', 'priority', 'finalLink', 'thumbnailLink', 'designLink', 'rawLink', 'draftLink',
-    'description', 'notes'];
+    'liveLink', 'description', 'notes'];
 
   const mergeWithPendingContent = (serverEntries) => {
     const pending = pendingContentRef.current;
@@ -2938,6 +3218,9 @@ function App() {
       if (data.status === 'ok' && data.groupOrder && data.groupOrder.length > 0) {
         const ordered = {};
         data.groupOrder.forEach(g => { ordered[g] = data.groups[g] || []; });
+        setPlatformOverrides(data.platforms || {});
+        setChannelPlatforms(data.platforms || {});
+        try { localStorage.setItem('wtc_cache_channel_platforms', JSON.stringify(data.platforms || {})); } catch (e) {}
         setContentChannelGroups(ordered);
       }
     } catch (e) {}
@@ -2973,10 +3256,44 @@ function App() {
     };
   }, [currentUser, showContentCalendar, canSeeContentCalendar]);
 
+  // v14 — edit a channel: rename it, move it to another group, or set its platform.
+  const [editingChannel, setEditingChannel] = useState(null); // { group, name, newName, newGroup, platform }
+  const saveChannelEdit = () => {
+    const ec = editingChannel;
+    if (!ec) return;
+    const newName = ec.newName.trim(), newGroup = ec.newGroup.trim();
+    if (!newName || !newGroup) { alert('Channel and group names are required.'); return; }
+    setContentChannelGroups(prev => {
+      const next = { ...prev };
+      next[ec.group] = (next[ec.group] || []).filter(c => c !== ec.name);
+      if (next[ec.group].length === 0 && ec.group !== newGroup) delete next[ec.group];
+      next[newGroup] = [...(next[newGroup] || []), newName];
+      return next;
+    });
+    const overrides = { ...channelPlatforms };
+    delete overrides[ec.name];
+    if (ec.platform) overrides[newName] = ec.platform;
+    setPlatformOverrides(overrides);
+    setChannelPlatforms(overrides);
+    if (newName !== ec.name || newGroup !== ec.group) {
+      setContentEntries(prev => prev.map(e => (e.channelGroup === ec.group && e.channels === ec.name) ? { ...e, channelGroup: newGroup, channels: newName } : e));
+    }
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'updateContentChannel', groupName: ec.group, oldName: ec.name, newName, newGroup, platform: ec.platform, userId: currentUser })
+    }).catch(() => {});
+    setEditingChannel(null);
+    setTimeout(() => { loadContentChannels(); loadContentCalendar(); }, 2500);
+  };
+
   const handleAddChannel = () => {
     const group = (newChannelGroup || '').trim();
     const channel = (newChannelName || '').trim();
     if (!group || !channel) { alert('Enter both a group name and a channel name.'); return; }
+    if (newChannelPlatform) {
+      const overrides = { ...channelPlatforms, [channel]: newChannelPlatform };
+      setPlatformOverrides(overrides); setChannelPlatforms(overrides);
+    }
     setContentChannelGroups(prev => {
       const next = { ...prev };
       next[group] = [...(next[group] || []), channel];
@@ -2985,9 +3302,10 @@ function App() {
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'addContentChannel', groupName: group, channelName: channel })
+      body: JSON.stringify({ action: 'addContentChannel', groupName: group, channelName: channel, platform: newChannelPlatform })
     });
     setNewChannelName('');
+    setNewChannelPlatform('');
   };
 
   const handleDeleteChannel = (group, channel) => {
@@ -3022,7 +3340,7 @@ function App() {
     setContentForm({
       channels: groupChannels[0] || '', contentType: 'Long Format Video',
       title: '', date: dateStr || '', time: '', assignedTo: [], editingStatus: 'Not Started', videoStatus: 'Not Started', priority: 'Medium',
-      finalLink: '', thumbnailLink: '', designLink: '', rawLink: '', draftLink: '', description: '', notes: ''
+      finalLink: '', thumbnailLink: '', designLink: '', rawLink: '', draftLink: '', liveLink: '', description: '', notes: ''
     });
     setEditingContentEntry({});
   };
@@ -3033,7 +3351,7 @@ function App() {
       date: entry.date ? String(entry.date).slice(0, 10) : '', time: entry.time || '',
       assignedTo: entry.assignedTo ? String(entry.assignedTo).split(',').map(a => a.trim()) : [],
       editingStatus: entry.editingStatus || 'Not Started', videoStatus: entry.videoStatus || 'Not Started', priority: entry.priority || 'Medium',
-      finalLink: entry.finalLink || '', thumbnailLink: entry.thumbnailLink || '', designLink: entry.designLink || '',
+      finalLink: entry.finalLink || '', thumbnailLink: entry.thumbnailLink || '', designLink: entry.designLink || '', liveLink: entry.liveLink || '',
       rawLink: entry.rawLink || '', draftLink: entry.draftLink || '',
       description: entry.description || '', notes: entry.notes || ''
     });
@@ -3075,6 +3393,7 @@ function App() {
       finalLink: contentForm.finalLink.trim(),
       thumbnailLink: contentForm.thumbnailLink.trim(),
       designLink: contentForm.designLink.trim(),
+      liveLink: (contentForm.liveLink || '').trim(),
       rawLink: contentForm.rawLink.trim(),
       draftLink: contentForm.draftLink.trim(),
       description: contentForm.description.trim(),
@@ -3124,6 +3443,16 @@ function App() {
     }, 8000);
   };
 
+  // v14 — reuse an entry for another channel (same title, date, people, links), opened as
+  // a new entry so the channel can be changed before saving.
+  const duplicateContentEntry = () => {
+    const groupChannels = contentChannelGroups[contentGroupTab] || [];
+    const other = groupChannels.find(c => c !== contentForm.channels) || contentForm.channels;
+    setContentForm(prev => ({ ...prev, channels: other, videoStatus: 'Not Started', liveLink: '' }));
+    setEditingContentEntry({});
+    pushNotif('⧉ Copied — pick the channel and press Create Entry.');
+  };
+
   const handleDeleteContentEntry = () => {
     if (!editingContentEntry?.id) return;
     if (String(editingContentEntry.id).startsWith('tmp_')) {
@@ -3156,7 +3485,12 @@ function App() {
   };
 
   const contentCalGridData = useMemo(() => {
-    const entriesThisGroup = contentEntries.filter(e => e.channelGroup === contentGroupTab);
+    const q = ccSearch.trim().toLowerCase();
+    const groupAll = contentEntries.filter(e => e.channelGroup === contentGroupTab);
+    const entriesThisGroup = groupAll.filter(e =>
+      (ccPlatformFilter === 'all' || platformOf(e.channels) === ccPlatformFilter) &&
+      (!q || [e.title, e.channels, e.assignedTo, e.notes, e.description].some(v => String(v || '').toLowerCase().includes(q))));
+    const groupPlatforms = Array.from(new Set([...(contentChannelGroups[contentGroupTab] || []), ...groupAll.map(e => e.channels)].map(platformOf)));
     const firstOfMonth = new Date(contentCalYear, contentCalMonth, 1);
     const startOffset = firstOfMonth.getDay(); // 0=Sun
     const daysInMon = new Date(contentCalYear, contentCalMonth + 1, 0).getDate();
@@ -3166,8 +3500,8 @@ function App() {
     while (cells.length % 7 !== 0) cells.push(null);
     const holidaySet = {};
     holidays.forEach(h => { holidaySet[h.date] = h.name; });
-    return { entriesThisGroup, cells, holidaySet };
-  }, [contentGroupTab, contentEntries, contentCalYear, contentCalMonth, holidays]);
+    return { entriesThisGroup, cells, holidaySet, groupPlatforms };
+  }, [contentGroupTab, contentEntries, contentCalYear, contentCalMonth, holidays, ccPlatformFilter, ccSearch, channelPlatforms, contentChannelGroups]);
 
   // ============================================================
   // MY RECURRING TASKS — everyone (including Shivendra/PC) can see and manage the
@@ -3506,6 +3840,10 @@ function App() {
               <button className={`icon-btn ${activeRoutineCount > 0 ? 'has-routines' : ''}`} onClick={openMyRoutines} title={`My Recurring Tasks${activeRoutineCount ? ` — ${activeRoutineCount} running` : ''}`}>
                 <FiRepeat /><span className="icon-label">Routines</span>
                 {activeRoutineCount > 0 && <span className="badge-count badge-soft">{activeRoutineCount}</span>}
+              </button>
+              <button className="icon-btn" onClick={() => { setShowTargets(true); setTargetView('mine'); loadTargets(); }} title="Targets">
+                <FiTarget /><span className="icon-label">Targets</span>
+                {myOpenTargets > 0 && <span className="badge-count badge-soft">{myOpenTargets}</span>}
               </button>
               <button className="icon-btn" onClick={openNoticeBoard} title="Notice Board"><FiClipboard /><span className="icon-label">Notices</span></button>
               <button className="icon-btn" onClick={openHolidayCalendar} title="Holiday Calendar"><FiSun /><span className="icon-label">Holidays</span></button>
@@ -4088,7 +4426,7 @@ function App() {
             <div className="modal-body compact-body">
               <div className="cc-group-tabs">
                 {Object.keys(contentChannelGroups).map(group => (
-                  <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => { setContentGroupTab(group); setExpandedContentDay(null); }}>{group}</button>
+                  <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => { setContentGroupTab(group); setExpandedContentDay(null); setCcPlatformFilter('all'); }}>{group}</button>
                 ))}
               </div>
 
@@ -4107,6 +4445,9 @@ function App() {
                 const todayKey = new Date().toISOString().slice(0, 10);
                 const overdue = inMonth.filter(e => e.videoStatus !== 'Published' && String(e.date).slice(0, 10) < todayKey).length;
                 const missingLink = inMonth.filter(e => e.videoStatus !== 'Published' && (e.editingStatus === 'Approved') && !toOpenableUrl(e.finalLink)).length;
+                const mismatched = inMonth.filter(e => platformMismatch(e)).length;
+                const noLive = inMonth.filter(e => e.videoStatus === 'Published' && !toOpenableUrl(e.liveLink)).length;
+                const noTime = inMonth.filter(e => e.videoStatus !== 'Published' && !e.time).length;
                 return (
                   <div className="cc-stats">
                     <div className="cc-stat"><strong>{inMonth.length}</strong><span>Planned</span></div>
@@ -4115,19 +4456,41 @@ function App() {
                     <div className="cc-stat cc-stat-pub"><strong>{published}</strong><span>Published</span></div>
                     <div className={`cc-stat cc-stat-late ${overdue ? 'has' : ''}`}><strong>{overdue}</strong><span>Past date, not live</span></div>
                     {missingLink > 0 && <div className="cc-stat cc-stat-late has"><strong>{missingLink}</strong><span>Approved, no final link</span></div>}
+                    {mismatched > 0 && <div className="cc-stat cc-stat-late has" title="The title names a different platform than the channel it is booked on"><strong>{mismatched}</strong><span>⚠ Wrong platform?</span></div>}
+                    {noTime > 0 && <div className="cc-stat"><strong>{noTime}</strong><span>No posting time</span></div>}
+                    {noLive > 0 && <div className="cc-stat"><strong>{noLive}</strong><span>Live, no post link</span></div>}
                   </div>
                 );
               })()}
 
+              <div className="cc-toolbar">
+                <div className="cc-pf-filter">
+                  <button className={ccPlatformFilter === 'all' ? 'active' : ''} onClick={() => setCcPlatformFilter('all')}>All</button>
+                  {contentCalGridData.groupPlatforms.map(pk => (
+                    <button key={pk} className={ccPlatformFilter === pk ? 'active' : ''} onClick={() => setCcPlatformFilter(pk)}>
+                      <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}>{PLATFORMS[pk].Icon ? (() => { const I = PLATFORMS[pk].Icon; return <I size={10} />; })() : null}</span>{PLATFORMS[pk].label}
+                    </button>
+                  ))}
+                </div>
+                <input className="cc-search" type="search" placeholder="Search title, person, notes…" value={ccSearch} onChange={(e) => setCcSearch(e.target.value)} />
+              </div>
+
               <div className="cc-legend">
-                {Array.from(new Set((contentChannelGroups[contentGroupTab] || []).map(platformOf))).map(pk => (
-                  <span key={pk} className="cc-legend-item"><span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}>{PLATFORMS[pk].Icon ? (() => { const I = PLATFORMS[pk].Icon; return <I size={10} />; })() : null}</span>{PLATFORMS[pk].label}</span>
-                ))}
+                {(() => {
+                  const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
+                  const seen = new Map();
+                  contentCalGridData.entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix).forEach(e => {
+                    const pk = platformOf(e.channels);
+                    const color = blockColor(e.contentType, e.channels);
+                    const key = pk + '|' + color;
+                    if (!seen.has(key)) seen.set(key, { color, label: `${PLATFORMS[pk].label} ${pk === 'other' ? '' : formatInfo(e.contentType, e.channels).text}`.trim() });
+                  });
+                  return Array.from(seen.entries()).map(([k, it]) => <span key={k} className="cc-legend-item"><span className="cc-swatch" style={{ background: it.color }}></span>{it.label}</span>);
+                })()}
                 <span className="cc-legend-sep"></span>
-                <span className="cc-legend-item"><span className="cc-status-dot st-plan"></span>Planned</span>
                 <span className="cc-legend-item"><span className="cc-status-dot st-edit"></span>Editing</span>
                 <span className="cc-legend-item"><span className="cc-status-dot st-sched"></span>Scheduled</span>
-                <span className="cc-legend-item"><span className="cc-status-dot st-pub"></span>Published</span>
+                <span className="cc-legend-item">✓ Published</span>
                 <span className="cc-legend-item"><span className="cc-holiday-dot"></span>Holiday</span>
               </div>
 
@@ -4174,14 +4537,14 @@ function App() {
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-chip cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''}`}
-                                  style={{ '--chip': PLATFORMS[pk].color }}
+                                  className={`cc-chip cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''} ${platformMismatch(entry) ? 'cc-chip-warn' : ''}`}
+                                  style={{ '--chip': blockColor(entry.contentType, entry.channels) }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
-                                  title={`${entry.title} · ${entry.channels} · ${fmt.text} · ${entry.videoStatus || 'Not Started'}`}
+                                  title={`${entry.title} · ${entry.channels} · ${fmt.text} · ${entry.videoStatus || 'Not Started'}${platformMismatch(entry) ? ' · ⚠ ' + platformMismatch(entry) : ''}`}
                                 >
                                   <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={9} /></span>
                                   <span className="cc-chip-body">
-                                    <span className="cc-chip-title">{isPublished && '✓ '}{entry.title}</span>
+                                    <span className="cc-chip-title">{platformMismatch(entry) && <span className="cc-warn-dot" title={platformMismatch(entry)}>⚠</span>}{entry.title}{isPublished && <span className="cc-pub-tick" title="Published">✓</span>}</span>
                                     <span className="cc-chip-meta">
                                       <span className="cc-format-tag" style={{ '--fmt': fmt.color }}>{fmt.text}</span>
                                       {entry.time && <span className="cc-chip-time">{entry.time}</span>}
@@ -4224,14 +4587,13 @@ function App() {
                     .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
                     .map(entry => {
                       const fmt = formatInfo(entry.contentType, entry.channels);
-                      const pk = platformOf(entry.channels);
                       const videoInfo = VIDEO_STATUSES.find(s => s.value === entry.videoStatus) || VIDEO_STATUSES[0];
                       const editInfo = EDITING_STATUSES.find(s => s.value === entry.editingStatus) || EDITING_STATUSES[0];
                       const isPublished = entry.videoStatus === 'Published';
                       return (
                         <div
                           key={entry.id}
-                          style={{ '--chip': PLATFORMS[pk].color }}
+                          style={{ '--chip': blockColor(entry.contentType, entry.channels) }}
                           className={`cc-entry-card ${isPublished ? 'cc-posted' : ''}`}
                           onClick={() => { setExpandedContentDay(null); openEditContentEntry(entry); }}
                         >
@@ -4239,6 +4601,7 @@ function App() {
                             {isPublished && <span className="cc-tick">✓</span>}
                             {entry.time && <strong>{entry.time} — </strong>}{entry.title}
                           </div>
+                          {platformMismatch(entry) && <div className="cc-form-warn">⚠ {platformMismatch(entry)}</div>}
                           <div className="cc-entry-badges">
                             <ChannelBadge channel={entry.channels} />
                             <span className="cc-badge" style={{ background: fmt.color + '1f', color: fmt.color }}>{fmt.icon} {fmt.text}</span>
@@ -4297,19 +4660,18 @@ function App() {
             </div>
           )}
 
-          {/* Manage Channels — PC/Shivendra/Pari can add or remove a channel group or a
-              channel within a group, straight from the app. */}
+          {/* Manage Channels — PC/Shivendra/Pari: add, rename, move, set platform, remove. */}
           {showManageChannels && (
-            <div className="modal-overlay" onClick={() => setShowManageChannels(false)}>
+            <div className="modal-overlay" onClick={() => { setShowManageChannels(false); setEditingChannel(null); }}>
               <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                  <h3>⚙️ Manage Channels</h3>
-                  <button className="modal-close" onClick={() => setShowManageChannels(false)}>✕</button>
+                  <h3><FiSettings /> Manage Channels</h3>
+                  <button className="modal-close" onClick={() => { setShowManageChannels(false); setEditingChannel(null); }}>✕</button>
                 </div>
                 <div className="modal-body compact-body">
-                  <div className="form-row">
+                  <div className="form-row-3">
                     <div className="form-group">
-                      <label>Group name</label>
+                      <label>Group</label>
                       <input type="text" list="cc-existing-groups" placeholder="e.g. Akshat Gupta" value={newChannelGroup} onChange={(e) => setNewChannelGroup(e.target.value)} />
                       <datalist id="cc-existing-groups">
                         {Object.keys(contentChannelGroups).map(g => <option key={g} value={g} />)}
@@ -4317,10 +4679,18 @@ function App() {
                     </div>
                     <div className="form-group">
                       <label>Channel name</label>
-                      <input type="text" placeholder="e.g. AG Insta" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} />
+                      <input type="text" placeholder="e.g. AG FB" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label>Platform</label>
+                      <select value={newChannelPlatform} onChange={(e) => setNewChannelPlatform(e.target.value)}>
+                        <option value="">Automatic (from name)</option>
+                        {Object.keys(PLATFORMS).map(k => <option key={k} value={k}>{PLATFORMS[k].label}</option>)}
+                      </select>
                     </div>
                   </div>
                   <button className="btn-success" onClick={handleAddChannel}>+ Add Channel</button>
+                  <p className="tm-hint" style={{ marginTop: 10 }}>Tap a channel to rename it, move it to another group or choose its platform. Calendar entries follow the new name automatically.</p>
 
                   <div className="cc-channel-manage-list">
                     {Object.keys(contentChannelGroups).map(group => (
@@ -4328,12 +4698,27 @@ function App() {
                         <strong>{group}</strong>
                         <div className="cc-channel-manage-chips">
                           {(contentChannelGroups[group] || []).map(ch => (
-                            <span key={ch} className="cc-channel-manage-chip">
-                              {ch}
+                            <span key={ch} className={`cc-channel-manage-chip ${editingChannel && editingChannel.group === group && editingChannel.name === ch ? 'editing' : ''}`}>
+                              <button className="cc-chan-edit" onClick={() => setEditingChannel({ group, name: ch, newName: ch, newGroup: group, platform: channelPlatforms[ch] || '' })} title="Edit channel">
+                                <span className="pf-icon" style={{ background: PLATFORMS[platformOf(ch)].bg }}><PlatformIcon channel={ch} size={9} /></span>
+                                {ch}
+                              </button>
                               <button onClick={() => handleDeleteChannel(group, ch)} title="Remove">✕</button>
                             </span>
                           ))}
                         </div>
+                        {editingChannel && editingChannel.group === group && (
+                          <div className="cc-chan-editor">
+                            <input type="text" value={editingChannel.newName} onChange={(e) => setEditingChannel({ ...editingChannel, newName: e.target.value })} placeholder="Channel name" />
+                            <input type="text" list="cc-existing-groups" value={editingChannel.newGroup} onChange={(e) => setEditingChannel({ ...editingChannel, newGroup: e.target.value })} placeholder="Group" />
+                            <select value={editingChannel.platform} onChange={(e) => setEditingChannel({ ...editingChannel, platform: e.target.value })}>
+                              <option value="">Automatic ({PLATFORMS[platformOf(editingChannel.newName, true)].label})</option>
+                              {Object.keys(PLATFORMS).map(k => <option key={k} value={k}>{PLATFORMS[k].label}</option>)}
+                            </select>
+                            <button className="btn-secondary" onClick={() => setEditingChannel(null)}>Cancel</button>
+                            <button className="btn-success" onClick={saveChannelEdit}>Save</button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -4355,7 +4740,10 @@ function App() {
                     <div className="form-group">
                       <label>Channel</label>
                       <select value={contentForm.channels} onChange={(e) => setContentForm({ ...contentForm, channels: e.target.value })}>
-                        {(contentChannelGroups[contentGroupTab] || []).map(ch => <option key={ch} value={ch}>{ch} · {PLATFORMS[platformOf(ch)].label}</option>)}
+                        {(contentChannelGroups[contentGroupTab] || []).map(ch => {
+                          const lbl = PLATFORMS[platformOf(ch)].label;
+                          return <option key={ch} value={ch}>{ch.toLowerCase().includes(lbl.split(' ')[0].toLowerCase()) ? ch : `${ch} · ${lbl}`}</option>;
+                        })}
                       </select>
                     </div>
                     <div className="form-group">
@@ -4434,10 +4822,19 @@ function App() {
                       <LinkField value={contentForm.thumbnailLink} onChange={(e) => setContentForm({ ...contentForm, thumbnailLink: e.target.value })} placeholder="https://..." />
                     </div>
                   </div>
-                  <div className="form-group">
-                    <label>Design Link</label>
-                    <LinkField value={contentForm.designLink} onChange={(e) => setContentForm({ ...contentForm, designLink: e.target.value })} placeholder="https://... (Canva/Figma/PSD source, etc.)" />
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Design Link</label>
+                      <LinkField value={contentForm.designLink} onChange={(e) => setContentForm({ ...contentForm, designLink: e.target.value })} placeholder="https://... (Canva/Figma/PSD source, etc.)" />
+                    </div>
+                    <div className="form-group">
+                      <label>Live Post Link <small className="label-hint">(after publishing)</small></label>
+                      <LinkField value={contentForm.liveLink || ''} onChange={(e) => setContentForm({ ...contentForm, liveLink: e.target.value })} placeholder="https://instagram.com/... or youtube.com/..." />
+                    </div>
                   </div>
+                  {platformMismatch({ title: contentForm.title, channels: contentForm.channels }) && (
+                    <p className="cc-form-warn">⚠ {platformMismatch({ title: contentForm.title, channels: contentForm.channels })} — check the Channel.</p>
+                  )}
 
                   <div className="form-group">
                     <label>Description</label>
@@ -4455,7 +4852,10 @@ function App() {
                 </div>
                 <div className="modal-footer">
                   {editingContentEntry.id && (
-                    <button className="btn-secondary" onClick={handleDeleteContentEntry} style={{ marginRight: 'auto', color: 'var(--danger)' }}>🗑️ Delete</button>
+                    <button className="btn-secondary" onClick={handleDeleteContentEntry} style={{ color: 'var(--danger)' }}>🗑️ Delete</button>
+                  )}
+                  {editingContentEntry.id && (
+                    <button className="btn-secondary" onClick={duplicateContentEntry} style={{ marginRight: 'auto' }} title="Copy this entry to another channel (e.g. the same reel on Facebook)">⧉ Copy to another channel</button>
                   )}
                   <button className="btn-secondary" onClick={() => setEditingContentEntry(null)}>Cancel</button>
                   <button className="btn-success" onClick={handleSaveContentEntry} disabled={contentSaving}>{contentSaving ? 'Saving...' : (editingContentEntry.id ? '💾 Save Changes' : '✅ Create Entry')}</button>
@@ -4515,6 +4915,155 @@ function App() {
         </div>
       )}
 
+      {/* TARGETS */}
+      {showTargets && (
+        <div className="modal-overlay" onClick={() => { setShowTargets(false); setTargetForm(null); }}>
+          <div className="modal-content targets-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><FiTarget /> Targets</h3>
+              <button className="btn-success tg-new" onClick={openNewTarget}><FiPlus /> {canAssignTargets ? 'Set / assign target' : 'Set my target'}</button>
+              <button className="modal-close" onClick={() => { setShowTargets(false); setTargetForm(null); }}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              {targetForm ? (
+                <div className="tg-form">
+                  <h4>{targetForm.id ? 'Edit target' : 'New target'}</h4>
+                  {canAssignTargets && !targetForm.id && (
+                    <div className="form-group">
+                      <label>For ({targetForm.ownerIds.length} selected)</label>
+                      <div className="assignee-avatars-select">
+                        {activeTeam.map(m => (
+                          <div key={m.id} title={m.displayName}
+                            className={`avatar-select ${targetForm.ownerIds.includes(m.id) ? 'checked' : ''}`}
+                            onClick={() => setTargetForm(f => ({ ...f, ownerIds: f.ownerIds.includes(m.id) ? f.ownerIds.filter(x => x !== m.id) : [...f.ownerIds, m.id] }))}>
+                            {m.avatar}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="form-group">
+                    <label>Target *</label>
+                    <input type="text" placeholder="e.g. Publish reels on AG Insta" value={targetForm.title} onChange={(e) => setTargetForm({ ...targetForm, title: e.target.value })} />
+                  </div>
+                  <div className="form-row-3">
+                    <div className="form-group">
+                      <label>How many *</label>
+                      <input type="number" min="1" placeholder="30" value={targetForm.target} onChange={(e) => setTargetForm({ ...targetForm, target: e.target.value })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Unit</label>
+                      <select value={targetForm.unit} onChange={(e) => setTargetForm({ ...targetForm, unit: e.target.value })}>
+                        {TARGET_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>Period</label>
+                      <select value={targetForm.period} onChange={(e) => { const r = periodRange(e.target.value); setTargetForm({ ...targetForm, period: e.target.value, ...(r || {}) }); }}>
+                        {['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Custom'].map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group"><label>Start</label><input type="date" value={targetForm.start} onChange={(e) => setTargetForm({ ...targetForm, start: e.target.value, period: 'Custom' })} /></div>
+                    <div className="form-group"><label>Due</label><input type="date" value={targetForm.due} onChange={(e) => setTargetForm({ ...targetForm, due: e.target.value, period: 'Custom' })} /></div>
+                  </div>
+                  <div className="form-group">
+                    <label>Details / how it is measured</label>
+                    <textarea rows="2" className="notice-textarea" value={targetForm.details} onChange={(e) => setTargetForm({ ...targetForm, details: e.target.value })} placeholder="Optional" />
+                  </div>
+                  <div className="tg-form-actions">
+                    <button className="btn-secondary" onClick={() => setTargetForm(null)}>Cancel</button>
+                    <button className="btn-success" onClick={saveTargetForm}>{targetForm.id ? 'Save changes' : 'Save target'}</button>
+                  </div>
+                </div>
+              ) : (() => {
+                const views = [{ k: 'mine', label: 'My targets' }];
+                if (canAssignTargets || targets.some(t => t.assignedById === currentUser && t.ownerId !== currentUser)) views.push({ k: 'assigned', label: 'Assigned by me' });
+                if (targetsCanSeeAll) views.push({ k: 'all', label: 'Whole team' });
+                let list = targets.filter(t => targetView === 'mine' ? t.ownerId === currentUser
+                  : targetView === 'assigned' ? (t.assignedById === currentUser && t.ownerId !== currentUser) : true);
+                if (targetView !== 'mine' && targetPersonFilter !== 'all') list = list.filter(t => t.ownerId === targetPersonFilter);
+                const rank = { behind: 0, over: 1, ok: 2, done: 3 };
+                list = list.slice().sort((a, b) => (rank[targetHealth(a).key] - rank[targetHealth(b).key]) || String(a.due).localeCompare(String(b.due)));
+                const people = Array.from(new Set(targets.filter(t => targetView === 'all' || t.assignedById === currentUser).map(t => t.ownerId)));
+                const sum = { total: list.length, done: list.filter(t => targetHealth(t).key === 'done').length, behind: list.filter(t => ['behind', 'over'].includes(targetHealth(t).key)).length };
+                return (
+                  <>
+                    <div className="disc-tabs">
+                      {views.map(v => <button key={v.k} className={targetView === v.k ? 'active' : ''} onClick={() => { setTargetView(v.k); setTargetPersonFilter('all'); }}>{v.label}</button>)}
+                      {targetView !== 'mine' && people.length > 1 && (
+                        <select className="tg-person" value={targetPersonFilter} onChange={(e) => setTargetPersonFilter(e.target.value)}>
+                          <option value="all">Everyone</option>
+                          {people.map(pid => <option key={pid} value={pid}>{team.find(m => m.id === pid)?.displayName || pid}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div className="disc-summary tg-summary">
+                      <div><strong>{sum.total}</strong><span>Targets</span></div>
+                      <div className="ok"><strong>{sum.done}</strong><span>Achieved</span></div>
+                      <div className={sum.behind ? 'bad' : 'ok'}><strong>{sum.behind}</strong><span>Behind / overdue</span></div>
+                      <div><strong>{sum.total ? Math.round(list.reduce((n, t) => n + Math.min(1, t.achieved / (t.target || 1)), 0) / sum.total * 100) : 0}%</strong><span>Overall progress</span></div>
+                    </div>
+                    {list.length === 0 ? (
+                      <div className="inbox-empty"><div className="inbox-empty-icon"><FiTarget /></div><p>No targets here yet</p><span>Press “{canAssignTargets ? 'Set / assign target' : 'Set my target'}” to add one.</span></div>
+                    ) : (
+                      <div className="tg-list">
+                        {list.map(t => {
+                          const h = targetHealth(t);
+                          const pct = Math.min(100, Math.round((t.achieved / (t.target || 1)) * 100));
+                          const canUpdate = t.ownerId === currentUser || t.assignedById === currentUser || isAppAdmin;
+                          const canEditT = t.assignedById === currentUser || isAppAdmin;
+                          const d = progressDraft[t.id];
+                          const owner = team.find(m => m.id === t.ownerId);
+                          return (
+                            <div key={t.id} className={`tg-card tg-${h.key}`}>
+                              <div className="tg-top">
+                                {targetView !== 'mine' && <span className="mini-avatar tg-avatar" title={t.owner}>{owner?.avatar || String(t.owner || '?').slice(0, 2)}</span>}
+                                <div className="tg-title">
+                                  <strong>{t.title}</strong>
+                                  <span>{t.period} · {formatNiceDate(t.start)} – {formatNiceDate(t.due)}{t.assignedById !== t.ownerId ? ` · set by ${t.assignedBy}` : ''}{targetView !== 'mine' ? ` · for ${t.owner}` : ''}</span>
+                                </div>
+                                <span className={`tg-health tg-h-${h.key}`}>{h.label}{h.daysLeft !== undefined && h.key !== 'done' ? ` · ${h.daysLeft}d left` : ''}</span>
+                              </div>
+                              {t.details && <p className="tg-details">{t.details}</p>}
+                              <div className="tg-progress">
+                                <div className="tg-bar"><div style={{ width: pct + '%' }}></div></div>
+                                <span className="tg-num"><strong>{t.achieved}</strong> / {t.target} {t.unit} · {pct}%</span>
+                              </div>
+                              <div className="tg-actions">
+                                {canUpdate && (d ? (
+                                  <>
+                                    <input type="number" min="0" className="tg-input" value={d.value} onChange={(e) => setProgressDraft(p => ({ ...p, [t.id]: { ...d, value: e.target.value } }))} />
+                                    <input type="text" className="tg-note" placeholder="Note (optional)" value={d.note} onChange={(e) => setProgressDraft(p => ({ ...p, [t.id]: { ...d, note: e.target.value } }))} />
+                                    <button className="btn-success" onClick={() => saveProgress(t)}>Save</button>
+                                    <button className="btn-secondary" onClick={() => setProgressDraft(p => { const n = { ...p }; delete n[t.id]; return n; })}>Cancel</button>
+                                  </>
+                                ) : (
+                                  <button className="btn-ghost" onClick={() => setProgressDraft(p => ({ ...p, [t.id]: { value: String(t.achieved), note: '' } }))}>Update progress</button>
+                                ))}
+                                {(t.log || []).length > 0 && <button className="btn-ghost" onClick={() => setTargetHistoryOpen(targetHistoryOpen === t.id ? null : t.id)}>History ({t.log.length})</button>}
+                                {canEditT && <button className="btn-ghost" onClick={() => setTargetForm({ id: t.id, title: t.title, details: t.details || '', ownerIds: [t.ownerId], period: t.period, start: t.start, due: t.due, target: t.target, unit: t.unit })}><FiEdit2 /> Edit</button>}
+                                {canEditT && <button className="btn-ghost tg-del" onClick={() => removeTarget(t)}><FiTrash2 /></button>}
+                              </div>
+                              {targetHistoryOpen === t.id && (
+                                <ul className="tg-history">
+                                  {[...(t.log || [])].reverse().map((l, i) => <li key={i}><strong>{l.value}</strong> {t.unit} · {l.by} · {timeAgo(l.at)}{l.note ? ` — ${l.note}` : ''}</li>)}
+                                </ul>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ATTENDANCE RECORD & DISCIPLINE — my flags (with correction requests); for
           HR/PC/Shivendra also the team summary, pending requests and shifts. */}
       {showDiscipline && (
@@ -4528,10 +5077,14 @@ function App() {
               <div className="disc-tabs">
                 {(!isAdmin || isHR) && <button className={disciplineTab === 'mine' ? 'active' : ''} onClick={() => { setDisciplineTab('mine'); loadDiscipline('mine'); }}>My record</button>}
                 {canManageAttendance && <button className={disciplineTab === 'team' ? 'active' : ''} onClick={() => { setDisciplineTab('team'); loadDiscipline('team'); }}>Team {disciplineData.team?.requests?.length ? <span className="tab-badge">{disciplineData.team.requests.length}</span> : null}</button>}
+                {canManageAttendance && <button className={disciplineTab === 'day' ? 'active' : ''} onClick={() => { setDisciplineTab('day'); if (!review) loadReview(); }}>Day view</button>}
+                {canManageAttendance && <button className={disciplineTab === 'month' ? 'active' : ''} onClick={() => { setDisciplineTab('month'); if (!review) loadReview(); }}>Month sheet</button>}
+                {canManageAttendance && <button className={disciplineTab === 'leaves' ? 'active' : ''} onClick={() => { setDisciplineTab('leaves'); if (!review) loadReview(); }}>Leaves</button>}
+                {canManageAttendance && <button className={disciplineTab === 'salary' ? 'active' : ''} onClick={() => { setDisciplineTab('salary'); if (!review) loadReview(); }}>Salary summary</button>}
                 {canManageAttendance && <button className={disciplineTab === 'shifts' ? 'active' : ''} onClick={() => setDisciplineTab('shifts')}>Shifts</button>}
               </div>
 
-              <div className="disc-rules">
+              {(disciplineTab === 'mine' || disciplineTab === 'team') && <div className="disc-rules">
                 <strong>Rules</strong>
                 <span>Late after {attRules.lateGrace} min of shift start</span>
                 <span>Lunch {fmtClock(attRules.lunchStart)}–{fmtClock(attRules.lunchEnd)}, {attRules.lunchMinutes} min, once</span>
@@ -4539,16 +5092,16 @@ function App() {
                 <span>Forgot sign-out → day closed at shift end</span>
                 <span>Under {attRules.minWorkHours}h worked</span>
                 <span className="disc-rule-key">Each = 1 strike · every {attRules.strikesPerHalfDay} strikes in a month = ½ day deduction</span>
-              </div>
+              </div>}
 
-              {disciplineTab !== 'shifts' && (
+              {disciplineTab !== 'shifts' && disciplineTab !== 'day' && (
                 <div className="month-nav">
                   <button className="btn-secondary" onClick={() => changeDiscMonth(-1)}>← Prev</button>
                   <strong>{new Date(discYear, discMonth - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
                   <button className="btn-secondary" onClick={() => changeDiscMonth(1)}>Next →</button>
                 </div>
               )}
-              {disciplineLoading && <p className="empty-text">Loading…</p>}
+              {(disciplineLoading || reviewLoading) && <p className="empty-text">Loading…</p>}
 
               {disciplineTab === 'mine' && disciplineData.mine && (() => {
                 const sum = disciplineData.mine.summary?.[currentUser] || { strikes: 0, halfDays: 0, excused: 0, pending: 0 };
@@ -4660,6 +5213,160 @@ function App() {
                   </>
                 );
               })()}
+
+              {disciplineTab === 'day' && canManageAttendance && (() => {
+                const [yy, mm] = reviewDay.split('-').map(Number);
+                const sameMonth = review && review.year === yy && review.month === mm;
+                const rows = sameMonth ? review.people.map(p => ({ p, d: p.days.find(x => x.date === reviewDay) })).filter(r => r.d) : [];
+                const codeLabel = { P: 'Present', A: 'Absent', LV: 'Leave', HD: 'Half day', WFH: 'Work from home', OFF: 'Sunday', HOL: 'Holiday', FUT: '—', NS: 'Not signed in' };
+                const count = (c) => rows.filter(r => r.d.code === c).length;
+                return (
+                  <>
+                    <div className="rv-daybar">
+                      <button className="btn-secondary" onClick={() => { const d = new Date(reviewDay + 'T12:00:00'); d.setDate(d.getDate() - 1); const k = d.toISOString().slice(0, 10); setReviewDay(k); const [y2, m2] = k.split('-').map(Number); if (!review || review.month !== m2 || review.year !== y2) { setDiscYear(y2); setDiscMonth(m2); loadReview(y2, m2); } }}>← Day</button>
+                      <input type="date" value={reviewDay} onChange={(e) => { const k = e.target.value; if (!k) return; setReviewDay(k); const [y2, m2] = k.split('-').map(Number); if (!review || review.month !== m2 || review.year !== y2) { setDiscYear(y2); setDiscMonth(m2); loadReview(y2, m2); } }} />
+                      <button className="btn-secondary" onClick={() => { const d = new Date(reviewDay + 'T12:00:00'); d.setDate(d.getDate() + 1); const k = d.toISOString().slice(0, 10); setReviewDay(k); const [y2, m2] = k.split('-').map(Number); if (!review || review.month !== m2 || review.year !== y2) { setDiscYear(y2); setDiscMonth(m2); loadReview(y2, m2); } }}>Day →</button>
+                      <strong className="rv-dayname">{new Date(reviewDay + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>
+                    </div>
+                    {sameMonth && (
+                      <div className="disc-summary">
+                        <div className="ok"><strong>{count('P') + count('WFH')}</strong><span>Present</span></div>
+                        <div className={count('A') ? 'bad' : 'ok'}><strong>{count('A')}</strong><span>Absent</span></div>
+                        <div><strong>{count('LV') + count('HD')}</strong><span>On leave</span></div>
+                        <div className={rows.reduce((n, r) => n + r.d.flags.filter(f => f.status !== 'Excused').length, 0) ? 'warn' : 'ok'}><strong>{rows.reduce((n, r) => n + r.d.flags.filter(f => f.status !== 'Excused').length, 0)}</strong><span>Flags</span></div>
+                      </div>
+                    )}
+                    <div className="disc-table-wrap">
+                      <table className="monthly-table disc-table rv-day-table">
+                        <thead><tr><th>Person</th><th>Status</th><th>In</th><th>Out</th><th>Worked</th><th>Lunch</th><th>Flags</th></tr></thead>
+                        <tbody>
+                          {rows.map(({ p, d }) => (
+                            <tr key={p.userId} className={`rv-row-${d.code}`}>
+                              <td><strong>{team.find(m => m.id === p.userId)?.displayName || p.name}</strong><small className="rv-shift">{p.shift.start}–{p.shift.end}</small></td>
+                              <td><span className={`rv-code rv-${d.code}`}>{d.leave || codeLabel[d.code] || d.code}</span></td>
+                              <td>{d.inAt ? fmtClock(d.inAt) : '—'}</td>
+                              <td>{d.outAt ? fmtClock(d.outAt) : (d.inAt ? 'not signed out' : '—')}</td>
+                              <td>{fmtMin(d.workedMin)}</td>
+                              <td className={d.lunchMin > attRules.lunchMinutes + attRules.lunchTolerance ? 'rv-bad' : ''}>{d.lunchMin ? `${d.lunchMin}m` : '—'}</td>
+                              <td className="rv-flags">{d.flags.length ? d.flags.map((f, i) => <span key={i} className={`warn-chip ${f.status === 'Excused' ? 'ok' : 'bad'}`} title={f.detail}>{({ LATE: 'Late', LONG_LUNCH: 'Long lunch', LUNCH_NOT_MARKED: 'No lunch', MISSED_SIGNOUT: 'No sign-out', SHORT_HOURS: 'Short hrs' })[f.type] || f.type}</span>) : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {disciplineTab === 'month' && canManageAttendance && review && (
+                <>
+                  <div className="rv-legend">
+                    <span className="rv-code rv-P">P</span> Present <span className="rv-code rv-A">A</span> Absent <span className="rv-code rv-LV">L</span> Leave <span className="rv-code rv-HD">½</span> Half day <span className="rv-code rv-WFH">W</span> WFH <span className="rv-code rv-OFF">·</span> Sunday/holiday <span className="rv-dot-flag"></span> flag — tap a cell for details
+                  </div>
+                  <div className="rv-grid-wrap">
+                    <table className="rv-grid">
+                      <thead>
+                        <tr><th className="rv-name-col">Person</th>{review.people[0]?.days.map(d => <th key={d.date} className={['OFF', 'HOL'].includes(d.code) ? 'rv-off' : ''}>{Number(d.date.slice(8))}<small>{'SMTWTFS'[new Date(d.date + 'T12:00:00').getDay()]}</small></th>)}<th>P</th><th>A</th><th>L</th></tr>
+                      </thead>
+                      <tbody>
+                        {review.people.map(p => (
+                          <tr key={p.userId}>
+                            <td className="rv-name-col">{team.find(m => m.id === p.userId)?.displayName || p.name}</td>
+                            {p.days.map(d => {
+                              const short = { P: 'P', A: 'A', LV: 'L', HD: '½', WFH: 'W', OFF: '·', HOL: '·', FUT: '', NS: '?' }[d.code];
+                              const bad = d.flags.some(f => f.status !== 'Excused');
+                              return (
+                                <td key={d.date} className={`rv-cell rv-${d.code}`} onClick={() => setReviewCell({ p, d })} title={`${d.date} · ${d.leave || d.code}${d.inAt ? ` · in ${d.inAt}` : ''}${d.outAt ? ` · out ${d.outAt}` : ''}`}>
+                                  {short}{bad && <span className="rv-dot-flag"></span>}
+                                </td>
+                              );
+                            })}
+                            <td className="rv-tot">{p.totals.present}</td><td className="rv-tot rv-tot-a">{p.totals.absent}</td><td className="rv-tot">{p.totals.leaveDays + p.totals.halfDays * 0.5}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {reviewCell && (
+                    <div className="rv-cell-detail">
+                      <div className="rv-cell-head">
+                        <strong>{reviewCell.p.name}</strong> · {new Date(reviewCell.d.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        <button className="btn-ghost" onClick={() => setReviewCell(null)}>Close</button>
+                      </div>
+                      <p>{reviewCell.d.leave ? `🌴 ${reviewCell.d.leave}` : ''} In {reviewCell.d.inAt ? fmtClock(reviewCell.d.inAt) : '—'} · Out {reviewCell.d.outAt ? fmtClock(reviewCell.d.outAt) : '—'} · Worked {fmtMin(reviewCell.d.workedMin)} · Lunch {reviewCell.d.lunchMin ? reviewCell.d.lunchMin + 'm' : '—'}</p>
+                      {reviewCell.d.flags.map((f, i) => <p key={i} className="flag-detail">• {f.detail} ({f.status === 'Open' ? 'strike' : f.status})</p>)}
+                      {!['OFF', 'HOL'].includes(reviewCell.d.code) && (
+                        <button className="btn-ghost" onClick={() => { setLeaveForm({ userIds: [reviewCell.p.userId], from: reviewCell.d.date, to: reviewCell.d.date, type: 'Casual Leave', note: '' }); setDisciplineTab('leaves'); setReviewCell(null); }}>🌴 Mark leave for this day</button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {disciplineTab === 'leaves' && canManageAttendance && (
+                <>
+                  <div className="leave-form">
+                    <h4>🌴 Mark leave</h4>
+                    <div className="form-group">
+                      <label>Who ({leaveForm.userIds.length} selected)</label>
+                      <div className="assignee-avatars-select">
+                        {activeTeam.filter(m => !m.isAdmin).map(m => (
+                          <div key={m.id} title={m.displayName} className={`avatar-select ${leaveForm.userIds.includes(m.id) ? 'checked' : ''}`}
+                            onClick={() => setLeaveForm(f => ({ ...f, userIds: f.userIds.includes(m.id) ? f.userIds.filter(x => x !== m.id) : [...f.userIds, m.id] }))}>{m.avatar}</div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="form-row-3">
+                      <div className="form-group"><label>From</label><input type="date" value={leaveForm.from} onChange={(e) => setLeaveForm({ ...leaveForm, from: e.target.value })} /></div>
+                      <div className="form-group"><label>To (optional)</label><input type="date" value={leaveForm.to} onChange={(e) => setLeaveForm({ ...leaveForm, to: e.target.value })} /></div>
+                      <div className="form-group"><label>Type</label>
+                        <select value={leaveForm.type} onChange={(e) => setLeaveForm({ ...leaveForm, type: e.target.value })}>{LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select>
+                      </div>
+                    </div>
+                    <div className="form-group"><label>Note</label><input type="text" placeholder="Reason / approval (optional)" value={leaveForm.note} onChange={(e) => setLeaveForm({ ...leaveForm, note: e.target.value })} /></div>
+                    <p className="tm-hint">Sundays and holidays are skipped. On leave days nobody gets attendance flags or reminders, and flags already given that day are excused. Half Day removes late / short-hours / lunch flags only.</p>
+                    <button className="btn-success" onClick={submitLeave}>Mark leave</button>
+                  </div>
+                  <h4 className="rv-subhead">Leaves in {new Date(discYear, discMonth - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</h4>
+                  {review && review.leaves.length ? (
+                    <div className="flag-list">
+                      {review.leaves.slice().sort((a, b) => b.date.localeCompare(a.date)).map(l => (
+                        <div key={l.id} className={`flag-row leave-row ${l.status === 'Cancelled' ? 'flag-rejected' : 'flag-excused'}`}>
+                          <div className="flag-main">
+                            <div className="flag-top"><strong>{l.name}</strong><span>{l.type}</span><span className="flag-date">{new Date(l.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span>{l.status === 'Cancelled' && <span className="flag-status st-rejected">Cancelled</span>}</div>
+                            <div className="flag-detail">{l.note || '—'} · marked by {l.markedBy}</div>
+                          </div>
+                          {l.status !== 'Cancelled' && <button className="btn-ghost" onClick={() => cancelLeaveRow(l)}>Cancel</button>}
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="empty-text">No leaves marked this month.</p>}
+                </>
+              )}
+
+              {disciplineTab === 'salary' && canManageAttendance && review && (
+                <>
+                  <div className="rv-salary-head">
+                    <p className="tm-hint">Up to today. “Suggested deduction” = absent days + unpaid leave + ½ per half day + strike deductions. Check it before using it for salary.</p>
+                    <button className="btn-success" onClick={downloadSalaryCsv}><FiDownload /> Download (Excel/CSV)</button>
+                  </div>
+                  <div className="disc-table-wrap">
+                    <table className="monthly-table disc-table">
+                      <thead><tr><th>Person</th><th>Working days</th><th>Present</th><th>Absent</th><th>Half days</th><th>Paid leave</th><th>Unpaid</th><th>Late</th><th>Strikes</th><th>Avg hours</th><th>Suggested deduction</th></tr></thead>
+                      <tbody>
+                        {review.people.map(p => (
+                          <tr key={p.userId} className={p.totals.deductionDays ? 'row-bad' : ''}>
+                            <td><strong>{team.find(m => m.id === p.userId)?.displayName || p.name}</strong></td>
+                            <td>{p.totals.workingDays}</td><td>{p.totals.present}</td><td>{p.totals.absent}</td><td>{p.totals.halfDays}</td>
+                            <td>{p.totals.paidLeave}</td><td>{p.totals.unpaidLeave}</td><td>{p.totals.late}</td><td>{p.totals.strikes}</td>
+                            <td>{fmtMin(p.totals.avgWorkedMin)}</td><td><strong>{p.totals.deductionDays ? `${p.totals.deductionDays} day` : '—'}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
 
               {disciplineTab === 'shifts' && canManageAttendance && (
                 <div className="shift-list">
@@ -4938,7 +5645,10 @@ function App() {
               <div className="section-header" onClick={() => setShowAttendance(!showAttendance)}>
                 <h3><FiUsers /> Team Status Today <span className="section-caret">{showAttendance ? '▾' : '▸'}</span></h3>
                 {canManageAttendance && (
-                  <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('team'); }}><FiShield /> Discipline &amp; shifts</button>
+                  <span className="ts-actions">
+                    <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('day'); }}><FiCalendar /> Attendance review &amp; leave</button>
+                    <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('team'); }}><FiShield /> Discipline &amp; shifts</button>
+                  </span>
                 )}
               </div>
               {showAttendance && (
@@ -5103,7 +5813,7 @@ function App() {
                 />
                 <MultiSelectFilter
                   label="Channels"
-                  options={channels}
+                  options={allChannelOptions}
                   selected={filterChannel}
                   onChange={setFilterChannel}
                 />
@@ -5325,13 +6035,13 @@ function App() {
               <div className="form-group">
                 <label>Channels ({selectedChannels.length} selected)</label>
                 <div className="channel-select-grid">
-                  {channels.map(ch => (
+                  {allChannelOptions.map(ch => (
                     <div 
                       key={ch}
                       className={`channel-chip ${selectedChannels.includes(ch) ? 'checked' : ''}`}
                       onClick={() => toggleChannel(ch)}
                     >
-                      {ch}
+                      <span className="pf-icon" style={{ background: PLATFORMS[platformOf(ch)].bg }}><PlatformIcon channel={ch} size={9} /></span> {ch}
                     </div>
                   ))}
                 </div>

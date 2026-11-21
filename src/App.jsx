@@ -1,4 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { SiInstagram, SiYoutube, SiFacebook, SiSpotify, SiX, SiThreads, SiPinterest } from 'react-icons/si'
+import { FaLinkedin } from 'react-icons/fa'
+import {
+  FiBell, FiX, FiCheckCircle, FiCalendar, FiEdit2, FiTrash2, FiClipboard, FiSun, FiUsers, FiRepeat,
+  FiPhone, FiMessageSquare, FiRefreshCw, FiPlus, FiShield, FiSettings, FiBellOff, FiClock, FiAlertTriangle
+} from 'react-icons/fi'
+import { LuBellRing as FiBellRing } from 'react-icons/lu'
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -213,6 +220,73 @@ const CONTENT_LINK_FIELDS = [
 // FIX — reusable multi-select checklist dropdown, replacing the old single-select native
 // <select> filters. Lets people check multiple options at once (e.g. "Not Started" AND
 // "In Progress" simultaneously) instead of being limited to one value.
+// ============================================================
+// v13 — PLATFORMS. Each channel name is matched to its platform (by the words in its
+// name: "Insta", "YT", "Spotify"…) so it gets the platform's own icon and colour
+// everywhere — task cards, the content calendar, filters. New channels added from
+// "Manage Channels" pick this up automatically.
+// ============================================================
+const PLATFORMS = {
+  instagram: { label: 'Instagram', Icon: SiInstagram, color: '#E1306C', bg: 'linear-gradient(45deg,#F58529,#DD2A7B 50%,#8134AF)' },
+  youtube: { label: 'YouTube', Icon: SiYoutube, color: '#FF0000', bg: '#FF0000' },
+  facebook: { label: 'Facebook', Icon: SiFacebook, color: '#1877F2', bg: '#1877F2' },
+  spotify: { label: 'Spotify', Icon: SiSpotify, color: '#1DB954', bg: '#1DB954' },
+  linkedin: { label: 'LinkedIn', Icon: FaLinkedin, color: '#0A66C2', bg: '#0A66C2' },
+  x: { label: 'X (Twitter)', Icon: SiX, color: '#111111', bg: '#111111' },
+  threads: { label: 'Threads', Icon: SiThreads, color: '#111111', bg: '#111111' },
+  pinterest: { label: 'Pinterest', Icon: SiPinterest, color: '#E60023', bg: '#E60023' },
+  other: { label: 'Other', Icon: null, color: '#64748b', bg: '#64748b' }
+};
+function platformOf(channel) {
+  const c = String(channel || '').toLowerCase();
+  if (/insta|\big\b|reel/.test(c)) return 'instagram';
+  if (/\byt\b|youtube|shorts/.test(c)) return 'youtube';
+  if (/facebook|\bfb\b/.test(c)) return 'facebook';
+  if (/spotify|podcast/.test(c)) return 'spotify';
+  if (/linkedin/.test(c)) return 'linkedin';
+  if (/twitter|\bx\b/.test(c)) return 'x';
+  if (/threads/.test(c)) return 'threads';
+  if (/pinterest/.test(c)) return 'pinterest';
+  return 'other';
+}
+// Channel name without the platform word ("AG Insta" → "AG").
+function channelShortName(channel) {
+  const short = String(channel || '').replace(/\b(insta(gram)?|yt|youtube|spotify|linkedin|twitter|facebook|fb)\b/ig, '').replace(/\s{2,}/g, ' ').trim();
+  return short || String(channel || '');
+}
+function PlatformIcon({ channel, size = 14 }) {
+  const p = PLATFORMS[platformOf(channel)];
+  if (!p.Icon) return <span className="pf-dot" style={{ width: size, height: size }}></span>;
+  return <p.Icon size={size} aria-label={p.label} />;
+}
+function ChannelBadge({ channel }) {
+  const key = platformOf(channel);
+  const p = PLATFORMS[key];
+  return (
+    <span className={`badge-channel pf-${key}`} title={`${channel} · ${p.label}`}>
+      <span className="pf-icon" style={{ background: p.bg }}><PlatformIcon channel={channel} size={10} /></span>
+      {channelShortName(channel)}
+    </span>
+  );
+}
+// Format of a piece of content. The stored value never changes (old entries keep
+// working); only the label adapts to the platform — a vertical video is a "Reel" on
+// Instagram/Facebook and a "Short" on YouTube.
+const CONTENT_FORMATS = [
+  { value: 'Short (Vertical)', icon: '⚡', color: '#f59e0b', label: (pf) => pf === 'youtube' ? 'Short' : pf === 'instagram' || pf === 'facebook' ? 'Reel' : 'Short video' },
+  { value: 'Long Format Video', icon: '🎬', color: '#3b82f6', label: () => 'Long video' },
+  { value: 'Carousel', icon: '🖼️', color: '#8b5cf6', label: () => 'Carousel' },
+  { value: 'Static Post', icon: '🖌️', color: '#14b8a6', label: () => 'Post' },
+  { value: 'Story', icon: '⭕', color: '#f43f5e', label: () => 'Story' },
+  { value: 'Community Post', icon: '💬', color: '#ec4899', label: () => 'Community post' },
+  { value: 'Live Stream', icon: '🔴', color: '#ef4444', label: () => 'Live' },
+  { value: 'Podcast Episode', icon: '🎙️', color: '#22c55e', label: () => 'Podcast' }
+];
+function formatInfo(contentType, channel) {
+  const f = CONTENT_FORMATS.find(x => x.value === contentType) || { value: contentType || 'Other', icon: '📄', color: '#64748b', label: () => contentType || 'Other' };
+  return { ...f, text: f.label(platformOf(channel)) };
+}
+
 function MultiSelectFilter({ label, options, selected, onChange }) {
   const [open, setOpen] = useState(false);
   const toggleOption = (opt) => {
@@ -267,12 +341,6 @@ function App() {
     "Devastram": ['Devastram Insta'],
     "WTC Other": ['Other']
   };
-  const CONTENT_TYPES = [
-    { value: 'Long Format Video', color: '#3b82f6', icon: '🎬' },
-    { value: 'Short (Vertical)', color: '#f59e0b', icon: '⚡' },
-    { value: 'Community Post', color: '#ec4899', icon: '💬' },
-    { value: 'Live Stream', color: '#ef4444', icon: '🔴' }
-  ];
   // FIX — Notion-style split status tracking: Editing Status (internal progress) and
   // Video Status (public state) are now independent, each shown as its own colored badge.
   const EDITING_STATUSES = [
@@ -494,6 +562,8 @@ function App() {
   const [monthlyYear, setMonthlyYear] = useState(now_.getFullYear());
   const [monthlyMonth, setMonthlyMonth] = useState(now_.getMonth() + 1); // 1-12
   const [taskViewMode, setTaskViewMode] = useState('all');
+  const [taskBucket, setTaskBucket] = useState('all'); // all | delayed | today | upcoming | hold | done | reminded
+  const [remindBusyId, setRemindBusyId] = useState(null);
   const [highlightTaskId, setHighlightTaskId] = useState(null); // NEW — task-navigation from a clicked notification
   const [showInbox, setShowInbox] = useState(false);
   const [showChat, setShowChat] = useState(false);
@@ -624,6 +694,19 @@ function App() {
   // Only PC and Shivendra can summon people to their cabin / call an immediate meeting —
   // but either of them can call the OTHER one too, since both hold this permission.
   const canCall = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
+  const isAppAdmin = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77';
+  const canManageAttendance = currentUser === 'pcwtc45' || currentUser === 'shivendrawtc77' || currentUser === 'pari';
+
+  // ---- App settings (v13): who can open the Content Calendar ----
+  // Default when nobody has changed it yet: everyone except video editors (as it is today).
+  const [appSettings, setAppSettings] = useState(() => cacheGet('settings') || {});
+  const [showCcAccess, setShowCcAccess] = useState(false);
+  const [ccAccessDraft, setCcAccessDraft] = useState([]);
+  const defaultContentAccess = (m) => !!m && !/editor/i.test(String(m.role || '')) && m.quoteType !== 'video_editor';
+  const contentAccessList = Array.isArray(appSettings.contentCalendarAccess) ? appSettings.contentCalendarAccess : null;
+  const hasContentAccess = (m) => !!m && (m.id === 'pcwtc45' || m.id === 'shivendrawtc77' ||
+    (contentAccessList ? contentAccessList.includes(m.id) : defaultContentAccess(m)));
+  const canSeeContentCalendar = hasContentAccess(currentUserInfo);
 
   const statusColors = {
     'Not Started': '#64748b',
@@ -762,9 +845,6 @@ function App() {
     if (currentUserInfo?.name) subscribeToPush(currentUserInfo.name);
   }, [currentUserInfo?.name, notifPermission]);
 
-  const sendTestNotification = () => {
-    fireDesktopNotification('WTC Task Hub', '🔔 Test notification — if you see this in your OS notification tray, desktop alerts are working correctly.');
-  };
 
   // NEW — pushNotif now optionally carries an onClick handler, so the toast itself is
   // clickable and navigates (to the task, or to the right chat conversation), not just
@@ -839,127 +919,99 @@ function App() {
   // descending 3-note pattern (C6 → A5 → F5). Deliberately a different waveform/timbre
   // and rhythm from every other sound in the app (ding, lunch chirp, meeting bell), per
   // the request to keep every sound distinct.
-  const playRingTone = () => {
-    try {
-      const ctx = getRingCtx_();
-      if (!ctx) return;
-      const playNote = (freq, start, duration) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.value = freq;
-        // Fast attack, natural exponential decay — the "struck bar" marimba character.
-        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + start + 0.012);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + duration + 0.03);
-      };
-      // Descending cascade: C6, A5, F5 — repeats each time the interval below fires.
-      playNote(1046.5, 0, 0.32);
-      playNote(880, 0.16, 0.32);
-      playNote(698.46, 0.32, 0.4);
-    } catch (e) {}
+  // Ringtone "Marimba Cascade" (C6 → A5 → F5, triangle wave, struck-bar decay).
+  // v13: the whole minute of ringing is scheduled on the audio clock in one go, so it keeps
+  // ringing even while the browser slows down timers of a hidden/minimised window.
+  const ringGainRef = useRef(null);
+  const scheduleRingPattern_ = (ctx, out, at) => {
+    const note = (freq, start, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.001, at + start);
+      gain.gain.exponentialRampToValueAtTime(0.55, at + start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + start + duration);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(at + start);
+      osc.stop(at + start + duration + 0.03);
+    };
+    note(1046.5, 0, 0.32);
+    note(880, 0.16, 0.32);
+    note(698.46, 0.32, 0.4);
   };
 
   const startRinging = () => {
-    playRingTone();
-    if (ringIntervalRef.current) clearInterval(ringIntervalRef.current);
-    ringIntervalRef.current = setInterval(playRingTone, 1300);
+    stopRinging();
+    try {
+      const ctx = getRingCtx_();
+      if (!ctx) return;
+      const master = ctx.createGain();
+      master.gain.value = 1;
+      master.connect(ctx.destination);
+      ringGainRef.current = master;
+      const t0 = ctx.currentTime + 0.05;
+      for (let i = 0; i < 46; i++) scheduleRingPattern_(ctx, master, t0 + i * 1.3); // ~60s
+    } catch (e) {}
   };
 
   const stopRinging = () => {
+    if (ringGainRef.current) {
+      try { ringGainRef.current.gain.value = 0; ringGainRef.current.disconnect(); } catch (e) {}
+      ringGainRef.current = null;
+    }
     if (ringIntervalRef.current) { clearInterval(ringIntervalRef.current); ringIntervalRef.current = null; }
     if (incomingCallTimeoutRef.current) { clearTimeout(incomingCallTimeoutRef.current); incomingCallTimeoutRef.current = null; }
   };
 
-  // ============================================================
-  // LUNCH ALARM — fires 1:00 PM sharp for everyone with the attendance card
-  // (Shivendra/PC never see this, same as they never see the attendance card at all).
-  // ============================================================
-  const [showLunchAlarm, setShowLunchAlarm] = useState(false);
-  const lunchAlarmIntervalRef = useRef(null);
-  const lunchAlarmTimeoutRef = useRef(null);
-  const lunchAlarmFiredTodayRef = useRef(null); // stores the date string it last fired for
-  const meetingAlarmIntervalRef = useRef(null);
-  const meetingAlarmTimeoutRef = useRef(null);
-
-  // Distinct synthesized alarm — a rising two-tone chirp, deliberately different from
-  // both the call ring (two-tone burst) and the notification ding (single beep), so all
-  // three are instantly recognizable by ear alone.
-  const playAlarmTone = () => {
+  // TASK REMINDER sound — a "knock-knock" woodblock (two short low square-wave knocks,
+  // twice). Different from the call ring, the notification ding and the meeting bell.
+  const playReminderTone = () => {
     try {
       const ctx = getRingCtx_();
       if (!ctx) return;
-      const playChirp = (start) => {
+      const knock = (start, freq) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(700, ctx.currentTime + start);
-        osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + start + 0.18);
+        const filter = ctx.createBiquadFilter();
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        filter.type = 'lowpass';
+        filter.frequency.value = 1400;
         gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.45, ctx.currentTime + start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.2);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + start + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.11);
+        osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
         osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + 0.25);
+        osc.stop(ctx.currentTime + start + 0.13);
       };
-      playChirp(0);
-      playChirp(0.28);
-      playChirp(0.56);
+      knock(0, 520); knock(0.16, 470); knock(0.55, 520); knock(0.71, 470);
     } catch (e) {}
   };
 
-  const startLunchAlarmSound = () => {
-    playAlarmTone();
-    if (lunchAlarmIntervalRef.current) clearInterval(lunchAlarmIntervalRef.current);
-    lunchAlarmIntervalRef.current = setInterval(playAlarmTone, 1000);
+  // Gentle two-note "lunch over" nudge, used by the lunch countdown (not an alarm).
+  const playLunchNudge = () => {
+    try {
+      const ctx = getRingCtx_();
+      if (!ctx) return;
+      [[784, 0], [587.33, 0.22]].forEach(([freq, start]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + 0.4);
+      });
+    } catch (e) {}
   };
 
-  const dismissLunchAlarm = () => {
-    if (lunchAlarmIntervalRef.current) { clearInterval(lunchAlarmIntervalRef.current); lunchAlarmIntervalRef.current = null; }
-    if (lunchAlarmTimeoutRef.current) { clearTimeout(lunchAlarmTimeoutRef.current); lunchAlarmTimeoutRef.current = null; }
-    setShowLunchAlarm(false);
-  };
-
-  // FIX — same reliability problem as the call notifications had: a background/throttled
-  // tab could simply miss the exact 13:00 minute this used to require. Two changes:
-  // (1) widened the trigger window to 1:00–1:10 PM instead of exactly minute 0, so a
-  // delayed/throttled check still catches it; (2) added a visibility-change listener so
-  // the moment someone returns to this tab, it immediately checks — same pattern used to
-  // fix call delivery. Applies only to people who actually have the personal attendance
-  // card (matches updateMyStatus's own admin/HR gate) — Shivendra/PC never see this.
-  useEffect(() => {
-    if (!currentUser || isAdmin) return;
-
-    const checkAlarmTime = () => {
-      const now = new Date();
-      const todayKey = now.toDateString();
-      const afterOnePM = now.getHours() === 13 && now.getMinutes() <= 10;
-      if (afterOnePM && lunchAlarmFiredTodayRef.current !== todayKey) {
-        lunchAlarmFiredTodayRef.current = todayKey;
-        setShowLunchAlarm(true);
-        startLunchAlarmSound();
-        fireDesktopNotification('🍽️ Lunch Time', 'Time for your 45-minute lunch break.');
-        lunchAlarmTimeoutRef.current = setTimeout(dismissLunchAlarm, 30000); // 30s auto-dismiss
-      }
-    };
-
-    const interval = setInterval(checkAlarmTime, 30000);
-
-    const handleVisible = () => {
-      if (document.visibilityState === 'visible') checkAlarmTime();
-    };
-    document.addEventListener('visibilitychange', handleVisible);
-
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisible);
-    };
-  }, [currentUser, isAdmin]);
+  const meetingAlarmIntervalRef = useRef(null);
+  const meetingAlarmTimeoutRef = useRef(null);
 
   // ============================================================
   // TEAM MEET — schedule a meeting (Routine/General/Team Meet/Other), assign anyone,
@@ -1127,179 +1179,221 @@ function App() {
   }, [currentUser]);
 
   // ============================================================
-  // FIX — CALLS UNDER 2 SECONDS. Three paths now ring the phone, whichever is first wins
-  // (seenCallIds makes sure the same call never rings twice):
-  //   1. PUSH → the service worker hands the push straight to this open app
-  //      (handlePushMessage below) and it rings instantly, no server round-trip at all.
-  //   2. POLL → every 2s while the app is on screen. This used to run every 1s for every
-  //      person and was the main thing overloading the backend for the whole team. The
-  //      backend now answers it from memory in a fraction of a second, so 2s is both
-  //      faster in practice AND far lighter.
-  //   3. RETURN → the moment the app comes back to the foreground (visibility effect).
-  // Refs (not state) are read inside these handlers so they always see the latest
-  // values; stale-closure bugs were one reason calls to some people never showed.
+  // CALLS v13 — rebuilt. How a call reaches someone (first one to arrive wins; the same
+  // call never rings twice):
+  //   1. WATCHER — a background worker checks every 2–3 s, EVEN WHEN THE WINDOW IS
+  //      MINIMISED OR BEHIND OTHER WINDOWS (the old check only ran while the app was on
+  //      screen, which is why calls stopped getting through from 1 Oct).
+  //   2. PUSH — wakes a phone/laptop where the app is closed; an open app rings from it.
+  //   3. RETURN — checks again the moment the app comes back to the front.
+  // While ringing: full-screen card + ringtone + vibration + flashing tab title + a system
+  // notification that stays until answered. If the same person answers on another device,
+  // this one stops ringing by itself. Unanswered after 60 s → "Missed".
   // ============================================================
   const incomingCallRef = useRef(null);
   useEffect(() => { incomingCallRef.current = incomingCall; }, [incomingCall]);
   const currentUserNameRef = useRef(null);
   useEffect(() => { currentUserNameRef.current = currentUserInfo?.name || null; }, [currentUserInfo?.name]);
+  const titleFlashRef = useRef(null);
+  const ringStatusPollRef = useRef(null);
+
+  const getSwRegistration_ = async () => {
+    try {
+      if (!('serviceWorker' in navigator)) return null;
+      return await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 3000))]);
+    } catch (e) { return null; }
+  };
+
+  const showCallSystemNotification_ = async (call) => {
+    try {
+      if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+      const reg = await getSwRegistration_();
+      const title = `📞 ${call.from} is calling you`;
+      const options = {
+        body: `${call.type || 'Call'} — tap to answer`, tag: 'wtc-call-' + call.callId, renotify: true,
+        requireInteraction: true, icon: '/icon-192.png', badge: '/icon-192.png',
+        vibrate: [400, 150, 400, 150, 400],
+        data: { url: '/', push: { data: { kind: 'call', callId: call.callId, from: call.from, type: call.type, timestamp: call.timestamp, to: currentUserNameRef.current } } },
+        actions: [{ action: 'accept', title: '✓ Coming' }, { action: 'decline', title: '✕ Busy' }]
+      };
+      if (reg && reg.showNotification) await reg.showNotification(title, options);
+      else new Notification(title, { body: options.body, tag: options.tag, requireInteraction: true });
+    } catch (e) {}
+  };
+
+  const closeCallSystemNotification_ = async (callId) => {
+    try {
+      const reg = await getSwRegistration_();
+      if (!reg || !reg.getNotifications) return;
+      const list = await reg.getNotifications({ tag: 'wtc-call-' + callId });
+      list.forEach(n => n.close());
+    } catch (e) {}
+  };
+
+  const startTitleFlash_ = (from) => {
+    if (titleFlashRef.current) clearInterval(titleFlashRef.current);
+    const original = 'WTC Hub';
+    let on = false;
+    titleFlashRef.current = setInterval(() => {
+      on = !on;
+      document.title = on ? `📞 ${from} is calling…` : original;
+    }, 900);
+  };
+  const stopTitleFlash_ = () => {
+    if (titleFlashRef.current) { clearInterval(titleFlashRef.current); titleFlashRef.current = null; }
+    document.title = 'WTC Hub';
+  };
+
+  const endRingingUi_ = (callId) => {
+    stopRinging();
+    stopTitleFlash_();
+    try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) {}
+    if (ringStatusPollRef.current) { clearInterval(ringStatusPollRef.current); ringStatusPollRef.current = null; }
+    if (callId) closeCallSystemNotification_(callId);
+    incomingCallRef.current = null;
+    setIncomingCall(null);
+  };
 
   const ringIncomingCall = (call) => {
     if (!call || !call.callId) return;
-    if (incomingCallRef.current) return; // already showing a ring — don't interrupt it
+    if (incomingCallRef.current) return; // already ringing — don't interrupt it
     if (seenCallIds.current.has(call.callId)) return;
-    // Ignore stale calls (e.g. a delayed push for a call that's already over).
     const ageSecs = call.timestamp ? (Date.now() - new Date(call.timestamp).getTime()) / 1000 : 0;
-    if (ageSecs > 120) return;
+    if (ageSecs > 120) return; // stale (e.g. a late push for a call that is over)
     seenCallIds.current.add(call.callId);
     const fresh = { callId: call.callId, from: call.from, type: call.type, timestamp: call.timestamp };
     incomingCallRef.current = fresh;
     setIncomingCall(fresh);
     startRinging();
-    if (document.visibilityState !== 'visible') {
-      fireDesktopNotification('📞 Incoming Call', `${fresh.from} — ${fresh.type}`);
-    }
+    startTitleFlash_(fresh.from);
+    try { if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400, 150, 400]); } catch (e) {}
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) showCallSystemNotification_(fresh);
+
+    // Answered on another device (or by the caller cancelling)? Stop ringing here too.
+    if (ringStatusPollRef.current) clearInterval(ringStatusPollRef.current);
+    ringStatusPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(API_URL + '?action=getCallStatus&callId=' + encodeURIComponent(fresh.callId));
+        const data = await res.json();
+        const me = (data.recipients || []).find(r => r.to === currentUserNameRef.current);
+        if (me && me.response && me.response !== 'Ringing' && incomingCallRef.current?.callId === fresh.callId) {
+          endRingingUi_(fresh.callId);
+        }
+      } catch (e) {}
+    }, 3000);
+
     if (incomingCallTimeoutRef.current) clearTimeout(incomingCallTimeoutRef.current);
-    // Auto-mark as Missed if not answered.
     incomingCallTimeoutRef.current = setTimeout(() => {
-      respondToIncomingCall(fresh.callId, 'Missed', true);
-    }, 45000);
+      respondToIncomingCall(fresh.callId, 'Missed');
+    }, 60000);
   };
 
-  const callPollInFlightRef = useRef(false);
-  const checkIncomingCalls = async () => {
-    const myName = currentUserNameRef.current;
-    if (!myName || incomingCallRef.current || callPollInFlightRef.current) return;
-    callPollInFlightRef.current = true;
-    try {
-      const response = await fetch(API_URL + '?action=getIncomingCalls&userName=' + encodeURIComponent(myName));
-      const data = await response.json();
-      if (data.status === 'ok' && data.calls && data.calls.length > 0) {
-        const fresh = data.calls.find(c => !seenCallIds.current.has(c.callId));
-        if (fresh) ringIncomingCall(fresh);
-      }
-    } catch (error) {
-    } finally {
-      callPollInFlightRef.current = false;
-    }
-  };
-
-  const respondToIncomingCall = (callId, response, isTimeout) => {
-    stopRinging();
+  const respondToIncomingCall = (callId, response) => {
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'respondToCall', callId, userName: currentUserNameRef.current || currentUserInfo?.name, response })
-    });
-    incomingCallRef.current = null;
-    setIncomingCall(null);
+    }).catch(() => {});
+    endRingingUi_(callId);
+    if (response === 'Missed') pushNotif('📞 You missed a call — it is saved in your notifications.');
   };
 
-  // ============================================================
-  // 📡 CALL ALERTS CHECK (PC/Shivendra) — shows, per person, which of their devices are
-  // registered to receive call alerts and when each was last seen, and can send a test
-  // alert that reports back exactly what happened. Loaded whenever the call picker opens
-  // so each avatar can show a green/grey dot ("can receive alerts" / "no phone registered").
-  // ============================================================
-  const [pushStatus, setPushStatus] = useState(null);
-  const [showCallAlerts, setShowCallAlerts] = useState(false);
-  const [pushTestResults, setPushTestResults] = useState({});
+  // The watcher worker (falls back to a plain timer on very old browsers).
+  const callWorkerRef = useRef(null);
+  const myStatusRef = useRef('Not Signed In');
+  useEffect(() => { myStatusRef.current = myStatus; }, [myStatus]);
+  const callAdminRef = useRef(false);
+  useEffect(() => { callAdminRef.current = !!isAdmin; }, [isAdmin]);
+  const handleCallsFromServer_ = (calls) => {
+    if (!Array.isArray(calls) || calls.length === 0 || incomingCallRef.current) return;
+    const fresh = calls.find(c => !seenCallIds.current.has(c.callId));
+    if (fresh) ringIncomingCall(fresh);
+  };
+  const handleCallsRef = useRef(null);
+  handleCallsRef.current = handleCallsFromServer_;
 
-  const loadPushStatus = async () => {
-    try {
-      const response = await fetch(API_URL + '?action=getPushStatus');
-      const data = await response.json();
-      if (data.status === 'ok') setPushStatus(data.people || {});
-    } catch (e) {}
+  const checkIncomingCalls = () => {
+    if (callWorkerRef.current) { callWorkerRef.current.postMessage({ type: 'now' }); return; }
+    const myName = currentUserNameRef.current;
+    if (!myName) return;
+    fetch(API_URL + '?action=getIncomingCalls&userName=' + encodeURIComponent(myName))
+      .then(r => r.json()).then(d => { if (d.status === 'ok' && handleCallsRef.current) handleCallsRef.current(d.calls); })
+      .catch(() => {});
   };
 
-  const sendTestAlert = async (name) => {
-    setPushTestResults(prev => ({ ...prev, [name]: { kind: 'pending', text: 'Sending test alert…' } }));
-    let result;
+  useEffect(() => {
+    const myName = currentUserInfo?.name;
+    if (!myName) return;
+    // 2 s on screen, 3 s in the background; people who are signed out (not in office)
+    // are checked every 6 s to keep the backend light. Push still reaches them instantly.
+    const intervalFor = () => {
+      const away = !callAdminRef.current && (myStatusRef.current === 'Signed Out' || myStatusRef.current === 'Not Signed In');
+      if (away) return 6000;
+      return document.visibilityState === 'visible' ? 2000 : 3000;
+    };
+    let worker = null;
+    let fallbackTimer = null;
     try {
-      const response = await fetch(API_URL + '?action=testPush&userName=' + encodeURIComponent(name) +
-        '&from=' + encodeURIComponent(currentUserInfo?.name || ''));
-      const data = await response.json();
-      const report = data.report || { byUser: {}, fatal: null };
-      const u = (report.byUser || {})[name] || { devices: 0, delivered: 0, errors: [] };
-      result = report.fatal
-        ? { kind: 'error', text: 'Not sent: ' + report.fatal }
-        : u.delivered > 0
-          ? { kind: 'ok', text: `Sent to ${u.delivered} of ${u.devices} device${u.devices === 1 ? '' : 's'}. Ask ${name} if it appeared.` +
-              (u.errors.length ? ' Problems: ' + u.errors.join(' · ') : '') }
-          : u.devices === 0
-            ? { kind: 'warn', text: 'No device registered — they need to open the app and allow notifications.' }
-            : { kind: 'error', text: u.errors.join(' · ') || 'Failed for an unknown reason.' };
+      worker = new Worker(new URL('./callWorker.js', import.meta.url), { type: 'module' });
+      worker.onmessage = (e) => {
+        if (e.data && e.data.type === 'calls' && handleCallsRef.current) handleCallsRef.current(e.data.calls);
+      };
+      worker.postMessage({ type: 'start', api: API_URL, userName: myName, interval: intervalFor() });
+      callWorkerRef.current = worker;
     } catch (e) {
-      result = { kind: 'error', text: 'Could not reach the server: ' + String((e && e.message) || e) };
+      worker = null;
+      fallbackTimer = setInterval(checkIncomingCalls, 2500);
     }
-    setPushTestResults(prev => ({ ...prev, [name]: result }));
-    loadPushStatus();
-  };
-
-  const openCallAlerts = () => {
-    setPushTestResults({});
-    setShowCallAlerts(true);
-    loadPushStatus();
-  };
+    const onVis = () => { if (worker) worker.postMessage({ type: 'interval', interval: intervalFor() }); };
+    document.addEventListener('visibilitychange', onVis);
+    const retune = setInterval(onVis, 30000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      clearInterval(retune);
+      if (worker) { worker.postMessage({ type: 'stop' }); worker.terminate(); }
+      if (fallbackTimer) clearInterval(fallbackTimer);
+      callWorkerRef.current = null;
+    };
+  }, [currentUserInfo?.name]);
 
   const openCallCompose = () => {
     setCallRecipients([]);
     setShowCallCompose(true);
-    loadPushStatus();
   };
 
   const toggleCallRecipient = (name) => {
     setCallRecipients(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
   };
 
-  // FIX — "sometimes nothing shows after I press call": the caller's screen used to wait
-  // for the whole server round-trip (sheet writes + pushes) before showing anything, and
-  // if that request was slow or failed, the calling screen never appeared at all. The
-  // call ID is now created right here, the "Calling..." tracker shows INSTANTLY, and the
-  // request goes out in the background (retried once automatically if it fails).
+  // The caller's screen appears instantly with its own call ID; the request goes out in
+  // the background and is retried (the server ignores a repeat of the same call ID).
   const sendCall = async (callType) => {
     if (callRecipients.length === 0) { alert('Select at least one person to call!'); return; }
     const recipients = [...callRecipients];
     const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     setShowCallCompose(false);
-    setOutgoingCall({ callId, callType, recipients: recipients.map(r => ({ to: r, response: 'Ringing' })) });
+    setOutgoingCall({ callId, callType, startedAt: Date.now(), recipients: recipients.map(r => ({ to: r, response: 'Ringing' })) });
 
     const url = API_URL + '?action=startCall&from=' + encodeURIComponent(currentUserInfo.name) +
       '&to=' + encodeURIComponent(recipients.join(',')) + '&callType=' + encodeURIComponent(callType) +
       '&callId=' + encodeURIComponent(callId);
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const response = await fetch(url);
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(t);
         const data = await response.json();
-        if (data.status === 'ok') {
-          // Delivery report from the server: for each person, how many of their devices the
-          // alert actually reached, or exactly why it didn't. Shown on the tracker below.
-          const report = data.push || { byUser: {}, fatal: null };
-          const alerts = {};
-          recipients.forEach(name => {
-            const r = (report.byUser || {})[name] || { devices: 0, delivered: 0, errors: [] };
-            alerts[name] = report.fatal
-              ? { kind: 'error', text: 'Alert not sent: ' + report.fatal }
-              : r.delivered > 0
-                ? { kind: 'ok', text: `📱 Alert sent to ${r.delivered} device${r.delivered === 1 ? '' : 's'}` }
-                : r.devices === 0
-                  ? { kind: 'warn', text: 'No phone registered — rings only if their app is open. Ask them to allow notifications.' }
-                  : { kind: 'error', text: 'Alert failed: ' + (r.errors[0] || 'unknown error') };
-          });
-          setOutgoingCall(prev => prev && prev.callId === callId ? { ...prev, alerts } : prev);
-          return;
-        }
+        if (data.status === 'ok') return;
       } catch (error) {}
-      await new Promise(r => setTimeout(r, 700));
+      await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
     }
-    // Both attempts failed — say so on the tracker instead of pretending it's ringing.
     setOutgoingCall(prev => prev && prev.callId === callId
       ? { ...prev, recipients: prev.recipients.map(r => ({ ...r, response: 'Failed' })) }
       : prev);
   };
 
-  // Caller's live status — every 1.5s (the backend answers this from memory now).
+  // Caller's live status — every 1.5s while the tracker is open.
   useEffect(() => {
     if (outgoingCall?.callId) {
       let cancelled = false;
@@ -1307,8 +1401,6 @@ function App() {
         try {
           const response = await fetch(API_URL + '?action=getCallStatus&callId=' + encodeURIComponent(outgoingCall.callId));
           const data = await response.json();
-          // Only apply real data — an empty list just means the call is still being
-          // registered, and must not wipe out the "Ringing" rows already on screen.
           if (!cancelled && data.status === 'ok' && Array.isArray(data.recipients) && data.recipients.length > 0) {
             setOutgoingCall(prev => prev && prev.callId === outgoingCall.callId ? { ...prev, recipients: data.recipients } : prev);
           }
@@ -1319,16 +1411,6 @@ function App() {
       return () => { cancelled = true; clearTimeout(first); clearInterval(interval); };
     }
   }, [outgoingCall?.callId]);
-
-  // Fallback poll — every 2s, only while the app is actually on screen (a hidden tab is
-  // throttled by the browser anyway; push + the visibility check cover that case).
-  useEffect(() => {
-    if (!currentUser) return;
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') checkIncomingCalls();
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [currentUser]);
 
   // FIX — EXPERT FIX for unreliable/late/missed calls. The root cause: browsers heavily
   // throttle JS timers in BACKGROUND tabs (sometimes to once a minute or less), so the 3s
@@ -1371,6 +1453,7 @@ function App() {
     loadTeam();
     loadContentChannels();
     loadHolidays();
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -1414,6 +1497,31 @@ function App() {
   useEffect(() => {
     if (currentUser && !isAdmin) setTaskViewMode('assigned');
   }, [currentUser, isAdmin]);
+
+  const loadSettings = async () => {
+    try {
+      const response = await fetch(API_URL + '?action=getSettings');
+      const data = await response.json();
+      if (data.status === 'ok' && data.settings) { setAppSettings(data.settings); cacheSet('settings', data.settings); }
+    } catch (e) {}
+  };
+
+  const openCcAccess = () => {
+    setCcAccessDraft(activeTeam.filter(m => hasContentAccess(m)).map(m => m.id));
+    setShowCcAccess(true);
+  };
+
+  const saveCcAccess = () => {
+    const list = Array.from(new Set([...ccAccessDraft, 'pcwtc45', 'shivendrawtc77']));
+    setAppSettings(prev => { const next = { ...prev, contentCalendarAccess: list }; cacheSet('settings', next); return next; });
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveSetting', key: 'contentCalendarAccess', value: list, userId: currentUser })
+    }).catch(() => {});
+    setShowCcAccess(false);
+    pushNotif('🔐 Content Calendar access saved.');
+  };
 
   const loadTeam = async () => {
     try {
@@ -1482,6 +1590,21 @@ function App() {
     } catch (error) {}
   };
 
+  // One place that knows how every kind of notification looks (icon, title, toast text).
+  const describeInboxItem = (item) => {
+    switch (item.type) {
+      case 'new_routine': return { icon: '🔄', title: `Routine task from ${item.from}`, toast: `🔄 Routine task from ${item.from}: ${item.title}` };
+      case 'task_completed': return { icon: '✅', title: `${item.from} completed a task`, toast: `✅ ${item.from} completed: ${item.title}` };
+      case 'new_meeting': return { icon: '🤝', title: `Meeting from ${item.from}`, toast: `🤝 ${item.from} scheduled: ${item.title}` };
+      case 'task_reminder': return { icon: '⏰', title: `${item.from} is reminding you`, toast: `⏰ ${item.from} reminded you: ${item.title}` };
+      case 'missed_call': return { icon: '📞', title: `Missed call from ${item.from}`, toast: `📞 Missed call from ${item.from}` };
+      case 'correction': return { icon: '📝', title: `${item.from} asked for an attendance correction`, toast: `📝 Correction request from ${item.from}` };
+      case 'attendance': return { icon: '🕘', title: 'Attendance update', toast: `🕘 ${item.title}` };
+      default: return { icon: '📌', title: `New task from ${item.from}`, toast: `📌 New task from ${item.from}: ${item.title}` };
+    }
+  };
+  const [reminderFlash, setReminderFlash] = useState(null);
+
   // FIX #7 — Notification detection rewritten from a fragile "count went up" comparison
   // to an explicit seen-ID ledger. Fires identically for General AND Routine tasks,
   // handles multiple simultaneous assignments, and never misfires on first load.
@@ -1494,19 +1617,15 @@ function App() {
     const newOnes = items.filter(i => i.read === 'No' && !seenInboxIds.current.has(i.id));
     newOnes.forEach(item => {
       seenInboxIds.current.add(item.id);
-      const label = item.type === 'new_routine' ? '🔄 Routine task'
-        : item.type === 'task_completed' ? '✅ Task completed'
-        : item.type === 'new_meeting' ? '🤝 Meeting scheduled'
-        : '📌 New task';
-      const msg = item.type === 'task_completed' ? `✅ ${item.from} completed: ${item.title}`
-        : item.type === 'new_meeting' ? `🤝 ${item.from} scheduled: ${item.title}`
-        : `${label} from ${item.from}: ${item.title}`;
-      playNotifSound();
-      // NEW — clicking the toast itself now navigates straight to the task, same as
-      // clicking the Inbox panel entry does, instead of only being clickable once you
-      // open the bell icon.
-      pushNotif(msg, item.taskId ? () => handleInboxItemClick(item) : undefined);
-      fireDesktopNotification('WTC Task Hub', msg);
+      const msg = describeInboxItem(item).toast;
+      if (item.type === 'task_reminder') {
+        playReminderTone();
+        setReminderFlash({ taskId: String(item.taskId), from: item.from, at: Date.now() });
+      } else {
+        playNotifSound();
+      }
+      pushNotif(msg, () => handleInboxItemClick(item));
+      if (document.visibilityState !== 'visible') fireDesktopNotification('WTC Hub', msg);
     });
   };
 
@@ -1580,6 +1699,8 @@ function App() {
       const data = await response.json();
       if (data.status === 'ok') {
         setAttendance(data.attendance);
+        if (data.shifts) setAttShifts(data.shifts);
+        if (data.rules) setAttRules(data.rules);
         if (!isAdmin || isHR) {
           applyServerAttendance(data.attendance.find(a => a.userId === currentUser));
         }
@@ -1593,6 +1714,8 @@ function App() {
       const data = await response.json();
       if (data.status === 'ok') {
         setAttendance(data.attendance);
+        if (data.shifts) setAttShifts(data.shifts);
+        if (data.rules) setAttRules(data.rules);
         if (!isAdmin || isHR) {
           applyServerAttendance(data.attendance.find(a => a.userId === currentUser));
         }
@@ -1604,6 +1727,12 @@ function App() {
     if (isAdmin && !isHR) return;
     if (!currentUserInfo) return;
     if (attendanceSwitching) return; // prevents double-clicks from creating duplicate log rows
+    if (newStatus === 'Lunch Break') {
+      const lunch = myLunchInfo();
+      if (lunch.taken) { pushNotif('🍽️ Lunch was already marked today.'); return; }
+      if (!lunch.windowOpen) { pushNotif('🍽️ Lunch can only be marked between 1:00 and 2:00 PM.'); return; }
+    }
+    if (newStatus === 'Signed Out' && !window.confirm('Sign out for today?')) return;
     setAttendanceSwitching(true);
 
     const nowISO = new Date().toISOString();
@@ -1629,6 +1758,173 @@ function App() {
       setAttendanceSwitching(false);
     }, 1500);
   };
+
+  // ============================================================
+  // v13 — ATTENDANCE DISCIPLINE (client side). The server (attendanceWatchdog in Code.gs)
+  // is the judge — it records flags and closes forgotten days. The app shows the rules,
+  // live warnings and countdowns, so nobody is surprised by a flag.
+  // ============================================================
+  const [attShifts, setAttShifts] = useState({});
+  const [attRules, setAttRules] = useState({ lunchStart: '13:00', lunchEnd: '14:00', lunchMinutes: 30, lunchTolerance: 5, lateGrace: 15, minWorkHours: 8, strikesPerHalfDay: 3 });
+  const [showDiscipline, setShowDiscipline] = useState(false);
+  const [disciplineTab, setDisciplineTab] = useState('mine'); // mine | team | shifts
+  const [disciplineData, setDisciplineData] = useState({ mine: null, team: null });
+  const [disciplineLoading, setDisciplineLoading] = useState(false);
+  const [discYear, setDiscYear] = useState(new Date().getFullYear());
+  const [discMonth, setDiscMonth] = useState(new Date().getMonth() + 1);
+  const [correctionDraft, setCorrectionDraft] = useState(null); // { flagId, note, correctedTime }
+  const [shiftDrafts, setShiftDrafts] = useState({});
+  const lunchNudgeRef = useRef({});
+
+  const hhmmToMin = (t) => { const m = String(t || '').match(/^(\d{1,2}):(\d{2})/); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  const fmtClock = (hhmm) => {
+    const m = hhmmToMin(hhmm);
+    if (m === null) return hhmm || '';
+    const h = Math.floor(m / 60), mm = m % 60;
+    return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+  };
+  const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+  const parseLog = (log) => String(log || '').split('||EVT||').map(x => {
+    const [st, ts] = x.split('|SEP|');
+    const time = new Date(String(ts || '').trim());
+    return st && !isNaN(time.getTime()) ? { status: st.trim(), time } : null;
+  }).filter(Boolean).sort((a, b) => a.time - b.time);
+  const shiftOf = (userId) => attShifts[userId] || { start: '10:00', end: '19:00' };
+
+  // Everything about today's lunch for a given activity log.
+  const lunchInfoFromLog = (log) => {
+    const ev = parseLog(log);
+    const idx = ev.findIndex(e => e.status === 'Lunch Break');
+    const nm = nowMinutes();
+    const ws = hhmmToMin(attRules.lunchStart), we = hhmmToMin(attRules.lunchEnd);
+    const windowOpen = nm >= ws && nm < we;
+    if (idx === -1) return { taken: false, onLunch: false, windowOpen, minsToClose: we - nm, beforeWindow: nm < ws, afterWindow: nm >= we };
+    const start = ev[idx].time;
+    const end = idx + 1 < ev.length ? ev[idx + 1].time : null;
+    const usedMs = Math.max(0, (end || new Date()) - start);
+    return { taken: true, onLunch: !end, windowOpen, start, end, usedMin: usedMs / 60000, beforeWindow: false, afterWindow: nm >= we };
+  };
+  const myLunchInfo = () => lunchInfoFromLog(myLiveLog || attendance.find(a => a.userId === currentUser)?.log);
+
+  // Live warnings for one person's day (used on the personal card and on Team Status).
+  const dayWarnings = (userId, log) => {
+    const ev = parseLog(log);
+    const shift = shiftOf(userId);
+    const sMin = hhmmToMin(shift.start), eMin = hhmmToMin(shift.end);
+    const nm = nowMinutes();
+    const out = [];
+    if (ev.length === 0) {
+      if (nm >= sMin + attRules.lateGrace && nm < eMin) out.push({ kind: 'bad', text: 'Not signed in' });
+      return out;
+    }
+    const first = ev.find(e => e.status === 'Working' || e.status === 'Meeting');
+    if (first) {
+      const late = (first.time.getHours() * 60 + first.time.getMinutes()) - sMin;
+      if (late > attRules.lateGrace) out.push({ kind: 'warn', text: `Late ${late}m` });
+    }
+    const lunch = lunchInfoFromLog(log);
+    if (lunch.onLunch && lunch.usedMin > attRules.lunchMinutes) out.push({ kind: 'bad', text: `Lunch +${Math.round(lunch.usedMin - attRules.lunchMinutes)}m` });
+    if (lunch.taken && !lunch.onLunch && lunch.usedMin > attRules.lunchMinutes + attRules.lunchTolerance) out.push({ kind: 'warn', text: `Long lunch ${Math.round(lunch.usedMin)}m` });
+    if (!lunch.taken && lunch.afterWindow) out.push({ kind: 'warn', text: 'Lunch not marked' });
+    const last = ev[ev.length - 1];
+    if (last.status !== 'Signed Out' && nm >= eMin + 15) out.push({ kind: 'bad', text: `Past shift end (${fmtClock(shift.end)})` });
+    return out;
+  };
+
+  const loadDiscipline = async (scope, year = discYear, month = discMonth) => {
+    if (!currentUser) return;
+    setDisciplineLoading(true);
+    try {
+      const res = await fetch(API_URL + `?action=getDiscipline&userId=${encodeURIComponent(currentUser)}&year=${year}&month=${month}&scope=${scope === 'team' ? 'all' : 'mine'}`);
+      const data = await res.json();
+      if (data.status === 'ok') {
+        setDisciplineData(prev => ({ ...prev, [scope === 'team' ? 'team' : 'mine']: data }));
+        if (data.shifts) setAttShifts(data.shifts);
+        if (data.rules) setAttRules(data.rules);
+      }
+    } catch (e) {} finally { setDisciplineLoading(false); }
+  };
+
+  const openDiscipline = (tab) => {
+    const t = tab === 'team' && canManageAttendance ? 'team' : 'mine';
+    setDisciplineTab(t);
+    setCorrectionDraft(null);
+    setShowDiscipline(true);
+    loadDiscipline(t);
+  };
+
+  const changeDiscMonth = (delta) => {
+    let m = discMonth + delta, y = discYear;
+    if (m > 12) { m = 1; y++; }
+    if (m < 1) { m = 12; y--; }
+    setDiscMonth(m); setDiscYear(y);
+    loadDiscipline(disciplineTab === 'team' ? 'team' : 'mine', y, m);
+  };
+
+  const submitCorrection = () => {
+    if (!correctionDraft || !correctionDraft.note.trim()) { alert('Please write the reason.'); return; }
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'requestCorrection', flagId: correctionDraft.flagId, userId: currentUser, note: correctionDraft.note.trim(), correctedTime: correctionDraft.correctedTime || '' })
+    }).catch(() => {});
+    setDisciplineData(prev => prev.mine ? { ...prev, mine: { ...prev.mine, flags: prev.mine.flags.map(f => String(f.id) === String(correctionDraft.flagId) ? { ...f, status: 'Requested', note: correctionDraft.note } : f) } } : prev);
+    setCorrectionDraft(null);
+    pushNotif('📝 Correction request sent to HR.');
+  };
+
+  const decideFlag = (flag, decision) => {
+    if (flag.userId === currentUser) { alert("You can't approve your own request."); return; }
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'resolveFlag', flagId: flag.id, decision, resolverId: currentUser, resolverName: currentUserInfo?.name })
+    }).catch(() => {});
+    setDisciplineData(prev => {
+      if (!prev.team) return prev;
+      const upd = (list) => (list || []).map(f => String(f.id) === String(flag.id) ? { ...f, status: decision } : f);
+      return { ...prev, team: { ...prev.team, flags: upd(prev.team.flags), requests: (prev.team.requests || []).filter(f => String(f.id) !== String(flag.id)) } };
+    });
+    pushNotif(decision === 'Excused' ? '✅ Excused — strike removed.' : '❌ Request rejected.');
+    setTimeout(() => loadDiscipline('team'), 2500);
+  };
+
+  const saveShiftFor = (member) => {
+    const d = shiftDrafts[member.id];
+    if (!d || hhmmToMin(d.start) === null || hhmmToMin(d.end) === null) return;
+    if (hhmmToMin(d.end) <= hhmmToMin(d.start)) { alert('Shift end must be after shift start.'); return; }
+    setAttShifts(prev => ({ ...prev, [member.id]: { start: d.start, end: d.end } }));
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveShift', targetId: member.id, shiftStart: d.start, shiftEnd: d.end, userId: currentUser })
+    }).catch(() => {});
+    setShiftDrafts(prev => { const n = { ...prev }; delete n[member.id]; return n; });
+    pushNotif(`🕘 Shift saved for ${member.displayName}: ${fmtClock(d.start)} – ${fmtClock(d.end)}`);
+  };
+
+  // Load my own record after login (powers the strikes line on the card), refresh every 10 min.
+  useEffect(() => {
+    if (!currentUser || (isAdmin && !isHR)) return;
+    loadDiscipline('mine');
+    const t = setInterval(() => loadDiscipline('mine'), 600000);
+    return () => clearInterval(t);
+  }, [currentUser, isAdmin, isHR]);
+
+  // Lunch countdown nudges: soft sound at 25 min, again at 30 min (once each per day).
+  useEffect(() => {
+    if (isAdmin && !isHR) return;
+    const lunch = myLunchInfo();
+    if (!lunch.onLunch) return;
+    const key = new Date().toDateString();
+    const fired = lunchNudgeRef.current[key] || {};
+    if (lunch.usedMin >= attRules.lunchMinutes - 5 && !fired.warn) {
+      fired.warn = true; playLunchNudge(); pushNotif('🍽️ 5 minutes of lunch left.');
+    }
+    if (lunch.usedMin >= attRules.lunchMinutes && !fired.over) {
+      fired.over = true; playLunchNudge(); setTimeout(playLunchNudge, 900);
+      pushNotif('⏰ Lunch time is over — tap Back to Work.');
+      fireDesktopNotification('⏰ Lunch time is over', 'Tap Back to Work in WTC Hub.');
+    }
+    lunchNudgeRef.current[key] = fired;
+  });
 
   // FIX #1 + #5 — Real-time calculation. Backend now stores correct UTC timestamps
   // (see Code.gs getIndiaTimeISO), so this math is finally trustworthy. Recomputed every
@@ -1684,6 +1980,17 @@ function App() {
     } catch (error) {
       return { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
     }
+  };
+
+  const timeAgo = (ts) => {
+    const t = new Date(ts).getTime();
+    if (isNaN(t)) return '';
+    const mins = Math.round((Date.now() - t) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
   const formatMs = (ms) => {
@@ -1777,8 +2084,45 @@ function App() {
   // FIX — sort by due date ascending (soonest first) instead of raw sheet order, so
   // routine tasks (and everything else) appear predictably by urgency, not randomly.
   const sortByDueDate = (a, b) => new Date(a.targetDate) - new Date(b.targetDate);
-  const freshTasks = filteredTasks.filter(t => !t.isStale).sort(sortByDueDate);
-  const staleTasks = filteredTasks.filter(t => t.isStale).sort(sortByDueDate);
+  const staleTasks = filteredTasks.filter(t => t.isStale && t.status !== 'Completed').sort(sortByDueDate);
+
+  // v13 — every task falls into exactly one bucket, so the board reads like a to-do list:
+  // Delayed → Due today → Upcoming → On hold → Completed.
+  const todayKeyLocal = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const dueKeyOf = (t) => {
+    if (!t.targetDate) return '';
+    const d = new Date(t.targetDate);
+    if (isNaN(d.getTime())) return String(t.targetDate).slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const bucketOf = (t) => {
+    if (t.status === 'Completed') return 'done';
+    if (t.status === 'On Hold') return 'hold';
+    const due = dueKeyOf(t);
+    if (!due) return 'upcoming';
+    if (due < todayKeyLocal || t.status === 'Delayed') return 'delayed';
+    if (due === todayKeyLocal) return 'today';
+    return 'upcoming';
+  };
+  const reminderByTask = {};
+  inbox.forEach(i => {
+    if (i.type !== 'task_reminder') return;
+    const k = String(i.taskId);
+    if (!reminderByTask[k] || new Date(i.timestamp) > new Date(reminderByTask[k].timestamp)) reminderByTask[k] = i;
+  });
+  const boardTasks = filteredTasks.filter(t => !(t.isStale && t.status !== 'Completed'));
+  const TASK_BUCKETS = [
+    { key: 'delayed', label: 'Delayed', icon: '🔴', hint: 'Past the due date' },
+    { key: 'today', label: 'Due today', icon: '🟠', hint: 'Finish these today' },
+    { key: 'upcoming', label: 'Upcoming', icon: '🔵', hint: 'Coming up next' },
+    { key: 'hold', label: 'On hold', icon: '⏸️', hint: 'Paused for now' },
+    { key: 'done', label: 'Completed', icon: '✅', hint: 'Done in the last 24 hours' }
+  ];
+  const bucketed = { delayed: [], today: [], upcoming: [], hold: [], done: [] };
+  boardTasks.forEach(t => bucketed[bucketOf(t)].push(t));
+  Object.keys(bucketed).forEach(k => bucketed[k].sort(sortByDueDate));
+  const remindedTasks = boardTasks.filter(t => reminderByTask[String(t.id)] && t.status !== 'Completed' && isTaskAssignedToMe(t));
+  const openCount = bucketed.delayed.length + bucketed.today.length + bucketed.upcoming.length + bucketed.hold.length;
 
   const handleAddTask = async () => {
     if (selectedAssignees.length === 0 || !newTask.taskDetails) {
@@ -1964,13 +2308,29 @@ function App() {
     } catch (error) {}
   };
 
-  const handleExportWhatsApp = (task) => {
-    const assignees = String(task.assignedTo).split(',').map(a => a.trim());
-    const firstAssignee = team.find(t => t.name === assignees[0]);
-    const personalURL = firstAssignee ? `https://wtc-task-hub.vercel.app/?user=${firstAssignee.id}` : 'https://wtc-task-hub.vercel.app';
-    const message = `TASK ASSIGNED - WTC\n\nTo: ${task.assignedTo}\nTask: ${task.taskDetails}\nRemarks: ${task.remarks || 'N/A'}\nChannel: ${task.channel}\nPriority: ${task.priority}\nTarget: ${new Date(task.targetDate).toLocaleDateString()}\nBy: ${task.assignedBy}\n\nDashboard: ${personalURL}`;
-    navigator.clipboard.writeText(message);
-    alert('Message copied!');
+  // v13 — "Remind" (replaces the old WhatsApp copy button). Only whoever assigned the
+  // task, or PC/Shivendra, can nudge; the assignee hears a distinct knock-knock sound,
+  // gets a push + notification, and the card is marked "Reminded".
+  const canRemindTask = (task) => {
+    if (!currentUserInfo || task.status === 'Completed') return false;
+    if (task.assignedBy !== currentUserInfo.name && !isAdmin) return false;
+    const others = String(task.assignedTo).split(',').map(a => a.trim()).filter(a => a && a !== currentUserInfo.name && a !== 'AG' && a !== 'BG');
+    return others.length > 0;
+  };
+
+  const handleRemindTask = async (task) => {
+    if (remindBusyId) return;
+    setRemindBusyId(task.id);
+    try {
+      const res = await fetch(API_URL + '?action=remindTask&taskId=' + encodeURIComponent(task.id) + '&from=' + encodeURIComponent(currentUserInfo.name));
+      const data = await res.json();
+      if (data.status === 'ok') pushNotif(`⏰ Reminder sent to ${(data.reminded || []).join(', ')}`);
+      else pushNotif(`ℹ️ ${data.message || 'Could not send the reminder.'}`);
+    } catch (e) {
+      pushNotif('⚠️ Could not reach the server — check the internet and try again.');
+    } finally {
+      setRemindBusyId(null);
+    }
   };
 
   // NEW — PC/Shivendra can delete ANY task from the dashboard, not just their own.
@@ -2042,6 +2402,7 @@ function App() {
       setTaskViewMode(assignedToMe ? 'assigned' : (assignedByMe ? 'by_me' : 'assigned'));
     }
     if (task.isStale) setShowOlderRoutine(true);
+    setTaskBucket('all');
     setHighlightTaskId(task.id);
     let tries = 0;
     const tryScroll = () => {
@@ -2111,6 +2472,11 @@ function App() {
   const handlePushMessageRef = useRef(null);
   handlePushMessageRef.current = (msg) => {
     if (!msg || !msg.type) return;
+    if (msg.type === 'wtc-call-answered') {
+      if (incomingCallRef.current && incomingCallRef.current.callId === msg.callId) endRingingUi_(msg.callId);
+      seenCallIds.current.add(msg.callId);
+      return;
+    }
     const push = msg.push || {};
     const extra = push.data || {};
     if (extra.kind === 'call' && extra.callId) {
@@ -2157,33 +2523,42 @@ function App() {
     else navigateToTask(taskParam);
   }, [currentUser, tasks]);
 
-  const handleInboxItemClick = (item) => {
-    if (item.type === 'task_completed' || item.type === 'new_meeting') {
-      // These have no further state to wait on (a meeting notification isn't "resolved"
-      // by anything the way a task is by being Completed), so they dismiss on click.
-      dismissedInboxIds.current.add(item.id);
-      fetch(API_URL, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
-      });
-      setInbox(prev => prev.filter(i => i.id !== item.id));
-      if (item.type === 'new_meeting') { setShowInbox(false); openMeetings(); }
-      return;
-    }
+  // v13 — every notification disappears the moment it is clicked, and takes you to
+  // what it is about (the task, the meeting list, the attendance panel…).
+  const dismissInboxItem = (item) => {
+    dismissedInboxIds.current.add(item.id);
     fetch(API_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'markInboxRead', inboxId: item.id })
-    });
-    setInbox(prev => prev.map(i => i.id === item.id ? { ...i, read: 'Yes' } : i));
+    }).catch(() => {});
+    setInbox(prev => prev.filter(i => i.id !== item.id));
+  };
+
+  const handleInboxItemClick = (item) => {
+    dismissInboxItem(item);
+    setShowInbox(false);
+    if (item.type === 'new_meeting' || String(item.taskId || '').startsWith('meeting_')) { openMeetings(); return; }
+    if (item.type === 'correction' || item.type === 'attendance') { openDiscipline(item.type === 'correction' ? 'team' : 'mine'); return; }
+    if (item.type === 'missed_call') return;
     if (item.taskId) navigateToTask(item.taskId);
+  };
+
+  const clearAllInbox = () => {
+    if (!currentUserInfo || inbox.length === 0) return;
+    inbox.forEach(i => dismissedInboxIds.current.add(i.id));
+    setInbox([]);
+    fetch(API_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'markAllInboxRead', userName: currentUserInfo.name })
+    }).catch(() => {});
   };
 
   // NEW — auto-clears a task-assignment notification the moment its task is Completed
   // (not before, and not just because it was clicked/viewed).
   useEffect(() => {
-    const linkedUnresolved = inbox.filter(i => (i.type === 'new_task' || i.type === 'new_routine'));
+    const linkedUnresolved = inbox.filter(i => (i.type === 'new_task' || i.type === 'new_routine' || i.type === 'task_reminder'));
     if (linkedUnresolved.length === 0) return;
     linkedUnresolved.forEach(item => {
       const linkedTask = tasks.find(t => String(t.id) === String(item.taskId));
@@ -2569,6 +2944,7 @@ function App() {
   };
 
   const openContentCalendar = () => {
+    if (!canSeeContentCalendar) return;
     setShowContentCalendar(true);
     loadContentCalendar();
     loadContentChannels();
@@ -2576,13 +2952,13 @@ function App() {
 
   // Preload right after login, so the data is already there when the calendar opens.
   useEffect(() => {
-    if (currentUser) loadContentCalendar();
-  }, [currentUser]);
+    if (currentUser && canSeeContentCalendar) loadContentCalendar();
+  }, [currentUser, canSeeContentCalendar]);
 
   // Refresh rhythm: every 4s while the calendar is open, every 60s in the background
   // (so the saved copy stays fresh), and only while the app is actually on screen.
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !canSeeContentCalendar) return;
     const everyMs = showContentCalendar ? 4000 : 60000;
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') loadContentCalendar();
@@ -2595,7 +2971,7 @@ function App() {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [currentUser, showContentCalendar]);
+  }, [currentUser, showContentCalendar, canSeeContentCalendar]);
 
   const handleAddChannel = () => {
     const group = (newChannelGroup || '').trim();
@@ -2728,8 +3104,14 @@ function App() {
       fetch(API_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'updateContentEntry', id: editingContentEntry.id, updates: payload })
+        body: JSON.stringify({ action: 'updateContentEntry', id: editingContentEntry.id, updates: payload, userName: currentUserInfo.name })
       });
+      // Marked Published → its task card completes right away (the server does the same).
+      if (payload.videoStatus === 'Published' && editingContentEntry.videoStatus !== 'Published' && editingContentEntry.linkedTaskId) {
+        const linkedId = String(editingContentEntry.linkedTaskId);
+        setTasks(prev => prev.map(t => String(t.id) === linkedId ? { ...t, status: 'Completed', completionDate: new Date().toISOString() } : t));
+        pushNotif('✅ Published — the linked task was marked Completed.');
+      }
     }
     setEditingContentEntry(null);
     setContentSaving(false);
@@ -2766,6 +3148,13 @@ function App() {
   // block) so the month grid only recomputes when something it depends on actually
   // changes, instead of on every render — this is the real fix for the "calendar feels
   // slow" complaint, not just a faster poll.
+  const contentStageOf = (entry) => {
+    if (entry.videoStatus === 'Published') return 'pub';
+    if (entry.videoStatus === 'Scheduled in YT Studio') return 'sched';
+    if (entry.editingStatus && entry.editingStatus !== 'Not Started') return 'edit';
+    return 'plan';
+  };
+
   const contentCalGridData = useMemo(() => {
     const entriesThisGroup = contentEntries.filter(e => e.channelGroup === contentGroupTab);
     const firstOfMonth = new Date(contentCalYear, contentCalMonth, 1);
@@ -2955,6 +3344,7 @@ function App() {
     setFilterChannel([]);
     setFilterCategory([]);
     setFilterTaskType(['Routine']);
+    setTaskBucket('all');
     setShowOlderRoutine(true);
   };
 
@@ -3095,114 +3485,92 @@ function App() {
       <header className="header-premium">
         <div className="header-container">
           <div className="header-brand">
-            <img src="/wtc-logo.png" alt="WTC" className="logo-premium" />
+            <img src="/wtc-logo-tight.png" alt="Write Track Creations" className="logo-premium" />
             <div className="brand-info">
               <h1 className="brand-title">WTC Hub</h1>
-              <p className="brand-subtitle">{currentUserInfo?.role}</p>
+              <p className="brand-subtitle">{currentUserInfo?.displayName} · {currentUserInfo?.role}</p>
             </div>
           </div>
-          
+
           <div className="header-center">
             <p className="greeting-text">{greeting}</p>
             <p className="date-text">{formattedDate}</p>
-            <p className="quote-text">"{todayQuote}"</p>
           </div>
-          
+
           <div className="header-actions-premium">
-            <div className="icon-dock">
-              {notifPermission === 'default' && (
-                <button className="icon-btn icon-gold notif-ask-btn" onClick={requestNotifPermission} title="Enable desktop notifications">
-                  🔕
-                </button>
+            <nav className="icon-dock" aria-label="Main">
+              {canSeeContentCalendar && (
+                <button className="icon-btn" onClick={openContentCalendar} title="Content Calendar"><FiCalendar /><span className="icon-label">Content</span></button>
               )}
-              {notifPermission === 'denied' && (
-                <button className="icon-btn notif-denied-btn" onClick={() => alert('Desktop notifications are blocked for this site in your browser.\n\nTo fix: click the 🔒 or ⓘ icon in your address bar → Site settings → Notifications → Allow. Then reload this page.')} title="Desktop notifications blocked — click for how to fix">
-                  🚫
-                </button>
-              )}
-              {notifPermission === 'granted' && (
-                <button className="icon-btn icon-gold" onClick={sendTestNotification} title="Desktop notifications are ON — click to send a test">
-                  🔔✓
-                </button>
-              )}
-              <button className="icon-btn icon-rose" onClick={openContentCalendar} title="Content Calendar">
-                🗓️
+              <button className="icon-btn" onClick={openMeetings} title="Team Meet"><FiUsers /><span className="icon-label">Meet</span></button>
+              <button className={`icon-btn ${activeRoutineCount > 0 ? 'has-routines' : ''}`} onClick={openMyRoutines} title={`My Recurring Tasks${activeRoutineCount ? ` — ${activeRoutineCount} running` : ''}`}>
+                <FiRepeat /><span className="icon-label">Routines</span>
+                {activeRoutineCount > 0 && <span className="badge-count badge-soft">{activeRoutineCount}</span>}
               </button>
-              {/* NEW — every icon lives directly in the top bar now; nothing is tucked
-                  away behind a "More" dropdown anymore. */}
-              <button className="icon-btn icon-sky" onClick={openNoticeBoard} title="Notice Board">
-                📋
-              </button>
-              <button className="icon-btn icon-amber" onClick={openHolidayCalendar} title="Holiday Calendar">
-                🏖️
-              </button>
-              <button className="icon-btn icon-emerald" onClick={openMeetings} title="Team Meet">
-                🤝
-              </button>
-              <button className={`icon-btn icon-violet routine-icon-btn ${activeRoutineCount > 0 ? 'has-routines' : ''}`} onClick={openMyRoutines} title={`My Recurring Tasks${activeRoutineCount ? ` — ${activeRoutineCount} running` : ''} — pause, resume, set duration, remove`}>
-                🔁
-                {activeRoutineCount > 0 && <span className="routine-badge">{activeRoutineCount}</span>}
-              </button>
+              <button className="icon-btn" onClick={openNoticeBoard} title="Notice Board"><FiClipboard /><span className="icon-label">Notices</span></button>
+              <button className="icon-btn" onClick={openHolidayCalendar} title="Holiday Calendar"><FiSun /><span className="icon-label">Holidays</span></button>
               {canManageTeam && (
-                <button className="icon-btn icon-violet" onClick={() => setShowTeamManager(true)} title="Manage Team">
-                  👥
-                </button>
+                <button className="icon-btn" onClick={() => setShowTeamManager(true)} title="Manage Team"><FiSettings /><span className="icon-label">Team</span></button>
               )}
+              <span className="dock-divider"></span>
               {canCall && (
-                <button className="icon-btn icon-coral call-icon-btn" onClick={openCallCompose} title="Call / Summon">
-                  📞
-                </button>
+                <button className="icon-btn icon-call" onClick={openCallCompose} title="Call / Summon"><FiPhone /></button>
               )}
-              <button className="icon-btn icon-teal" onClick={openChat} title="Chat">
-                💬
+              <button className="icon-btn" onClick={openChat} title="Chat">
+                <FiMessageSquare />
                 {unreadChats > 0 && <span className="badge-count">{unreadChats}</span>}
               </button>
-              <button className="icon-btn icon-gold" onClick={openInbox} title="Inbox">
-                🔔
-                {unreadInbox > 0 && <span className="badge-count">{unreadInbox}</span>}
+              <button className="icon-btn" onClick={openInbox} title="Notifications">
+                <FiBell />
+                {unreadInbox > 0 && <span className="badge-count">{unreadInbox > 99 ? '99+' : unreadInbox}</span>}
               </button>
+              {notifPermission !== 'granted' && notifPermission !== 'unsupported' && (
+                <button className="icon-btn icon-warn" onClick={notifPermission === 'default' ? requestNotifPermission : () => alert('Notifications are blocked for this app.\n\nTo fix: click the 🔒 icon next to the address (or the app\'s ⋮ menu → App info) → Notifications → Allow. Then reopen the app.')} title="Alerts are off on this device — click to turn on">
+                  <FiBellOff />
+                </button>
+              )}
               <button
                 className={`icon-btn ${manualRefreshing ? 'spinning' : ''}`}
                 onClick={async () => {
                   if (manualRefreshing) return;
                   setManualRefreshing(true);
-                  // FIX — uses the silent background loaders (no full-page "Loading..." block)
-                  // so refreshing feels instant instead of blanking the whole dashboard.
-                  await Promise.all([loadTasksBackground(), loadAttendanceBackground(), loadInboxBackground(), loadChatsBackground(), loadTeam()]);
+                  await Promise.all([loadTasksBackground(), loadAttendanceBackground(), loadInboxBackground(), loadChatsBackground(), loadTeam(), loadSettings()]);
                   setTimeout(() => setManualRefreshing(false), 500);
                 }}
                 title="Refresh"
               >
-                🔄
+                <FiRefreshCw />
               </button>
-            </div>
+            </nav>
             {!showArchive && (
               <button className="btn-new-task" onClick={() => setShowNewTaskForm(true)}>
-                <span>+</span> New Task
+                <FiPlus /> New Task
               </button>
             )}
           </div>
         </div>
       </header>
 
+      {todayQuote && <p className="quote-strip">“{todayQuote}”</p>}
+
       {/* Shown only while THIS device can't receive call alerts, with the exact fix. */}
       {!pushBannerDismissed && ['not-allowed', 'blocked', 'unsupported', 'error'].includes(myPushState.status) && (
         <div className={`push-banner push-banner-${myPushState.status}`} role="status">
-          <span className="push-banner-icon">📞</span>
+          <span className="push-banner-icon"><FiBell /></span>
           <div className="push-banner-text">
             <strong>
-              {myPushState.status === 'not-allowed' ? 'Turn on call alerts for this device'
-                : myPushState.status === 'blocked' ? 'Call alerts are blocked on this device'
-                : 'This device can’t receive call alerts'}
+              {myPushState.status === 'not-allowed' ? 'Turn on alerts for this device'
+                : myPushState.status === 'blocked' ? 'Alerts are blocked on this device'
+                : 'This device can’t receive alerts'}
             </strong>
             <span>
-              {myPushState.status === 'not-allowed' ? 'So calls reach you even when the app is closed or your phone is locked.'
+              {myPushState.status === 'not-allowed' ? 'So calls, reminders and new tasks reach you even when the app is closed.'
                 : myPushState.status === 'blocked' ? 'Open the site settings (🔒 next to the address, or Settings → Apps on a phone) → Notifications → Allow, then reopen the app.'
                 : myPushState.detail}
             </span>
           </div>
           {myPushState.status === 'not-allowed' && (
-            <button className="btn-success push-banner-btn" onClick={requestNotifPermission}>Allow alerts</button>
+            <button className="btn-success push-banner-btn" onClick={requestNotifPermission}>Turn on</button>
           )}
           {myPushState.status === 'error' && (
             <button className="btn-secondary push-banner-btn" onClick={() => subscribeToPush(currentUserInfo?.name)}>Try again</button>
@@ -3212,35 +3580,36 @@ function App() {
       )}
 
       {showInbox && (
-        <div className="side-panel">
+        <div className="side-panel inbox-panel">
           <div className="panel-header">
-            <h3>📥 Your Inbox ({inbox.length})</h3>
-            <button className="close-btn" onClick={() => setShowInbox(false)}>✕</button>
+            <h3><FiBell /> Notifications {inbox.length > 0 && <span className="panel-count">{inbox.length}</span>}</h3>
+            {inbox.length > 0 && <button className="panel-text-btn" onClick={clearAllInbox}>Clear all</button>}
+            <button className="close-btn" onClick={() => setShowInbox(false)} aria-label="Close"><FiX /></button>
           </div>
           <div className="panel-body">
             {inbox.length === 0 ? (
-              <p className="empty-text">No notifications yet</p>
+              <div className="inbox-empty">
+                <div className="inbox-empty-icon"><FiCheckCircle /></div>
+                <p>You're all caught up</p>
+                <span>New tasks, reminders and updates will appear here.</span>
+              </div>
             ) : (
               <>
-                <p className="inbox-hint">Tap a notification to jump to it — task notifications clear on their own once completed</p>
-                {inbox.map(item => (
-                  <div key={item.id} className={`inbox-item ${item.read === 'No' ? 'unread' : ''}`} onClick={() => handleInboxItemClick(item)}>
-                    <div className="inbox-icon">
-                      {item.type === 'new_routine' ? '🔄'
-                        : item.type === 'task_completed' ? '✅'
-                        : item.type === 'new_meeting' ? '🤝'
-                        : '📌'}
+                <p className="inbox-hint">Tap a notification to open it — it clears automatically.</p>
+                {inbox.map(item => {
+                  const d = describeInboxItem(item);
+                  return (
+                    <div key={item.id} className={`inbox-item inbox-${item.type}`} onClick={() => handleInboxItemClick(item)}>
+                      <div className="inbox-icon">{d.icon}</div>
+                      <div className="inbox-content">
+                        <p className="inbox-title">{d.title}</p>
+                        <p className="inbox-task">{item.title}</p>
+                        <p className="inbox-time">{timeAgo(item.timestamp)}</p>
+                      </div>
+                      <button className="inbox-dismiss" title="Dismiss" onClick={(e) => { e.stopPropagation(); dismissInboxItem(item); }}><FiX /></button>
                     </div>
-                    <div className="inbox-content">
-                      <p className="inbox-title">
-                        {item.type === 'new_routine' ? 'Routine task' : item.type === 'task_completed' ? 'Task completed' : item.type === 'new_meeting' ? 'Meeting scheduled' : 'New task'} from {item.from}
-                      </p>
-                      <p className="inbox-task">{item.title}</p>
-                      <p className="inbox-time">{new Date(item.timestamp).toLocaleString()}</p>
-                    </div>
-                    <span className={`priority-tag ${item.priority.toLowerCase()}`}>{item.priority}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </>
             )}
           </div>
@@ -3708,8 +4077,11 @@ function App() {
                 <span className="cc-sync-dot"></span>
                 {contentSyncState === 'live' ? 'Live' : contentSyncState === 'offline' ? 'Reconnecting…' : 'Syncing…'}
               </span>
+              {isAppAdmin && (
+                <button className="btn-secondary cc-manage-btn" onClick={openCcAccess}><FiShield /> Access</button>
+              )}
               {canManageTeam && (
-                <button className="btn-secondary cc-manage-btn" onClick={() => setShowManageChannels(true)}>⚙️ Manage Channels</button>
+                <button className="btn-secondary cc-manage-btn" onClick={() => setShowManageChannels(true)}><FiSettings /> Channels</button>
               )}
               <button className="modal-close" onClick={() => { setShowContentCalendar(false); setEditingContentEntry(null); }}>✕</button>
             </div>
@@ -3726,15 +4098,37 @@ function App() {
                 <button className="btn-secondary" onClick={() => { changeContentCalMonth(1); setExpandedContentDay(null); }}>Next →</button>
               </div>
 
+              {(() => {
+                const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
+                const inMonth = contentCalGridData.entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix);
+                const published = inMonth.filter(e => e.videoStatus === 'Published').length;
+                const scheduled = inMonth.filter(e => e.videoStatus === 'Scheduled in YT Studio').length;
+                const inEdit = inMonth.filter(e => e.videoStatus !== 'Published' && e.videoStatus !== 'Scheduled in YT Studio' && e.editingStatus && e.editingStatus !== 'Not Started').length;
+                const todayKey = new Date().toISOString().slice(0, 10);
+                const overdue = inMonth.filter(e => e.videoStatus !== 'Published' && String(e.date).slice(0, 10) < todayKey).length;
+                const missingLink = inMonth.filter(e => e.videoStatus !== 'Published' && (e.editingStatus === 'Approved') && !toOpenableUrl(e.finalLink)).length;
+                return (
+                  <div className="cc-stats">
+                    <div className="cc-stat"><strong>{inMonth.length}</strong><span>Planned</span></div>
+                    <div className="cc-stat cc-stat-edit"><strong>{inEdit}</strong><span>In editing</span></div>
+                    <div className="cc-stat cc-stat-sched"><strong>{scheduled}</strong><span>Scheduled</span></div>
+                    <div className="cc-stat cc-stat-pub"><strong>{published}</strong><span>Published</span></div>
+                    <div className={`cc-stat cc-stat-late ${overdue ? 'has' : ''}`}><strong>{overdue}</strong><span>Past date, not live</span></div>
+                    {missingLink > 0 && <div className="cc-stat cc-stat-late has"><strong>{missingLink}</strong><span>Approved, no final link</span></div>}
+                  </div>
+                );
+              })()}
+
               <div className="cc-legend">
-                {CONTENT_TYPES.map(t => (
-                  <span key={t.value} className="cc-legend-item">
-                    <span className="cc-legend-dot" style={{ background: t.color }}></span>
-                    {t.icon} {t.value}
-                  </span>
+                {Array.from(new Set((contentChannelGroups[contentGroupTab] || []).map(platformOf))).map(pk => (
+                  <span key={pk} className="cc-legend-item"><span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}>{PLATFORMS[pk].Icon ? (() => { const I = PLATFORMS[pk].Icon; return <I size={10} />; })() : null}</span>{PLATFORMS[pk].label}</span>
                 ))}
-                <span className="cc-legend-item"><span className="cc-tick" style={{ position: 'static' }}>✓</span> Posted</span>
-                <span className="cc-legend-item"><span className="cc-holiday-dot"></span> Holiday</span>
+                <span className="cc-legend-sep"></span>
+                <span className="cc-legend-item"><span className="cc-status-dot st-plan"></span>Planned</span>
+                <span className="cc-legend-item"><span className="cc-status-dot st-edit"></span>Editing</span>
+                <span className="cc-legend-item"><span className="cc-status-dot st-sched"></span>Scheduled</span>
+                <span className="cc-legend-item"><span className="cc-status-dot st-pub"></span>Published</span>
+                <span className="cc-legend-item"><span className="cc-holiday-dot"></span>Holiday</span>
               </div>
 
               {/* FIX — speed complaint: this grid used to be rebuilt from scratch, inline,
@@ -3773,21 +4167,27 @@ function App() {
                           </div>
                           <div className="cc-day-entries">
                             {visibleEntries.map(entry => {
-                              const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
+                              const fmt = formatInfo(entry.contentType, entry.channels);
+                              const pk = platformOf(entry.channels);
                               const isPublished = entry.videoStatus === 'Published';
+                              const stage = contentStageOf(entry);
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-chip ${isPublished ? 'cc-posted' : ''} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''}`}
-                                  style={{ '--chip': typeInfo.color }}
+                                  className={`cc-chip cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''}`}
+                                  style={{ '--chip': PLATFORMS[pk].color }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
-                                  title={entry.title}
+                                  title={`${entry.title} · ${entry.channels} · ${fmt.text} · ${entry.videoStatus || 'Not Started'}`}
                                 >
-                                  {isPublished && <span className="cc-tick">✓</span>}
-                                  {entry.time && <span className="cc-chip-time">{entry.time}</span>}
-                                  <span className="cc-chip-icon">{typeInfo.icon}</span>
-                                  <span className="cc-chip-title">{entry.title}</span>
-                                  {CONTENT_LINK_FIELDS.some(f => toOpenableUrl(entry[f.key])) && <span className="cc-chip-link" title="Has links — open the day to use them">🔗</span>}
+                                  <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={9} /></span>
+                                  <span className="cc-chip-body">
+                                    <span className="cc-chip-title">{isPublished && '✓ '}{entry.title}</span>
+                                    <span className="cc-chip-meta">
+                                      <span className="cc-format-tag" style={{ '--fmt': fmt.color }}>{fmt.text}</span>
+                                      {entry.time && <span className="cc-chip-time">{entry.time}</span>}
+                                      {CONTENT_LINK_FIELDS.some(f => toOpenableUrl(entry[f.key])) && <span className="cc-chip-link">🔗</span>}
+                                    </span>
+                                  </span>
                                 </div>
                               );
                             })}
@@ -3823,12 +4223,15 @@ function App() {
                     .filter(e => e.channelGroup === contentGroupTab && String(e.date).slice(0, 10) === expandedContentDay.dateStr)
                     .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
                     .map(entry => {
-                      const typeInfo = CONTENT_TYPES.find(t => t.value === entry.contentType) || CONTENT_TYPES[0];
+                      const fmt = formatInfo(entry.contentType, entry.channels);
+                      const pk = platformOf(entry.channels);
                       const videoInfo = VIDEO_STATUSES.find(s => s.value === entry.videoStatus) || VIDEO_STATUSES[0];
+                      const editInfo = EDITING_STATUSES.find(s => s.value === entry.editingStatus) || EDITING_STATUSES[0];
                       const isPublished = entry.videoStatus === 'Published';
                       return (
                         <div
                           key={entry.id}
+                          style={{ '--chip': PLATFORMS[pk].color }}
                           className={`cc-entry-card ${isPublished ? 'cc-posted' : ''}`}
                           onClick={() => { setExpandedContentDay(null); openEditContentEntry(entry); }}
                         >
@@ -3837,8 +4240,11 @@ function App() {
                             {entry.time && <strong>{entry.time} — </strong>}{entry.title}
                           </div>
                           <div className="cc-entry-badges">
-                            <span className="cc-badge" style={{ background: typeInfo.color + '22', color: typeInfo.color }}>{typeInfo.icon} {typeInfo.value}</span>
-                            <span className="cc-badge" style={{ background: videoInfo.color + '22', color: videoInfo.color }}>{videoInfo.icon} {videoInfo.value}</span>
+                            <ChannelBadge channel={entry.channels} />
+                            <span className="cc-badge" style={{ background: fmt.color + '1f', color: fmt.color }}>{fmt.icon} {fmt.text}</span>
+                            <span className="cc-badge" style={{ background: editInfo.color + '1f', color: editInfo.color }}>✂️ {editInfo.value}</span>
+                            <span className="cc-badge" style={{ background: videoInfo.color + '1f', color: videoInfo.color }}>{videoInfo.icon} {videoInfo.value}</span>
+                            <span className="cc-badge cc-badge-people">👤 {entry.assignedTo}</span>
                           </div>
                           {CONTENT_LINK_FIELDS.some(f => toOpenableUrl(entry[f.key])) && (
                             <div className="cc-entry-links">
@@ -3855,6 +4261,37 @@ function App() {
                       );
                     })}
                   <button className="btn-success" style={{ marginTop: '10px' }} onClick={() => { const d = expandedContentDay.dateStr; setExpandedContentDay(null); openNewContentEntry(d); }}>+ Add another</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showCcAccess && isAppAdmin && (
+            <div className="modal-overlay" onClick={() => setShowCcAccess(false)}>
+              <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+                <div className="modal-header">
+                  <h3><FiShield /> Who can open the Content Calendar</h3>
+                  <button className="modal-close" onClick={() => setShowCcAccess(false)}>✕</button>
+                </div>
+                <div className="modal-body compact-body">
+                  <p className="tm-hint">PC and Shivendra always have access. People switched off won't see the calendar icon — their linked tasks still appear on their task board as usual.</p>
+                  <div className="access-list">
+                    {activeTeam.filter(m => m.id !== 'pcwtc45' && m.id !== 'shivendrawtc77').map(m => {
+                      const on = ccAccessDraft.includes(m.id);
+                      return (
+                        <label key={m.id} className={`access-row ${on ? 'on' : ''}`}>
+                          <span className="chat-avatar">{m.avatar}</span>
+                          <span className="access-name"><strong>{m.displayName}</strong><small>{m.role}</small></span>
+                          <input type="checkbox" className="switch" checked={on}
+                            onChange={() => setCcAccessDraft(prev => prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id])} />
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn-secondary" onClick={() => setShowCcAccess(false)}>Cancel</button>
+                  <button className="btn-success" onClick={saveCcAccess}>Save access</button>
                 </div>
               </div>
             </div>
@@ -3918,13 +4355,13 @@ function App() {
                     <div className="form-group">
                       <label>Channel</label>
                       <select value={contentForm.channels} onChange={(e) => setContentForm({ ...contentForm, channels: e.target.value })}>
-                        {(contentChannelGroups[contentGroupTab] || []).map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                        {(contentChannelGroups[contentGroupTab] || []).map(ch => <option key={ch} value={ch}>{ch} · {PLATFORMS[platformOf(ch)].label}</option>)}
                       </select>
                     </div>
                     <div className="form-group">
                       <label>Content Type</label>
                       <select value={contentForm.contentType} onChange={(e) => setContentForm({ ...contentForm, contentType: e.target.value })}>
-                        {CONTENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.icon} {t.value}</option>)}
+                        {CONTENT_FORMATS.map(t => <option key={t.value} value={t.value}>{t.icon} {t.label(platformOf(contentForm.channels))}</option>)}
                       </select>
                     </div>
                   </div>
@@ -4078,6 +4515,176 @@ function App() {
         </div>
       )}
 
+      {/* ATTENDANCE RECORD & DISCIPLINE — my flags (with correction requests); for
+          HR/PC/Shivendra also the team summary, pending requests and shifts. */}
+      {showDiscipline && (
+        <div className="modal-overlay" onClick={() => setShowDiscipline(false)}>
+          <div className="modal-content discipline-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><FiShield /> Attendance record</h3>
+              <button className="modal-close" onClick={() => setShowDiscipline(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <div className="disc-tabs">
+                {(!isAdmin || isHR) && <button className={disciplineTab === 'mine' ? 'active' : ''} onClick={() => { setDisciplineTab('mine'); loadDiscipline('mine'); }}>My record</button>}
+                {canManageAttendance && <button className={disciplineTab === 'team' ? 'active' : ''} onClick={() => { setDisciplineTab('team'); loadDiscipline('team'); }}>Team {disciplineData.team?.requests?.length ? <span className="tab-badge">{disciplineData.team.requests.length}</span> : null}</button>}
+                {canManageAttendance && <button className={disciplineTab === 'shifts' ? 'active' : ''} onClick={() => setDisciplineTab('shifts')}>Shifts</button>}
+              </div>
+
+              <div className="disc-rules">
+                <strong>Rules</strong>
+                <span>Late after {attRules.lateGrace} min of shift start</span>
+                <span>Lunch {fmtClock(attRules.lunchStart)}–{fmtClock(attRules.lunchEnd)}, {attRules.lunchMinutes} min, once</span>
+                <span>No lunch marked → 30 min deducted</span>
+                <span>Forgot sign-out → day closed at shift end</span>
+                <span>Under {attRules.minWorkHours}h worked</span>
+                <span className="disc-rule-key">Each = 1 strike · every {attRules.strikesPerHalfDay} strikes in a month = ½ day deduction</span>
+              </div>
+
+              {disciplineTab !== 'shifts' && (
+                <div className="month-nav">
+                  <button className="btn-secondary" onClick={() => changeDiscMonth(-1)}>← Prev</button>
+                  <strong>{new Date(discYear, discMonth - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
+                  <button className="btn-secondary" onClick={() => changeDiscMonth(1)}>Next →</button>
+                </div>
+              )}
+              {disciplineLoading && <p className="empty-text">Loading…</p>}
+
+              {disciplineTab === 'mine' && disciplineData.mine && (() => {
+                const sum = disciplineData.mine.summary?.[currentUser] || { strikes: 0, halfDays: 0, excused: 0, pending: 0 };
+                const flags = disciplineData.mine.flags || [];
+                return (
+                  <>
+                    <div className="disc-summary">
+                      <div className={sum.strikes >= attRules.strikesPerHalfDay ? 'bad' : sum.strikes ? 'warn' : 'ok'}><strong>{sum.strikes}</strong><span>Strikes</span></div>
+                      <div className={sum.halfDays ? 'bad' : 'ok'}><strong>{sum.halfDays}</strong><span>Days deducted</span></div>
+                      <div><strong>{sum.pending}</strong><span>Waiting for HR</span></div>
+                      <div className="ok"><strong>{sum.excused}</strong><span>Excused</span></div>
+                    </div>
+                    {sum.strikes > 0 && sum.strikes % attRules.strikesPerHalfDay !== 0 && (
+                      <p className="disc-next">{attRules.strikesPerHalfDay - (sum.strikes % attRules.strikesPerHalfDay)} more strike(s) this month = another ½ day deduction.</p>
+                    )}
+                    {flags.length === 0 ? (
+                      <div className="inbox-empty"><div className="inbox-empty-icon"><FiCheckCircle /></div><p>Clean record this month 🎉</p></div>
+                    ) : (
+                      <div className="flag-list">
+                        {flags.slice().sort((a, b) => b.date.localeCompare(a.date)).map(f => (
+                          <div key={f.id} className={`flag-row flag-${String(f.status).toLowerCase()}`}>
+                            <div className="flag-main">
+                              <div className="flag-top"><strong>{f.label}</strong><span className="flag-date">{new Date(f.date + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</span><span className={`flag-status st-${String(f.status).toLowerCase()}`}>{f.status === 'Open' ? 'Strike' : f.status === 'Requested' ? 'Waiting for HR' : f.status}</span></div>
+                              <div className="flag-detail">{f.detail}</div>
+                              {f.note && <div className="flag-note">Your reason: {f.note}{f.correctedTime ? ` · actual time ${fmtClock(f.correctedTime)}` : ''}</div>}
+                            </div>
+                            {(f.status === 'Open') && (
+                              correctionDraft && String(correctionDraft.flagId) === String(f.id) ? (
+                                <div className="flag-form">
+                                  <textarea rows="2" placeholder="Reason (e.g. client call ran late, forgot to tap sign-out…)" value={correctionDraft.note} onChange={(e) => setCorrectionDraft({ ...correctionDraft, note: e.target.value })} />
+                                  {f.type === 'MISSED_SIGNOUT' && (
+                                    <label className="flag-time">Actual leaving time <input type="time" value={correctionDraft.correctedTime} onChange={(e) => setCorrectionDraft({ ...correctionDraft, correctedTime: e.target.value })} /></label>
+                                  )}
+                                  <div className="flag-form-actions">
+                                    <button className="btn-secondary" onClick={() => setCorrectionDraft(null)}>Cancel</button>
+                                    <button className="btn-success" onClick={submitCorrection}>Send to HR</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button className="btn-ghost" onClick={() => setCorrectionDraft({ flagId: f.id, note: '', correctedTime: '' })}>Request correction</button>
+                              )
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {disciplineTab === 'team' && canManageAttendance && disciplineData.team && (() => {
+                const team = disciplineData.team;
+                const rows = activeTeam.filter(m => !m.isAdmin).map(m => ({ m, s: team.summary?.[m.id] || { strikes: 0, halfDays: 0, excused: 0, pending: 0, byType: {} } }))
+                  .sort((a, b) => b.s.strikes - a.s.strikes);
+                return (
+                  <>
+                    {(team.requests || []).length > 0 && (
+                      <div className="disc-requests">
+                        <h4>Correction requests ({team.requests.length})</h4>
+                        {team.requests.map(f => (
+                          <div key={f.id} className="flag-row flag-requested">
+                            <div className="flag-main">
+                              <div className="flag-top"><strong>{f.name}</strong><span>{f.label}</span><span className="flag-date">{new Date(f.date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span></div>
+                              <div className="flag-detail">{f.detail}</div>
+                              <div className="flag-note">Reason: {f.note}{f.correctedTime ? ` · says they left at ${fmtClock(f.correctedTime)}` : ''}</div>
+                            </div>
+                            {f.userId === currentUser ? <span className="flag-own">Another manager decides</span> : (
+                              <div className="flag-decide">
+                                <button className="btn-success" onClick={() => decideFlag(f, 'Excused')}>Excuse</button>
+                                <button className="btn-secondary" onClick={() => decideFlag(f, 'Rejected')}>Reject</button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="disc-table-wrap">
+                      <table className="monthly-table disc-table">
+                        <thead><tr><th>Person</th><th>Late</th><th>Lunch</th><th>No lunch</th><th>No sign-out</th><th>Short hrs</th><th>Strikes</th><th>Deduction</th></tr></thead>
+                        <tbody>
+                          {rows.map(({ m, s: sm }) => (
+                            <tr key={m.id} className={sm.halfDays ? 'row-bad' : ''}>
+                              <td><strong>{m.displayName}</strong></td>
+                              <td>{sm.byType?.LATE || 0}</td>
+                              <td>{sm.byType?.LONG_LUNCH || 0}</td>
+                              <td>{sm.byType?.LUNCH_NOT_MARKED || 0}</td>
+                              <td>{sm.byType?.MISSED_SIGNOUT || 0}</td>
+                              <td>{sm.byType?.SHORT_HOURS || 0}</td>
+                              <td><strong>{sm.strikes}</strong>{sm.excused ? <small> (+{sm.excused} excused)</small> : null}</td>
+                              <td>{sm.halfDays ? `${sm.halfDays} day` : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flag-list">
+                      {(team.flags || []).slice().sort((a, b) => b.date.localeCompare(a.date)).map(f => (
+                        <div key={f.id} className={`flag-row flag-${String(f.status).toLowerCase()}`}>
+                          <div className="flag-main">
+                            <div className="flag-top"><strong>{f.name}</strong><span>{f.label}</span><span className="flag-date">{new Date(f.date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span><span className={`flag-status st-${String(f.status).toLowerCase()}`}>{f.status === 'Open' ? 'Strike' : f.status}</span></div>
+                            <div className="flag-detail">{f.detail}</div>
+                          </div>
+                          {f.status !== 'Excused' && f.userId !== currentUser && (
+                            <button className="btn-ghost" onClick={() => decideFlag(f, 'Excused')}>Excuse</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+
+              {disciplineTab === 'shifts' && canManageAttendance && (
+                <div className="shift-list">
+                  <p className="tm-hint">Each person's office hours. Late marks and the "forgot to sign out" closing time use these. First set automatically from everyone's real sign-in times.</p>
+                  {activeTeam.filter(m => !m.isAdmin).map(m => {
+                    const cur = shiftOf(m.id);
+                    const d = shiftDrafts[m.id];
+                    return (
+                      <div key={m.id} className="shift-row">
+                        <span className="chat-avatar">{m.avatar}</span>
+                        <strong className="shift-name">{m.displayName}</strong>
+                        <input type="time" value={d ? d.start : cur.start} onChange={(e) => setShiftDrafts(prev => ({ ...prev, [m.id]: { start: e.target.value, end: (prev[m.id] || cur).end } }))} />
+                        <span>to</span>
+                        <input type="time" value={d ? d.end : cur.end} onChange={(e) => setShiftDrafts(prev => ({ ...prev, [m.id]: { start: (prev[m.id] || cur).start, end: e.target.value } }))} />
+                        <button className="btn-success" disabled={!d} onClick={() => saveShiftFor(m)}>Save</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Monthly Attendance — available to everyone who has the personal attendance card */}
       {showMonthlyAttendance && (
         <div className="modal-overlay" onClick={() => setShowMonthlyAttendance(false)}>
@@ -4141,61 +4748,6 @@ function App() {
         </div>
       )}
 
-      {/* 📡 CALL ALERTS CHECK — who can receive call alerts, and a test button per person */}
-      {showCallAlerts && canCall && (
-        <div className="modal-overlay" onClick={() => setShowCallAlerts(false)}>
-          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>📡 Call Alerts</h3>
-              <button className="modal-close" onClick={() => setShowCallAlerts(false)}>✕</button>
-            </div>
-            <div className="modal-body compact-body">
-              <p className="reminder-window-hint">
-                A call reaches someone whose app is closed or phone is locked only if one of their devices is registered here.
-                Press <strong>Send test</strong> to check a person right now — the result says exactly what happened.
-              </p>
-              {pushStatus === null ? (
-                <p className="empty-text">Loading…</p>
-              ) : (
-                <div className="push-list">
-                  {activeTeam.filter(m => m.id !== currentUser).map(member => {
-                    const devices = pushStatus[member.name] || [];
-                    const test = pushTestResults[member.name];
-                    return (
-                      <div key={member.id} className={`push-row ${devices.length ? 'has' : 'none'}`}>
-                        <div className="push-row-main">
-                          <span className="chat-avatar">{member.avatar}</span>
-                          <div className="push-row-info">
-                            <strong>{member.displayName}</strong>
-                            {devices.length === 0 ? (
-                              <span className="push-row-sub warn">No device registered</span>
-                            ) : devices.map((d, i) => (
-                              <span key={i} className="push-row-sub">
-                                📱 {d.device}{d.lastSeen ? ` · last seen ${new Date(d.lastSeen).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}` : ''}
-                              </span>
-                            ))}
-                          </div>
-                          <button className="btn-secondary push-test-btn" onClick={() => sendTestAlert(member.name)} disabled={test && test.kind === 'pending'}>
-                            {test && test.kind === 'pending' ? 'Sending…' : 'Send test'}
-                          </button>
-                        </div>
-                        {test && test.kind !== 'pending' && (
-                          <div className={`push-test-result ${test.kind}`}>{test.text}</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="push-self">
-                <strong>This device:</strong>{' '}
-                {myPushState.status === 'registered' ? `✅ registered (${myPushState.detail})` : `⚠️ ${myPushState.detail || 'checking…'}`}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* CALL COMPOSE — pick recipients, then choose the call type */}
       {showCallCompose && canCall && (
         <div className="modal-overlay" onClick={() => setShowCallCompose(false)}>
@@ -4223,22 +4775,15 @@ function App() {
                       key={member.id}
                       className={`avatar-select ${callRecipients.includes(member.name) ? 'checked' : ''}`}
                       onClick={() => toggleCallRecipient(member.name)}
-                      title={`${member.displayName}${pushStatus ? ((pushStatus[member.name] || []).length ? ' — can receive call alerts' : ' — no phone registered for alerts') : ''}`}
+                      title={member.displayName}
                     >
                       {member.avatar}
-                      {pushStatus && (
-                        <span className={`push-dot ${(pushStatus[member.name] || []).length ? 'on' : 'off'}`}></span>
-                      )}
+                      {isPresent(member.name) && <span className="presence-dot"></span>}
                     </div>
                   ))}
                 </div>
               </div>
-              <p className="reminder-window-hint">This rings on their dashboard with a full-screen alert and sound — not an actual audio/video call, just a fast way to summon someone.</p>
-              <div className="push-legend">
-                <span><span className="push-dot on static"></span> phone registered for call alerts</span>
-                <span><span className="push-dot off static"></span> not registered (rings only if their app is open)</span>
-                <button type="button" className="link-btn" onClick={() => { setShowCallCompose(false); openCallAlerts(); }}>📡 Check call alerts</button>
-              </div>
+              <p className="call-hint">Their screen rings with sound and a full-screen alert — on the app, the desktop and the phone.</p>
             </div>
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowCallCompose(false)}>Cancel</button>
@@ -4268,9 +4813,6 @@ function App() {
                       <span className="chat-avatar">{member?.avatar || r.to.substring(0, 2)}</span>
                       <span className="call-status-name">{member?.displayName || r.to}</span>
                       <span className="call-status-badge">{icon} {r.response === 'Ringing' ? 'Ringing...' : r.response === 'Failed' ? 'Not sent — check internet & try again' : r.response}</span>
-                      {outgoingCall.alerts && outgoingCall.alerts[r.to] && (
-                        <span className={`call-alert-note call-alert-${outgoingCall.alerts[r.to].kind}`}>{outgoingCall.alerts[r.to].text}</span>
-                      )}
                     </div>
                   );
                 })}
@@ -4297,20 +4839,6 @@ function App() {
         </div>
       )}
 
-      {/* LUNCH ALARM — fires 1:00 PM sharp, distinct tone, 30s auto-dismiss */}
-      {showLunchAlarm && (
-        <div className="incoming-call-overlay lunch-alarm-overlay">
-          <div className="incoming-call-card">
-            <div className="incoming-call-avatar lunch-alarm-avatar">🍽️</div>
-            <h2>Lunch Time!</h2>
-            <p className="incoming-call-type">Take your 45-minute break</p>
-            <div className="incoming-call-actions">
-              <button className="btn-accept-call" onClick={dismissLunchAlarm}>✓ Got it</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {activeMeetingAlarm && (
         <div className="incoming-call-overlay meeting-alarm-overlay">
           <div className="incoming-call-card">
@@ -4328,66 +4856,109 @@ function App() {
 
       {!loading && (
         <>
-          {(!isAdmin || isHR) && (
-            <div className="attendance-card-premium">
-              <div className="attendance-card-header">
-                <h3>⏰ Your Attendance Today</h3>
-                <button className="btn-monthly-attendance" onClick={openMonthlyAttendance}>📅 Monthly Attendance</button>
-              </div>
-              <div className="attendance-info">
-                <div className="status-badge" style={{background: attendanceColors[myStatus] + '20', color: attendanceColors[myStatus]}}>
-                  {myStatus}
+          {(!isAdmin || isHR) && (() => {
+            const log = myLiveLog || attendance.find(a => a.userId === currentUser)?.log;
+            const times = calculateWorkingTime(log);
+            const shift = shiftOf(currentUser);
+            const lunch = lunchInfoFromLog(log);
+            const warnings = dayWarnings(currentUser, log);
+            const signedIn = !(myStatus === 'Not Signed In' || myStatus === 'Signed Out');
+            const mySummary = disciplineData.mine?.summary?.[currentUser];
+            const strikes = mySummary ? mySummary.strikes : 0;
+            const perHalf = attRules.strikesPerHalfDay || 3;
+            const lunchLeft = lunch.onLunch ? attRules.lunchMinutes - lunch.usedMin : null;
+            const lunchDisabledReason = lunch.taken ? 'Lunch already marked today' : !lunch.windowOpen ? `Lunch can be marked only ${fmtClock(attRules.lunchStart)} – ${fmtClock(attRules.lunchEnd)}` : '';
+            return (
+              <div className={`attendance-card-premium att-${String(myStatus).replace(/\s+/g, '-').toLowerCase()}`}>
+                <div className="att-top">
+                  <div className="att-status">
+                    <span className="att-status-dot" style={{ background: attendanceColors[myStatus] }}></span>
+                    <div>
+                      <div className="att-status-label">{myStatus}</div>
+                      <div className="att-shift"><FiClock /> Shift {fmtClock(shift.start)} – {fmtClock(shift.end)} · Lunch {fmtClock(attRules.lunchStart)}–{fmtClock(attRules.lunchEnd)} ({attRules.lunchMinutes} min)</div>
+                    </div>
+                  </div>
+                  <div className="att-metrics">
+                    <div><span>Worked</span><strong>{times.working}</strong></div>
+                    <div><span>Break</span><strong>{times.breaks}</strong></div>
+                    <div className={`att-strikes ${strikes >= perHalf ? 'bad' : strikes > 0 ? 'warn' : ''}`} onClick={() => openDiscipline('mine')} title="Open my attendance record">
+                      <span>Strikes ({new Date().toLocaleDateString('en-IN', { month: 'short' })})</span><strong>{strikes}</strong>
+                    </div>
+                  </div>
                 </div>
-                {(myLiveLog || attendance.find(a => a.userId === currentUser)) && (
-                  <div className="time-info">
-                    {(() => {
-                      const log = myLiveLog || attendance.find(a => a.userId === currentUser)?.log;
-                      const times = calculateWorkingTime(log);
-                      return (
-                        <>
-                          <div>⏱️ <strong>{times.working}</strong></div>
-                          <div>☕ <strong>{times.breaks}</strong></div>
-                          <div>📊 <strong>{times.productivity}%</strong></div>
-                        </>
-                      );
-                    })()}
+
+                {lunch.onLunch && (
+                  <div className={`lunch-meter ${lunchLeft < 0 ? 'over' : lunchLeft <= 5 ? 'ending' : ''}`}>
+                    <div className="lunch-meter-text">
+                      🍽️ {lunchLeft >= 0 ? `${Math.floor(lunchLeft)}:${String(Math.floor((lunchLeft % 1) * 60)).padStart(2, '0')} of lunch left` : `Lunch is over by ${Math.ceil(-lunchLeft)} min — tap Back to Work`}
+                    </div>
+                    <div className="lunch-meter-bar"><div style={{ width: `${Math.min(100, (lunch.usedMin / attRules.lunchMinutes) * 100)}%` }}></div></div>
                   </div>
                 )}
-              </div>
-              <div className="attendance-buttons">
-                {myStatus === 'Not Signed In' || myStatus === 'Signed Out' ? (
-                  <button className="btn-signin" onClick={() => updateMyStatus('Working')} disabled={attendanceSwitching}>🟢 Sign In</button>
-                ) : (
-                  <>
-                    {myStatus !== 'Working' && <button className="btn-resume" onClick={() => updateMyStatus('Working')} disabled={attendanceSwitching}>🟢 Back to Work</button>}
-                    {myStatus !== 'Lunch Break' && <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')} disabled={attendanceSwitching}>🍽️ Lunch</button>}
-                    {myStatus !== 'Meeting' && <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')} disabled={attendanceSwitching}>🤝 Meeting</button>}
-                    <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')} disabled={attendanceSwitching}>🚪 Sign Out</button>
-                  </>
+                {signedIn && !lunch.taken && lunch.windowOpen && (
+                  <div className="att-note att-note-info">🍽️ Lunch window is open — closes in {lunch.minsToClose} min. If you don't mark lunch, 30 min are deducted automatically.</div>
                 )}
+                {signedIn && !lunch.taken && lunch.afterWindow && (
+                  <div className="att-note att-note-warn">🍽️ Lunch wasn't marked today — 1:00–1:30 PM will be counted as lunch and a strike is added.</div>
+                )}
+                {lunch.taken && !lunch.onLunch && lunch.end && (
+                  <div className="att-note att-note-ok">✓ Lunch {lunch.start.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} – {lunch.end.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} ({Math.round(lunch.usedMin)} min)</div>
+                )}
+                {warnings.filter(w => !/^Lunch|^Long lunch/.test(w.text)).map(w => (
+                  <div key={w.text} className={`att-note att-note-${w.kind === 'bad' ? 'bad' : 'warn'}`}>
+                    <FiAlertTriangle /> {w.text.startsWith('Past shift end') ? `Your shift ended at ${fmtClock(shift.end)} — sign out before you leave. A forgotten sign-out is closed automatically at night and counts as a strike.` : w.text.startsWith('Late') ? `Signed in ${w.text.replace('Late ', '')} after your shift start (${fmtClock(shift.start)}) — counts as a late mark.` : w.text === 'Not signed in' ? `You haven't signed in yet — your shift started at ${fmtClock(shift.start)}.` : w.text}
+                  </div>
+                ))}
+
+                <div className="attendance-buttons">
+                  {!signedIn ? (
+                    <button className="btn-signin" onClick={() => updateMyStatus('Working')} disabled={attendanceSwitching}>Sign In</button>
+                  ) : (
+                    <>
+                      {myStatus !== 'Working' && <button className="btn-resume" onClick={() => updateMyStatus('Working')} disabled={attendanceSwitching}>Back to Work</button>}
+                      {myStatus !== 'Lunch Break' && (
+                        <button className="btn-lunch" onClick={() => updateMyStatus('Lunch Break')} disabled={attendanceSwitching || !!lunchDisabledReason} title={lunchDisabledReason || 'Start your 30-minute lunch'}>
+                          🍽️ Lunch{lunch.taken ? ' ✓' : ''}
+                        </button>
+                      )}
+                      {myStatus !== 'Meeting' && <button className="btn-meeting" onClick={() => updateMyStatus('Meeting')} disabled={attendanceSwitching}>Meeting</button>}
+                      <button className="btn-signout" onClick={() => updateMyStatus('Signed Out')} disabled={attendanceSwitching}>Sign Out</button>
+                    </>
+                  )}
+                  <span className="att-btn-spacer"></span>
+                  <button className="btn-ghost" onClick={() => openDiscipline('mine')}>My record</button>
+                  <button className="btn-ghost" onClick={openMonthlyAttendance}>Monthly hours</button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {(isAdmin || isHR) && (
             <div className="team-status-section">
               <div className="section-header" onClick={() => setShowAttendance(!showAttendance)}>
-                <h3>📊 Team Status Today {showAttendance ? '▼' : '▶'}</h3>
+                <h3><FiUsers /> Team Status Today <span className="section-caret">{showAttendance ? '▾' : '▸'}</span></h3>
+                {canManageAttendance && (
+                  <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('team'); }}><FiShield /> Discipline &amp; shifts</button>
+                )}
               </div>
               {showAttendance && (
                 <div className="team-status-grid">
-                  {/* FIX #3 — Pari (HR) now included alongside regular team members */}
                   {activeTeam.filter(m => !m.isAdmin).map(member => {
                     const memberAttendance = attendance.find(a => a.userId === member.id);
                     const status = memberAttendance?.status || 'Not Signed In';
                     const times = memberAttendance ? calculateWorkingTime(memberAttendance.log) : { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
+                    const warns = dayWarnings(member.id, memberAttendance?.log);
+                    const shift = shiftOf(member.id);
                     return (
-                      <div key={member.id} className="status-card">
+                      <div key={member.id} className={`status-card ${warns.some(w => w.kind === 'bad') ? 'has-bad' : ''}`}>
                         <div className="status-avatar" style={{background: attendanceColors[status]}}>{member.avatar}</div>
                         <div className="status-details">
                           <strong>{member.displayName} {member.isHR ? '(HR)' : ''}</strong>
                           <span className="status-text" style={{color: attendanceColors[status]}}>{status}</span>
-                          <span className="status-time">⏱️ {times.working} | ☕ {times.breaks} | 📊 {times.productivity}%</span>
+                          <span className="status-time">⏱ {times.working} · ☕ {times.breaks} · 🕘 {fmtClock(shift.start)}–{fmtClock(shift.end)}</span>
+                          {warns.length > 0 && (
+                            <span className="status-warns">{warns.map(w => <span key={w.text} className={`warn-chip ${w.kind}`}>{w.text}</span>)}</span>
+                          )}
                         </div>
                       </div>
                     );
@@ -4508,6 +5079,19 @@ function App() {
 
               <div className="view-title">
                 <h2>{getViewTitle()}</h2>
+                <span className="view-title-sub">{openCount} open · {bucketed.delayed.length} delayed · {bucketed.today.length} due today</span>
+              </div>
+
+              <div className="bucket-tabs" role="tablist">
+                <button className={taskBucket === 'all' ? 'active' : ''} onClick={() => setTaskBucket('all')}>All <span>{boardTasks.length}</span></button>
+                {remindedTasks.length > 0 && (
+                  <button className={`bucket-reminded ${taskBucket === 'reminded' ? 'active' : ''}`} onClick={() => setTaskBucket('reminded')}>⏰ Reminders <span>{remindedTasks.length}</span></button>
+                )}
+                {TASK_BUCKETS.map(b => (
+                  <button key={b.key} className={`bucket-${b.key} ${taskBucket === b.key ? 'active' : ''}`} onClick={() => setTaskBucket(b.key)}>
+                    {b.icon} {b.label} <span>{bucketed[b.key].length}</span>
+                  </button>
+                ))}
               </div>
 
               <div className="filters">
@@ -4541,50 +5125,48 @@ function App() {
 
               <div className="tasks-container">
                 {(() => {
-                  const todayForUrgency = new Date();
-                  todayForUrgency.setHours(0, 0, 0, 0);
-
                   const renderTaskCard = (task) => {
                     const isCompleted = task.status === 'Completed';
                     const canChangeStatus = isAdmin || !isCompleted;
                     const canEdit = isAdmin || !isCompleted;
                     const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
                     const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
-                    const isUrgent = task.priority === 'High' && task.delayDays > 0;
-
-                    // FIX — routine tasks now visually differ by urgency: due today/overdue
-                    // gets a red flash so it can't be missed; still a few days out fades
-                    // slightly so it doesn't compete for attention with what's actually urgent.
-                    let routineUrgencyClass = '';
-                    if (isRoutine && !isCompleted && task.targetDate) {
-                      const dueDate = new Date(task.targetDate);
-                      dueDate.setHours(0, 0, 0, 0);
-                      const daysUntilDue = Math.round((dueDate - todayForUrgency) / (1000 * 60 * 60 * 24));
-                      routineUrgencyClass = daysUntilDue <= 1 ? 'routine-urgent' : 'routine-fade';
-                    }
-
+                    const bucket = bucketOf(task);
+                    const reminder = isTaskAssignedToMe(task) && !isCompleted ? reminderByTask[String(task.id)] : null;
+                    const justReminded = reminder && reminderFlash && reminderFlash.taskId === String(task.id) && Date.now() - reminderFlash.at < 15000;
+                    const due = task.targetDate ? new Date(task.targetDate) : null;
+                    const dueLabel = !due || isNaN(due.getTime()) ? '—'
+                      : bucket === 'today' ? 'Today'
+                      : due.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
                     return (
-                      <div key={task.id} id={`task-card-${task.id}`} className={`task-card ${task.delayDays > 0 ? 'overdue' : ''} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''} ${routineUrgencyClass} ${String(highlightTaskId) === String(task.id) ? 'task-highlighted' : ''}`}>
-                        <div className={`priority-strip ${task.priority.toLowerCase()} ${isUrgent ? 'urgent-shimmer' : ''}`}></div>
-                        {isRoutine && <div className="routine-tag">🔄 Routine Task</div>}
-                        {task.delayDays > 0 && <div className="alert-banner">⚠️ Delayed by {task.delayDays} day(s)</div>}
+                      <div key={task.id} id={`task-card-${task.id}`} className={`task-card bucket-card-${bucket} ${isCompleted ? 'completed' : ''} ${isRoutine ? 'routine' : ''} ${reminder ? 'reminded' : ''} ${justReminded ? 'reminded-flash' : ''} ${String(highlightTaskId) === String(task.id) ? 'task-highlighted' : ''}`}>
+                        <div className={`priority-strip ${String(task.priority || 'Medium').toLowerCase()}`}></div>
+                        <div className="task-card-top">
+                          <span className={`due-pill due-${bucket}`}>
+                            {bucket === 'delayed' ? `Delayed ${task.delayDays > 0 ? task.delayDays + 'd' : ''}` : bucket === 'today' ? 'Due today' : bucket === 'hold' ? 'On hold' : bucket === 'done' ? 'Completed' : 'Upcoming'}
+                          </span>
+                          {isRoutine && <span className="routine-pill">🔄 Routine</span>}
+                          <span className="task-due-date"><FiCalendar /> {dueLabel}</span>
+                        </div>
+                        {reminder && (
+                          <div className="reminder-banner">⏰ {reminder.from} reminded you · {timeAgo(reminder.timestamp)}</div>
+                        )}
                         <div className="task-header">
                           <div className="task-title-row">
                             <h3>{task.taskDetails}</h3>
                             {canEdit && (
-                              <button className="btn-edit-task" onClick={() => openEditTask(task)} title="Edit task">✏️</button>
+                              <button className="btn-edit-task" onClick={() => openEditTask(task)} title="Edit task"><FiEdit2 /></button>
                             )}
                           </div>
                           <div className="badges">
-                            {channelList.map(ch => <span key={ch} className="badge-channel">{ch}</span>)}
-                            <span className={`badge-priority ${task.priority.toLowerCase()}`}>{task.priority}</span>
+                            {channelList.map(ch => <ChannelBadge key={ch} channel={ch} />)}
+                            <span className={`badge-priority ${String(task.priority || 'Medium').toLowerCase()}`}>{task.priority}</span>
                             {task.category && <span className="badge-category">{task.category}</span>}
                           </div>
-                          {task.remarks && <p className="task-remarks">💬 {task.remarks}</p>}
+                          {task.remarks && <p className="task-remarks">{task.remarks}</p>}
                         </div>
                         <div className="task-meta">
                           <div className="assignee-row">
-                            <span className="meta-label">Assigned to:</span>
                             <div className="assignee-avatars">
                               {String(task.assignedTo).split(',').map(a => a.trim()).map(name => (
                                 <span key={name} className="mini-avatar-wrap" title={name}>
@@ -4593,18 +5175,14 @@ function App() {
                                 </span>
                               ))}
                             </div>
-                          </div>
-                          <div className="meta-row">
-                            <span>📌 By: <strong>{task.assignedBy}</strong></span>
-                            <span className="date-badge">📅 {new Date(task.targetDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                            <span className="assigned-by">by <strong>{task.assignedBy}</strong></span>
                           </div>
                         </div>
                         <div className="task-footer">
                           <select
                             value={task.status}
                             onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                            className={`status-select ${!canChangeStatus ? 'locked' : ''}`}
-                            style={{ color: statusColors[task.status] }}
+                            className={`status-select status-${String(task.status).replace(/\s+/g, '-').toLowerCase()} ${!canChangeStatus ? 'locked' : ''}`}
                             disabled={!canChangeStatus}
                           >
                             <option value="Not Started">Not Started</option>
@@ -4613,31 +5191,49 @@ function App() {
                             <option value="On Hold">On Hold</option>
                             <option value="Delayed">Delayed</option>
                           </select>
-                          <button className="btn-whatsapp" onClick={() => handleExportWhatsApp(task)}>WA</button>
+                          {canRemindTask(task) && (
+                            <button className="btn-remind" onClick={() => handleRemindTask(task)} disabled={String(remindBusyId) === String(task.id)} title="Send a reminder to the assignee">
+                              <FiBellRing /> {String(remindBusyId) === String(task.id) ? 'Sending…' : 'Remind'}
+                            </button>
+                          )}
                           {isAdmin && (
-                            <button className="btn-delete-task" title="Delete task" onClick={() => handleDeleteTask(task)}>🗑️</button>
+                            <button className="btn-delete-task" title="Delete task" onClick={() => handleDeleteTask(task)}><FiTrash2 /></button>
                           )}
                         </div>
                       </div>
                     );
                   };
 
+                  const sections = taskBucket === 'all'
+                    ? TASK_BUCKETS.filter(b => bucketed[b.key].length > 0).map(b => ({ ...b, items: bucketed[b.key] }))
+                    : taskBucket === 'reminded'
+                      ? [{ key: 'reminded', label: 'Reminders', icon: '⏰', hint: 'Someone is waiting on these', items: remindedTasks }]
+                      : TASK_BUCKETS.filter(b => b.key === taskBucket).map(b => ({ ...b, items: bucketed[b.key] }));
+                  const nothing = sections.every(sec => sec.items.length === 0) && staleTasks.length === 0;
+
                   return (
                     <>
-                      {freshTasks.length === 0 && staleTasks.length === 0 ? (
+                      {nothing ? (
                         <div className="empty-state">
                           <div className="empty-state-icon">🎉</div>
-                          <p className="empty-state-title">You're all caught up!</p>
+                          <p className="empty-state-title">{taskBucket === 'all' ? "You're all caught up!" : 'Nothing here'}</p>
                           <p className="empty-state-sub">No tasks to show here right now.</p>
                         </div>
                       ) : (
                         <>
-                          {freshTasks.length > 0 && (
-                            <div className={`tasks-grid ${freshTasks.length > 12 ? 'compact-cards' : ''}`}>
-                              {freshTasks.map(renderTaskCard)}
-                            </div>
-                          )}
-                          {staleTasks.length > 0 && (
+                          {sections.filter(sec => sec.items.length > 0).map(sec => (
+                            <section key={sec.key} className={`task-section task-section-${sec.key}`}>
+                              <div className="task-section-head">
+                                <h3>{sec.icon} {sec.label}</h3>
+                                <span className="task-section-count">{sec.items.length}</span>
+                                <span className="task-section-hint">{sec.hint}</span>
+                              </div>
+                              <div className={`tasks-grid ${sec.items.length > 12 ? 'compact-cards' : ''}`}>
+                                {sec.items.map(renderTaskCard)}
+                              </div>
+                            </section>
+                          ))}
+                          {staleTasks.length > 0 && (taskBucket === 'all' || taskBucket === 'delayed') && (
                             <div className="stale-routine-section">
                               <button className="stale-routine-toggle" onClick={() => setShowOlderRoutine(!showOlderRoutine)}>
                                 📦 Older Routine Tasks ({staleTasks.length}) — 14+ days unfinished {showOlderRoutine ? '▼' : '▶'}

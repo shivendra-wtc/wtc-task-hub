@@ -49,9 +49,11 @@ export default async function handler(req, res) {
 
     // Calls go out with HIGH urgency (otherwise Android battery-saver can delay them for
     // minutes) and expire after 60s; everything else is normal urgency, kept for a day.
-    const isCall = payload && payload.tag === 'wtc-call';
+    const kind = payload && payload.data ? payload.data.kind : '';
+    const isCall = kind === 'call' || (payload && String(payload.tag || '').indexOf('wtc-call') === 0);
+    const isUrgent = isCall || (payload && payload.data && (payload.data.type === 'task_reminder' || kind === 'attendance'));
     await webpush.sendNotification(subscription, JSON.stringify(payload || {}), {
-      urgency: isCall ? 'high' : 'normal',
+      urgency: isUrgent ? 'high' : 'normal',
       TTL: isCall ? 60 : 86400
     });
     return res.status(200).json({ ok: true });

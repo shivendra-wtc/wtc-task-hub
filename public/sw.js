@@ -6,6 +6,9 @@
 //   2. Hand the push straight to any OPEN copy of the app (postMessage), so an open app
 //      reacts instantly — e.g. starts ringing for a call — with no server round-trip.
 
+// Same backend URL as the app (used to answer a call straight from the notification).
+const API_URL = 'https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec';
+
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
@@ -23,24 +26,24 @@ self.addEventListener('push', (event) => {
     data = { title: 'WTC Hub', body: event.data ? event.data.text() : '' };
   }
 
-  const isCall = data.tag === 'wtc-call';
-  const title = data.title || 'WTC Management Hub';
   const extra = data.data || {};
+  const isCall = extra.kind === 'call';
+  const isReminder = extra.type === 'task_reminder';
+  const title = data.title || 'WTC Management Hub';
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    // Distinct vibration for calls vs everything else, so a call feels different in
-    // your pocket even with the screen off.
-    vibrate: isCall ? [400, 150, 400, 150, 400, 150, 400, 150, 400] : [200, 100, 200],
-    // Each call gets its own tag so two calls never silently replace each other;
-    // renotify makes the phone buzz/sound again even if a similar alert is showing.
+    // Distinct vibration per kind, so a call / a reminder feel different in your pocket.
+    vibrate: isCall ? [400, 150, 400, 150, 400, 150, 400, 150, 400]
+      : isReminder ? [90, 60, 90, 300, 90, 60, 90] : [200, 100, 200],
     tag: isCall && extra.callId ? 'wtc-call-' + extra.callId : (data.tag || 'wtc-notify'),
     renotify: true,
-    requireInteraction: isCall,
+    requireInteraction: isCall || isReminder,
     silent: false,
     data: { url: data.url || '/', push: data }
   };
+  if (isCall) options.actions = [{ action: 'accept', title: '✓ Coming' }, { action: 'decline', title: '✕ Busy' }];
 
   event.waitUntil((async () => {
     // Tell every open copy of the app right away (this is what makes an open app ring
@@ -60,6 +63,26 @@ self.addEventListener('notificationclick', (event) => {
   const info = event.notification.data || {};
   const targetUrl = info.url || '/';
   const push = info.push || {};
+  const extra = push.data || {};
+
+  // "✓ Coming" / "✕ Busy" pressed right on the call notification — answer without
+  // opening the app, and tell any open copy of the app to stop ringing.
+  if ((event.action === 'accept' || event.action === 'decline') && extra.kind === 'call' && extra.callId && extra.to) {
+    const response = event.action === 'accept' ? 'Accepted' : 'Declined';
+    event.waitUntil((async () => {
+      try {
+        await fetch(API_URL, {
+          method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'respondToCall', callId: extra.callId, userName: extra.to, response })
+        });
+      } catch (e) {}
+      const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      clientList.forEach((client) => {
+        try { client.postMessage({ type: 'wtc-call-answered', callId: extra.callId, response }); } catch (e) {}
+      });
+    })());
+    return;
+  }
 
   event.waitUntil((async () => {
     const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

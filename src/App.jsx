@@ -419,6 +419,10 @@ function TimePicker12({ value, onChange, minuteStep = 5 }) {
   );
 }
 
+// Long-form (horizontal) vs short-form (vertical) — shown as a filled vs light block.
+function isLongForm(contentType) { return contentType === 'Long Format Video' || contentType === 'Live Stream' || contentType === 'Podcast Episode'; }
+function isVertical(contentType) { return contentType === 'Short (Vertical)' || contentType === 'Story'; }
+
 function blockColor(contentType, channel) {
   const set = BLOCK_COLORS[platformOf(channel)] || BLOCK_COLORS.other;
   return set[contentType] || set.default;
@@ -4615,10 +4619,12 @@ function App() {
                         });
                         return Array.from(seen.entries()).map(([k, it]) => <span key={k} className="cc-legend-item"><span className="cc-swatch" style={{ background: it.color }}></span>{it.label}</span>);
                       })()}
+                      <span className="cc-legend-item"><span className="cc-legend-block long">Long</span>Filled block = long-form video</span>
+                      <span className="cc-legend-item"><span className="cc-legend-block short">Short</span>Light block = Reel / Short</span>
                       <span className="cc-legend-item"><span className="cc-done-mini">✓</span>Published</span>
                       <span className="cc-legend-item"><span className="cc-status-dot st-edit"></span>Editing</span>
                       <span className="cc-legend-item"><span className="cc-status-dot st-sched"></span>Scheduled</span>
-                      <span className="cc-legend-item">🔗 green = final/live link added</span>
+                      <span className="cc-legend-item">🔗 = a link is added (green: final/live)</span>
                     </span>
                   </span>
                 </div>
@@ -4674,19 +4680,20 @@ function App() {
                               return (
                                 <div
                                   key={entry.id}
-                                  className={`cc-chip cc-evt cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''} ${warn ? 'cc-chip-warn' : ''}`}
+                                  className={`cc-chip cc-evt cc-st-${stage} ${String(entry.id).startsWith('tmp_') ? 'cc-chip-saving' : ''} ${warn ? 'cc-chip-warn' : ''} ${isLongForm(entry.contentType) ? 'cc-long' : 'cc-short'}`}
                                   style={{ '--chip': blockColor(entry.contentType, entry.channels) }}
                                   onClick={(e) => { e.stopPropagation(); openEditContentEntry(entry); }}
                                   title={`${entry.title}\n${entry.channels} · ${fmt.text}${entry.time ? ' · ' + entry.time : ''}\n${entry.videoStatus || 'Not Started'} · ${entry.assignedTo || ''}${warn ? '\n⚠ ' + warn : ''}`}
                                 >
                                   <div className="cc-evt-row">
                                     <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={8} /></span>
+                                    <span className={`cc-shape ${isLongForm(entry.contentType) ? 'wide' : isVertical(entry.contentType) ? 'tall' : 'square'}`} title={fmt.text}></span>
                                     <span className="cc-chip-title">{warn && <span className="cc-warn-dot">⚠</span>}{entry.title}</span>
                                     {entry.time && <span className="cc-chip-time">{fmtClock12(entry.time).replace(':00 ', ' ')}</span>}
                                     {(() => {
                                       const order = ['liveLink', 'finalLink', 'draftLink', 'designLink', 'thumbnailLink', 'rawLink'];
                                       const have = order.filter(k => toOpenableUrl(entry[k]));
-                                      if (!have.length) return <span className="cc-link-ind none" title="No link added yet">🔗</span>;
+                                      if (!have.length) return null;
                                       const label = { liveLink: 'Live post', finalLink: 'Final', draftLink: 'Draft', designLink: 'Design', thumbnailLink: 'Thumbnail', rawLink: 'Raw' };
                                       return (
                                         <a className={`cc-link-ind ${have.includes('finalLink') || have.includes('liveLink') ? 'final' : 'some'}`} href={toOpenableUrl(entry[have[0]])} target="_blank" rel="noopener noreferrer"

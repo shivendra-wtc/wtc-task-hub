@@ -4423,3 +4423,24 @@ input.switch:checked::after { transform: translateX(18px); }
   .cc-sticky .cc-search { flex: 1 1 120px; }
   .cc-v17 .cc-chip-time, .cc-v17 .cc-link-ind { display: none; }
 }
+
+/* =====================  v18 — long-form vs short-form blocks  ===================== */
+/* Long-form: solid block in the platform/format colour, white text. */
+.cc-v17 .cc-evt.cc-long { background: var(--chip) !important; border-color: var(--chip); border-left-color: color-mix(in srgb, var(--chip) 70%, #000); }
+.cc-v17 .cc-evt.cc-long:hover { background: color-mix(in srgb, var(--chip) 88%, #000) !important; }
+.cc-v17 .cc-evt.cc-long .cc-chip-title { color: #fff; }
+.cc-v17 .cc-evt.cc-long .cc-chip-time { color: rgba(255,255,255,0.9); }
+.cc-v17 .cc-evt.cc-long .pf-icon { background: #fff !important; color: var(--chip); }
+.cc-v17 .cc-evt.cc-long.cc-st-pub { background: color-mix(in srgb, var(--chip) 80%, #fff) !important; }
+.cc-v17 .cc-evt.cc-long .cc-link-ind.some, .cc-v17 .cc-evt.cc-long .cc-link-ind.final { background: rgba(255,255,255,0.9); }
+.cc-v17 .cc-evt.cc-long .cc-done { box-shadow: 0 0 0 1.5px #fff; }
+/* Short-form: light block (as before) with a dashed left edge feel. */
+.cc-v17 .cc-evt.cc-short { background: color-mix(in srgb, var(--chip) 10%, #fff) !important; }
+/* Tiny shape: tall = vertical (Reel/Short/Story), wide = long video */
+.cc-shape { flex-shrink: 0; display: inline-block; border: 1.6px solid currentColor; border-radius: 2px; color: color-mix(in srgb, var(--chip) 80%, #000); }
+.cc-shape.tall { width: 6px; height: 10px; }
+.cc-shape.wide { width: 11px; height: 7px; color: #fff; }
+.cc-shape.square { width: 8px; height: 8px; }
+.cc-legend-block { display: inline-block; font-size: 9px; font-weight: 800; border-radius: 4px; padding: 1px 5px; margin-right: 2px; }
+.cc-legend-block.long { background: #E53935; color: #fff; }
+.cc-legend-block.short { background: #fde8d7; color: #c2410c; border-left: 3px solid #F97316; }

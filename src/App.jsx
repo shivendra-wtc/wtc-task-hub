@@ -374,13 +374,51 @@ const BLOCK_COLORS = {
 };
 // The "Live post link" field exists from 22 Nov 2026 — older entries aren't counted as missing it.
 const LIVE_LINK_SINCE = '2026-11-22';
-// "19:30" → "7:30p" — short enough to always fit inside a calendar block.
-function fmtClockShort(hhmm) {
+// "19:30" → "7:30 PM"
+function fmtClock12(hhmm) {
   const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})/);
   if (!m) return hhmm || '';
   const h = Number(m[1]);
-  return `${((h + 11) % 12) + 1}${m[2] === '00' ? '' : ':' + m[2]}${h >= 12 ? 'p' : 'a'}`;
+  return `${((h + 11) % 12) + 1}:${m[2]} ${h >= 12 ? 'PM' : 'AM'}`;
 }
+
+// 12-hour time picker (hour · minute · AM/PM) that stores "HH:mm" (24 h) like before,
+// so nothing saved in the sheet changes format.
+function TimePicker12({ value, onChange, minuteStep = 5 }) {
+  const m = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+  const h24 = m ? Number(m[1]) : null;
+  const min = m ? m[2] : '';
+  const h12 = h24 === null ? '' : String(((h24 + 11) % 12) + 1);
+  const ap = h24 === null ? 'PM' : (h24 >= 12 ? 'PM' : 'AM');
+  const emit = (hh, mm, a) => {
+    if (!hh) { onChange(''); return; }
+    let H = Number(hh) % 12;
+    if (a === 'PM') H += 12;
+    onChange(`${String(H).padStart(2, '0')}:${mm || '00'}`);
+  };
+  const mins = [];
+  for (let i = 0; i < 60; i += minuteStep) mins.push(String(i).padStart(2, '0'));
+  if (min && !mins.includes(min)) mins.push(min);
+  return (
+    <div className="tp12">
+      <select value={h12} onChange={(e) => emit(e.target.value, min, ap)} aria-label="Hour">
+        <option value="">--</option>
+        {[12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(h => <option key={h} value={String(h)}>{h}</option>)}
+      </select>
+      <span>:</span>
+      <select value={min} onChange={(e) => emit(h12 || '12', e.target.value, ap)} aria-label="Minutes">
+        <option value="">--</option>
+        {mins.sort().map(x => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <select value={ap} onChange={(e) => emit(h12 || '12', min, e.target.value)} aria-label="AM or PM">
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+      {value && <button type="button" className="tp12-clear" onClick={() => onChange('')} title="Clear time">✕</button>}
+    </div>
+  );
+}
+
 function blockColor(contentType, channel) {
   const set = BLOCK_COLORS[platformOf(channel)] || BLOCK_COLORS.other;
   return set[contentType] || set.default;
@@ -1285,7 +1323,7 @@ function App() {
           meetingAlarmFiredRef.current.add(fireKey);
           setActiveMeetingAlarm(m);
           startMeetingAlarmSound();
-          fireDesktopNotification('🤝 Meeting starting in 5 minutes', `${m.title} at ${m.meetingTime}`);
+          fireDesktopNotification('🤝 Meeting starting in 5 minutes', `${m.title} at ${fmtClock12(m.meetingTime)}`);
           meetingAlarmTimeoutRef.current = setTimeout(dismissMeetingAlarm, 30000);
         }
       });
@@ -4400,7 +4438,7 @@ function App() {
                                 {m.purpose && <p className="meeting-purpose">{m.purpose}</p>}
                                 <div className="meeting-card-meta">
                                   <span>📅 {isRoutine ? 'From ' : ''}{new Date(m.meetingDate + 'T12:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                                  <span>🕐 {m.meetingTime}</span>
+                                  <span>🕐 {fmtClock12(m.meetingTime)}</span>
                                   <span>👥 {m.assignedTo}</span>
                                 </div>
                                 <p className="meeting-created-by">Scheduled by {m.createdBy}</p>
@@ -4468,7 +4506,7 @@ function App() {
                     </div>
                     <div className="form-group">
                       <label>Time *</label>
-                      <input type="time" value={newMeeting.meetingTime} onChange={(e) => setNewMeeting({ ...newMeeting, meetingTime: e.target.value })} />
+                      <TimePicker12 value={newMeeting.meetingTime} onChange={(v) => setNewMeeting({ ...newMeeting, meetingTime: v })} />
                     </div>
                   </div>
                   {newMeeting.type === 'Routine' && (
@@ -4508,99 +4546,97 @@ function App() {
               <button className="modal-close" onClick={() => { setShowContentCalendar(false); setEditingContentEntry(null); }}>✕</button>
             </div>
             <div className="modal-body compact-body">
-              <div className="cc-group-tabs">
-                {Object.keys(contentChannelGroups).map(group => (
-                  <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => { setContentGroupTab(group); setExpandedContentDay(null); setCcPlatformFilter('all'); }}>{group}</button>
-                ))}
-              </div>
-
-              <div className="month-nav" style={{ marginTop: '14px' }}>
-                <button className="btn-secondary" onClick={() => { changeContentCalMonth(-1); setExpandedContentDay(null); }}>← Prev</button>
-                <strong>{new Date(contentCalYear, contentCalMonth, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</strong>
-                <button className="btn-secondary" onClick={() => { changeContentCalMonth(1); setExpandedContentDay(null); }}>Next →</button>
-              </div>
-
-              {(() => {
-                const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
-                const inMonth = contentCalGridData.entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix);
-                const published = inMonth.filter(e => e.videoStatus === 'Published').length;
-                const scheduled = inMonth.filter(e => e.videoStatus === 'Scheduled in YT Studio').length;
-                const inEdit = inMonth.filter(e => e.videoStatus !== 'Published' && e.videoStatus !== 'Scheduled in YT Studio' && e.editingStatus && e.editingStatus !== 'Not Started').length;
-                const todayKey = new Date().toISOString().slice(0, 10);
-                const overdue = inMonth.filter(e => e.videoStatus !== 'Published' && String(e.date).slice(0, 10) < todayKey).length;
-                const missingLink = inMonth.filter(e => e.videoStatus !== 'Published' && (e.editingStatus === 'Approved') && !toOpenableUrl(e.finalLink)).length;
-                const mismatched = inMonth.filter(e => platformMismatch(e)).length;
-                const noLive = inMonth.filter(e => e.videoStatus === 'Published' && String(e.date).slice(0, 10) >= LIVE_LINK_SINCE && !toOpenableUrl(e.liveLink)).length;
-                const noTime = inMonth.filter(e => e.videoStatus !== 'Published' && !e.time).length;
-                return (
-                  <div className="cc-stats">
-                    <div className="cc-stat"><strong>{inMonth.length}</strong><span>Planned</span></div>
-                    <div className="cc-stat cc-stat-edit"><strong>{inEdit}</strong><span>In editing</span></div>
-                    <div className="cc-stat cc-stat-sched"><strong>{scheduled}</strong><span>Scheduled</span></div>
-                    <div className="cc-stat cc-stat-pub"><strong>{published}</strong><span>Published</span></div>
-                    <div className={`cc-stat cc-stat-late ${overdue ? 'has' : ''}`}><strong>{overdue}</strong><span>Past date, not live</span></div>
-                    {missingLink > 0 && <div className="cc-stat cc-stat-late has"><strong>{missingLink}</strong><span>Approved, no final link</span></div>}
-                    {mismatched > 0 && <div className="cc-stat cc-stat-late has" title="The title names a different platform than the channel it is booked on"><strong>{mismatched}</strong><span>⚠ Wrong platform?</span></div>}
-                    {noTime > 0 && <div className="cc-stat"><strong>{noTime}</strong><span>No posting time</span></div>}
-                    {noLive > 0 && <div className="cc-stat"><strong>{noLive}</strong><span>Live, no post link</span></div>}
+              {/* v17 — compact top bar, frozen while the calendar scrolls (down to the day names). */}
+              <div className="cc-sticky">
+                <div className="cc-bar1">
+                  <div className="cc-group-tabs cc-tabs-compact">
+                    {Object.keys(contentChannelGroups).map(group => (
+                      <button key={group} className={contentGroupTab === group ? 'active' : ''} onClick={() => { setContentGroupTab(group); setExpandedContentDay(null); setCcPlatformFilter('all'); }}>{group}</button>
+                    ))}
                   </div>
-                );
-              })()}
-
-              <div className="cc-toolbar">
-                <div className="cc-pf-filter">
-                  <button className={ccPlatformFilter === 'all' ? 'active' : ''} onClick={() => setCcPlatformFilter('all')}>All</button>
-                  {contentCalGridData.groupPlatforms.map(pk => (
-                    <button key={pk} className={ccPlatformFilter === pk ? 'active' : ''} onClick={() => setCcPlatformFilter(pk)}>
-                      <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}>{PLATFORMS[pk].Icon ? (() => { const I = PLATFORMS[pk].Icon; return <I size={10} />; })() : null}</span>{PLATFORMS[pk].label}
-                    </button>
-                  ))}
+                  <div className="cc-monthnav">
+                    <button onClick={() => { changeContentCalMonth(-1); setExpandedContentDay(null); }} title="Previous month">‹</button>
+                    <strong>{new Date(contentCalYear, contentCalMonth, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</strong>
+                    <button onClick={() => { changeContentCalMonth(1); setExpandedContentDay(null); }} title="Next month">›</button>
+                  </div>
+                  <div className="cc-view-toggle">
+                    <button className={ccView === 'month' ? 'active' : ''} onClick={() => setCcView('month')}>Month</button>
+                    <button className={ccView === 'agenda' ? 'active' : ''} onClick={() => setCcView('agenda')}>List</button>
+                  </div>
                 </div>
-                <input className="cc-search" type="search" placeholder="Search title, person, notes…" value={ccSearch} onChange={(e) => setCcSearch(e.target.value)} />
-              </div>
 
-              <div className="cc-legend">
-                {(() => {
-                  const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
-                  const seen = new Map();
-                  contentCalGridData.entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix).forEach(e => {
-                    const pk = platformOf(e.channels);
-                    const color = blockColor(e.contentType, e.channels);
-                    const key = pk + '|' + color;
-                    if (!seen.has(key)) seen.set(key, { color, label: `${PLATFORMS[pk].label} ${pk === 'other' ? '' : formatInfo(e.contentType, e.channels).text}`.trim() });
-                  });
-                  return Array.from(seen.entries()).map(([k, it]) => <span key={k} className="cc-legend-item"><span className="cc-swatch" style={{ background: it.color }}></span>{it.label}</span>);
-                })()}
-                <span className="cc-legend-sep"></span>
-                <span className="cc-legend-item"><span className="cc-status-dot st-edit"></span>Editing</span>
-                <span className="cc-legend-item"><span className="cc-status-dot st-sched"></span>Scheduled</span>
-                <span className="cc-legend-item">✓ Published</span>
-                <span className="cc-legend-item"><span className="cc-holiday-dot"></span>Holiday</span>
-              </div>
-
-              {/* FIX — speed complaint: this grid used to be rebuilt from scratch, inline,
-                  on every single render (every 1-second clock tick anywhere in the app).
-                  contentCalGridData (useMemo'd in the component body, see above) means it
-                  only recomputes when the entries, tab, month, year, or holidays actually
-                  change — which is the real reason it now feels fast. */}
-              <div className="cc-viewbar">
-                <div className="cc-view-toggle">
-                  <button className={ccView === 'month' ? 'active' : ''} onClick={() => setCcView('month')}>Month</button>
-                  <button className={ccView === 'agenda' ? 'active' : ''} onClick={() => setCcView('agenda')}>List</button>
+                <div className="cc-bar2">
+                  {(() => {
+                    const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
+                    const inMonth = contentCalGridData.entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix);
+                    const published = inMonth.filter(e => e.videoStatus === 'Published').length;
+                    const scheduled = inMonth.filter(e => e.videoStatus === 'Scheduled in YT Studio').length;
+                    const inEdit = inMonth.filter(e => e.videoStatus !== 'Published' && e.videoStatus !== 'Scheduled in YT Studio' && e.editingStatus && e.editingStatus !== 'Not Started').length;
+                    const n = new Date();
+                    const todayKey = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+                    const overdue = inMonth.filter(e => e.videoStatus !== 'Published' && String(e.date).slice(0, 10) < todayKey).length;
+                    const missingLink = inMonth.filter(e => e.videoStatus !== 'Published' && (e.editingStatus === 'Approved') && !toOpenableUrl(e.finalLink)).length;
+                    const mismatched = inMonth.filter(e => platformMismatch(e)).length;
+                    const noLive = inMonth.filter(e => e.videoStatus === 'Published' && String(e.date).slice(0, 10) >= LIVE_LINK_SINCE && !toOpenableUrl(e.liveLink)).length;
+                    const noTime = inMonth.filter(e => e.videoStatus !== 'Published' && !e.time).length;
+                    return (
+                      <div className="cc-pills">
+                        <span className="cc-pill"><b>{inMonth.length}</b> planned</span>
+                        <span className="cc-pill pub"><b>{published}</b> published</span>
+                        {inEdit > 0 && <span className="cc-pill edit"><b>{inEdit}</b> editing</span>}
+                        {scheduled > 0 && <span className="cc-pill sched"><b>{scheduled}</b> scheduled</span>}
+                        {overdue > 0 && <span className="cc-pill bad"><b>{overdue}</b> past date</span>}
+                        {missingLink > 0 && <span className="cc-pill bad"><b>{missingLink}</b> no final link</span>}
+                        {mismatched > 0 && <span className="cc-pill bad" title="The title names a different platform than the channel it is booked on">⚠ <b>{mismatched}</b> wrong platform</span>}
+                        {noTime > 0 && <span className="cc-pill"><b>{noTime}</b> no time</span>}
+                        {noLive > 0 && <span className="cc-pill"><b>{noLive}</b> no post link</span>}
+                      </div>
+                    );
+                  })()}
+                  <div className="cc-pf-filter cc-pf-compact">
+                    <button className={ccPlatformFilter === 'all' ? 'active' : ''} onClick={() => setCcPlatformFilter('all')}>All</button>
+                    {contentCalGridData.groupPlatforms.map(pk => (
+                      <button key={pk} className={ccPlatformFilter === pk ? 'active' : ''} onClick={() => setCcPlatformFilter(pk)} title={PLATFORMS[pk].label}>
+                        <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}>{PLATFORMS[pk].Icon ? (() => { const I = PLATFORMS[pk].Icon; return <I size={10} />; })() : null}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <input className="cc-search" type="search" placeholder="Search…" value={ccSearch} onChange={(e) => setCcSearch(e.target.value)} />
+                  <span className="cc-legend-btn" tabIndex={0}>Colours ⓘ
+                    <span className="cc-legend-pop">
+                      {(() => {
+                        const monthPrefix = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}`;
+                        const seen = new Map();
+                        contentCalGridData.entriesThisGroup.filter(e => String(e.date).slice(0, 7) === monthPrefix).forEach(e => {
+                          const pk = platformOf(e.channels);
+                          const color = blockColor(e.contentType, e.channels);
+                          const key = pk + '|' + color;
+                          if (!seen.has(key)) seen.set(key, { color, label: `${PLATFORMS[pk].label} ${pk === 'other' ? '' : formatInfo(e.contentType, e.channels).text}`.trim() });
+                        });
+                        return Array.from(seen.entries()).map(([k, it]) => <span key={k} className="cc-legend-item"><span className="cc-swatch" style={{ background: it.color }}></span>{it.label}</span>);
+                      })()}
+                      <span className="cc-legend-item"><span className="cc-done-mini">✓</span>Published</span>
+                      <span className="cc-legend-item"><span className="cc-status-dot st-edit"></span>Editing</span>
+                      <span className="cc-legend-item"><span className="cc-status-dot st-sched"></span>Scheduled</span>
+                      <span className="cc-legend-item">🔗 green = final/live link added</span>
+                    </span>
+                  </span>
                 </div>
-                <span className="cc-viewbar-hint">Tap a day to add · tap an entry to open it</span>
+
+                {ccView === 'month' && (
+                  <div className="cc-weekdays">
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className={d === 'Sun' ? 'cc-sun' : ''}>{d}</div>)}
+                  </div>
+                )}
               </div>
 
               {ccView === 'month' && (() => {
                 const { entriesThisGroup, cells, holidaySet } = contentCalGridData;
                 const now = new Date();
                 const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                const MAX_CHIPS = 3;
+                const MAX_CHIPS = 4;
                 return (
-                  <div className="cc-calendar-grid cc-v15">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                      <div key={d} className={`cc-day-header ${d === 'Sun' ? 'cc-sun' : ''}`}>{d}</div>
-                    ))}
+                  <div className="cc-calendar-grid cc-v15 cc-v17">
                     {cells.map((day, idx) => {
                       if (day === null) return <div key={idx} className="cc-day-cell cc-day-empty"></div>;
                       const dateStr = `${contentCalYear}-${String(contentCalMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -4644,9 +4680,9 @@ function App() {
                                   title={`${entry.title}\n${entry.channels} · ${fmt.text}${entry.time ? ' · ' + entry.time : ''}\n${entry.videoStatus || 'Not Started'} · ${entry.assignedTo || ''}${warn ? '\n⚠ ' + warn : ''}`}
                                 >
                                   <div className="cc-evt-row">
-                                    <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={9} /></span>
-                                    <span className="cc-format-tag">{({ 'Long video': 'Long', 'Community post': 'Community', 'Short video': 'Short' })[fmt.text] || fmt.text}</span>
-                                    {entry.time && <span className="cc-chip-time">{fmtClockShort(entry.time)}</span>}
+                                    <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={8} /></span>
+                                    <span className="cc-chip-title">{warn && <span className="cc-warn-dot">⚠</span>}{entry.title}</span>
+                                    {entry.time && <span className="cc-chip-time">{fmtClock12(entry.time).replace(':00 ', ' ')}</span>}
                                     {(() => {
                                       const order = ['liveLink', 'finalLink', 'draftLink', 'designLink', 'thumbnailLink', 'rawLink'];
                                       const have = order.filter(k => toOpenableUrl(entry[k]));
@@ -4654,16 +4690,13 @@ function App() {
                                       const label = { liveLink: 'Live post', finalLink: 'Final', draftLink: 'Draft', designLink: 'Design', thumbnailLink: 'Thumbnail', rawLink: 'Raw' };
                                       return (
                                         <a className={`cc-link-ind ${have.includes('finalLink') || have.includes('liveLink') ? 'final' : 'some'}`} href={toOpenableUrl(entry[have[0]])} target="_blank" rel="noopener noreferrer"
-                                          onClick={(e) => e.stopPropagation()} title={`Links: ${have.map(k => label[k]).join(', ')} — click to open ${label[have[0]]}`}>
-                                          🔗{have.length > 1 ? <sup>{have.length}</sup> : null}
-                                        </a>
+                                          onClick={(e) => e.stopPropagation()} title={`Links: ${have.map(k => label[k]).join(', ')} — click to open ${label[have[0]]}`}>🔗</a>
                                       );
                                     })()}
                                     {isPublished ? <span className="cc-done" title="Published">✓</span>
                                       : stage === 'sched' ? <span className="cc-stage-dot st-sched" title="Scheduled"></span>
                                       : stage === 'edit' ? <span className="cc-stage-dot st-edit" title={entry.editingStatus}></span> : null}
                                   </div>
-                                  <div className="cc-chip-title">{warn && <span className="cc-warn-dot">⚠ </span>}{entry.title}</div>
                                 </div>
                               );
                             })}
@@ -4706,7 +4739,7 @@ function App() {
                             const warn = platformMismatch(entry);
                             return (
                               <div key={entry.id} className={`cc-ag-item cc-st-${stage}`} style={{ '--chip': blockColor(entry.contentType, entry.channels) }} onClick={() => openEditContentEntry(entry)}>
-                                <span className="cc-ag-time">{entry.time ? fmtClockShort(entry.time) : '—'}</span>
+                                <span className="cc-ag-time">{entry.time ? fmtClock12(entry.time) : '—'}</span>
                                 <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={10} /></span>
                                 <div className="cc-ag-main">
                                   <div className="cc-ag-title">{warn && <span className="cc-warn-dot" title={warn}>⚠ </span>}{entry.title}</div>
@@ -4755,7 +4788,7 @@ function App() {
                         >
                           <div className="cc-entry-title">
                             {isPublished && <span className="cc-tick">✓</span>}
-                            {entry.time && <strong>{entry.time} — </strong>}{entry.title}
+                            {entry.time && <strong>{fmtClock12(entry.time)} — </strong>}{entry.title}
                           </div>
                           {platformMismatch(entry) && <div className="cc-form-warn">⚠ {platformMismatch(entry)}</div>}
                           <div className="cc-entry-badges">
@@ -4922,7 +4955,7 @@ function App() {
                     </div>
                     <div className="form-group">
                       <label>Time</label>
-                      <input type="time" value={contentForm.time} onChange={(e) => setContentForm({ ...contentForm, time: e.target.value })} />
+                      <TimePicker12 value={contentForm.time} onChange={(v) => setContentForm({ ...contentForm, time: v })} />
                     </div>
                     <div className="form-group">
                       <label>Priority</label>
@@ -5319,7 +5352,7 @@ function App() {
                                 <div className="flag-form">
                                   <textarea rows="2" placeholder="Reason (e.g. client call ran late, forgot to tap sign-out…)" value={correctionDraft.note} onChange={(e) => setCorrectionDraft({ ...correctionDraft, note: e.target.value })} />
                                   {f.type === 'MISSED_SIGNOUT' && (
-                                    <label className="flag-time">Actual leaving time <input type="time" value={correctionDraft.correctedTime} onChange={(e) => setCorrectionDraft({ ...correctionDraft, correctedTime: e.target.value })} /></label>
+                                    <label className="flag-time">Actual leaving time <TimePicker12 value={correctionDraft.correctedTime} onChange={(v) => setCorrectionDraft({ ...correctionDraft, correctedTime: v })} /></label>
                                   )}
                                   <div className="flag-form-actions">
                                     <button className="btn-secondary" onClick={() => setCorrectionDraft(null)}>Cancel</button>
@@ -5741,7 +5774,7 @@ function App() {
             <h2>Meeting starting in 5 minutes!</h2>
             <p className="incoming-call-type">{activeMeetingAlarm.title}</p>
             {activeMeetingAlarm.purpose && <p className="meeting-alarm-purpose">{activeMeetingAlarm.purpose}</p>}
-            <p className="meeting-alarm-meta">🕐 {activeMeetingAlarm.meetingTime} · 👥 {activeMeetingAlarm.assignedTo}</p>
+            <p className="meeting-alarm-meta">🕐 {fmtClock12(activeMeetingAlarm.meetingTime)} · 👥 {activeMeetingAlarm.assignedTo}</p>
             <div className="incoming-call-actions">
               <button className="btn-accept-call" onClick={dismissMeetingAlarm}>✓ Got it</button>
             </div>

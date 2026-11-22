@@ -4319,3 +4319,37 @@ input.switch:checked::after { transform: translateX(18px); }
 .cc-v15 .cc-format-tag { flex-shrink: 0; overflow: visible; }
 .cc-v15 .cc-chip-time { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: clip; }
 .cc-v15 .cc-day-entries { padding-top: 4px; }
+
+/* =====================  v16  ===================== */
+/* Calendar uses more of the screen; bigger, easier blocks */
+.modal-content.xl { max-width: min(1680px, 97vw) !important; width: 97vw; }
+.cc-v15 .cc-day-cell { min-height: 150px; padding: 9px; }
+.cc-v15 .cc-chip-title { font-size: 12.5px; }
+.cc-v15 .cc-evt { padding: 6px 8px; }
+.cc-v15 .cc-chip-time { font-size: 10.5px; }
+.cc-link-ind { margin-left: auto; font-size: 11px; line-height: 1; text-decoration: none; flex-shrink: 0; border-radius: 5px; padding: 2px 3px; display: inline-flex; align-items: flex-start; }
+.cc-link-ind.none { filter: grayscale(1); opacity: 0.35; }
+.cc-link-ind.some { background: #fef3c7; }
+.cc-link-ind.final { background: #dcfce7; box-shadow: inset 0 0 0 1px #86efac; }
+.cc-link-ind:hover { transform: scale(1.12); }
+.cc-link-ind sup { font-size: 8px; font-weight: 800; color: #15803d; margin-left: 1px; }
+.cc-v15 .cc-evt .cc-done { right: -6px; }
+.cc-v15 .cc-stage-dot { margin-left: 3px; }
+
+/* Attendance — flexible shift */
+.att-outtime { background: #eef4ff !important; border: 1px solid #c7d7fb; }
+.att-outtime strong { color: #1d4ed8 !important; }
+.att-outtime em { display: block; font-style: normal; font-size: 11px; font-weight: 700; color: #3b5bdb; }
+.att-outtime.done { background: #e7f6ee !important; border-color: #a7e3c0; }
+.att-outtime.done strong, .att-outtime.done em { color: #0f9d58 !important; }
+.att-cut { font-size: 11px; color: var(--bad); font-weight: 800; }
+.warn-chip.ok { text-decoration: none; }
+.rv-SO { background: #e0f2fe; color: #0369a1; }
+.rv-X { background: #dcfce7; color: #15803d; }
+.rv-PRE { background: transparent; color: #cbd5e1; }
+.rv-good { color: #15803d; font-weight: 800; }
+.sat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+.sat-day { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; background: #fff; }
+.sat-day.mine { border-color: #86efac; background: #f0fdf4; }
+.sat-day.used { opacity: 0.55; }
+.sat-note { font-size: 12px; color: var(--ink-3); }

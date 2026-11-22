@@ -82,6 +82,8 @@ function doGetRouter_(e) {
   if (action === "getDiscipline") return getDiscipline(e.parameter.userId, e.parameter.year, e.parameter.month, e.parameter.scope);
   if (action === "getSettings") return getSettings();
   if (action === "getTargets") return getTargets(e.parameter.userId);
+  if (action === "getMyLeaves") return getMyLeaves(e.parameter.userId);
+  if (action === "markLeaveSync") { try { const d = JSON.parse(e.parameter.data || "{}"); return markLeave(d.userIds, d.fromDate, d.toDate, d.leaveType, d.note, d.markerId, d.markerName); } catch (err) { return jsonResponse({status: "error", message: String(err)}); } }
   if (action === "getAttendanceReport") return getAttendanceReport(e.parameter.viewerId, e.parameter.year, e.parameter.month);
   if (action === "updateAttendanceSync") return updateAttendance(e.parameter.userId, e.parameter.userName, e.parameter.status);
   return jsonResponse({status: "ok", message: "WTC API v13 running"});
@@ -771,7 +773,7 @@ function getAttendance() {
   const today = getIndiaDate();
   const recent = readRecentAttendance_(sheet, 1500);
   const byUser = eventsByUserForDate_(recent.values, today);
-  const attendance = Object.keys(byUser).map(uid => {
+  const attendance = Object.keys(byUser).filter(uid => NO_ATTENDANCE_IDS_.indexOf(uid) === -1).map(uid => {
     const info = byUser[uid];
     const last = info.events[info.events.length - 1];
     return {
@@ -2366,13 +2368,18 @@ const APP_ADMIN_IDS_ = ["pcwtc45", "shivendrawtc77"];
 const WORK_STATUSES_ = ["Working", "Meeting"];
 const FLAG_LABELS_ = {
   LATE: "Late sign-in", LONG_LUNCH: "Lunch over 30 min", LUNCH_NOT_MARKED: "Lunch not marked",
-  MISSED_SIGNOUT: "Forgot to sign out", SHORT_HOURS: "Short working hours"
+  MISSED_SIGNOUT: "Forgot to sign out", SHORT_HOURS: "Short working hours",
+  LATE_QUARTER: "Late — ¼ day cut", LATE_HALF: "Very late — ½ day cut", EARLY_SIGNOUT: "Left before sign-out time"
 };
+// These are a direct cut from the day (not strikes).
+const FLAG_DAY_CUT_ = { LATE_QUARTER: 0.25, LATE_HALF: 0.5 };
 const FLAG_HEADERS_ = ["ID", "Date", "User ID", "Name", "Type", "Detail", "Minutes", "Status",
   "Created", "Request Note", "Corrected Time", "Resolved By", "Resolved At"];
 
 function attendanceRules_() {
   return {
+    flexible: true, flexStart: "09:00", flexLastFull: "10:14", quarterUntil: "11:00", reportStart: REPORT_START_,
+    noAttendance: NO_ATTENDANCE_IDS_,
     lunchStart: "13:00", lunchEnd: "14:00", lunchMinutes: LUNCH_ALLOWED_MIN_, lunchTolerance: LUNCH_TOLERANCE_MIN_,
     lateGrace: LATE_GRACE_MIN_, minWorkHours: MIN_WORK_HOURS_, strikesPerHalfDay: STRIKES_PER_HALF_DAY_
   };
@@ -2567,7 +2574,7 @@ function attendanceWatchdog() {
     const attSheet = getAttendanceSheet_();
     const recent = readRecentAttendance_(attSheet, 2500).values;
     const shifts = getShiftMap_();
-    const team = (allTeam_()).filter(m => m.active !== false && !m.isAdmin);
+    const team = attendanceTeam_();
     const flagSheet = getFlagsSheet_();
     const existing = readFlags_();
     const ctx = { flagKeys: {}, newFlags: [], newAttRows: [], pushes: [], nextFlagId: 1 };
@@ -2578,12 +2585,12 @@ function attendanceWatchdog() {
     const active = (d) => !startDate || d >= startDate;
     // Close YESTERDAY if it never got closed (e.g. the late-night run did not happen).
     if (props.getProperty("att_closed_" + yesterday) !== "1") {
-      if (isWorkingDay_(yesterday) && active(yesterday)) processDay_(ctx, yesterday, eventsByUserForDate_(recent, yesterday), team, shifts, true, 24 * 60);
+      if (active(yesterday)) processDay_(ctx, yesterday, eventsByUserForDate_(recent, yesterday), team, shifts, true, 24 * 60, !isWorkingDay_(yesterday));
       props.setProperty("att_closed_" + yesterday, "1");
     }
-    if (isWorkingDay_(today) && active(today)) {
+    if (active(today)) {
       const closing = nowMin >= 23 * 60 + 30;
-      processDay_(ctx, today, eventsByUserForDate_(recent, today), team, shifts, closing, nowMin);
+      processDay_(ctx, today, eventsByUserForDate_(recent, today), team, shifts, closing, nowMin, !isWorkingDay_(today));
       if (closing) props.setProperty("att_closed_" + today, "1");
     }
 
@@ -2611,32 +2618,75 @@ function remindOnce_(ctx, kind, dateKey, member, title, body) {
 
 // isFinal = the day is over (close open days, judge hours). nowMin = "how far" into the
 // day we are allowed to judge (24*60 for a finished day).
-function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
+// ============================================================
+// v16 — FLEXIBLE SHIFT (same for everyone)
+//   Sign in any time 9:00–10:14 AM. Your sign-out time = 9 h 15 min slot rule:
+//     before 9:00 → 6:00 PM · 9:00–9:14 → 6:15 · 9:15–9:29 → 6:30 · 9:30–9:44 → 6:45
+//     9:45–9:59 → 7:00 · 10:00–10:14 → 7:15 PM
+//   10:15–11:00 AM → ¼ day is cut, sign-out 7:15 PM
+//   after 11:00 AM → ½ day is cut, sign-out 7:15 PM
+//   Lunch 1–2 PM, 30 min. Leaving before your sign-out time = early sign-out (strike).
+//   Sunday = week off; signing in on a Sunday/holiday counts as an EXTRA working day.
+//   One "Saturday Off" per person per month.
+// ============================================================
+const FLEX_LAST_FULL_MIN_ = 10 * 60 + 14;   // 10:14 AM
+const FLEX_QUARTER_UNTIL_MIN_ = 11 * 60;    // up to 11:00 AM → ¼ day
+const NO_ATTENDANCE_IDS_ = ["jagdish"];       // on the team for tasks, not tracked for attendance
+const REPORT_START_ = "2026-11-23";            // attendance/salary counting starts fresh from here
+
+function requiredSignOutMin_(inMin) {
+  if (inMin < 9 * 60) return 18 * 60;
+  if (inMin <= FLEX_LAST_FULL_MIN_) return 18 * 60 + 15 + Math.floor((inMin - 9 * 60) / 15) * 15;
+  return 19 * 60 + 15;
+}
+function lateCutFor_(inMin) {
+  if (inMin <= FLEX_LAST_FULL_MIN_) return 0;
+  if (inMin <= FLEX_QUARTER_UNTIL_MIN_) return 0.25;
+  return 0.5;
+}
+function attendanceTeam_() {
+  return allTeam_().filter(m => m.active !== false && !m.isAdmin && NO_ATTENDANCE_IDS_.indexOf(String(m.id)) === -1);
+}
+
+function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin, offDay) {
   const live = !isFinal || dateKey === getIndiaDate();
   if (!ctx.leaves) { try { ctx.leaves = leaveMap_(); } catch (e) { ctx.leaves = {}; } }
   team.forEach(member => {
-    const leaveType = ctx.leaves[dateKey + "|" + member.id] || "";
-    if (leaveType && leaveType !== "Work From Home" && leaveType !== "Half Day") return; // on leave — no flags, no reminders
-    const halfDay = leaveType === "Half Day";
-    const shift = shifts[member.id] || { start: "10:00", end: "19:00" };
-    const startMin = hhmmToMin_(shift.start), endMin = hhmmToMin_(shift.end);
     const info = byUser[member.id];
     const events = info ? info.events.slice() : [];
 
-    if (events.length === 0) {
-      if (live && !isFinal && !halfDay && nowMin >= startMin + 20 && nowMin < endMin) {
-        remindOnce_(ctx, "signin", dateKey, member, "🕘 You haven't signed in", "Your shift started at " + shift.start + ". Open WTC Hub and tap Sign In.");
+    // Sunday / holiday: nothing is expected. If someone worked (extra day) and forgot to
+    // sign out, just close the day — no flag.
+    if (offDay) {
+      if (isFinal && events.length && events[events.length - 1].status !== "Signed Out") {
+        const last = events[events.length - 1];
+        const closeAt = new Date(Math.max(last.time.getTime() + 60000, istAt_(dateKey, "19:15").getTime()));
+        ctx.newAttRows.push([dateKey, member.id, member.name, "Signed Out", closeAt.toISOString(), "AUTO: extra day — closed at " + fmt12_(closeAt)]);
       }
       return;
     }
 
-    // LATE
-    const firstWork = events.find(e => e.status === "Working" || e.status === "Meeting");
-    if (firstWork) {
-      const late = istMinutes_(firstWork.time) - startMin;
-      if (late > LATE_GRACE_MIN_ && !halfDay) {
-        addFlag_(ctx, dateKey, member.id, member.name, "LATE", "Signed in at " + fmt12_(firstWork.time) + " (shift starts " + shift.start + ")", late);
+    const leaveType = ctx.leaves[dateKey + "|" + member.id] || "";
+    if (leaveType && leaveType !== "Work From Home" && leaveType !== "Half Day") return; // on leave — no flags, no reminders
+    const halfDay = leaveType === "Half Day";
+
+    if (events.length === 0) {
+      if (live && !isFinal && !halfDay && nowMin >= 9 * 60 + 50 && nowMin <= FLEX_LAST_FULL_MIN_) {
+        remindOnce_(ctx, "signin", dateKey, member, "🕘 Sign in by 10:14 AM", "Sign in before 10:15 AM for a full day. After that ¼ day is cut (after 11 AM, ½ day).");
       }
+      return;
+    }
+
+    const firstWork = events.find(e => e.status === "Working" || e.status === "Meeting");
+    const inMin = firstWork ? istMinutes_(firstWork.time) : null;
+    const outMin = inMin !== null ? requiredSignOutMin_(inMin) : 19 * 60 + 15;
+    const outHhmm = minToHhmm_(outMin);
+
+    // LATE (¼ / ½ day cut)
+    if (firstWork && !halfDay) {
+      const cut = lateCutFor_(inMin);
+      if (cut === 0.25) addFlag_(ctx, dateKey, member.id, member.name, "LATE_QUARTER", "Signed in at " + fmt12_(firstWork.time) + " (after 10:14 AM) — ¼ day cut", inMin - FLEX_LAST_FULL_MIN_);
+      if (cut === 0.5) addFlag_(ctx, dateKey, member.id, member.name, "LATE_HALF", "Signed in at " + fmt12_(firstWork.time) + " (after 11:00 AM) — ½ day cut", inMin - FLEX_LAST_FULL_MIN_);
     }
 
     // LUNCH
@@ -2676,12 +2726,12 @@ function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
     // SIGN-OUT
     let last = events[events.length - 1];
     if (last.status !== "Signed Out") {
-      if (live && !isFinal && nowMin >= endMin + 30) {
-        remindOnce_(ctx, "signout", dateKey, member, "🚪 Don't forget to sign out", "Your shift ended at " + shift.end + ". Tap Sign Out when you leave.");
+      if (live && !isFinal && nowMin >= outMin + 20) {
+        remindOnce_(ctx, "signout", dateKey, member, "🚪 Don't forget to sign out", "Your sign-out time was " + fmt12_(istAt_(dateKey, outHhmm)) + ". Tap Sign Out when you leave.");
       }
       if (isFinal) {
-        const shiftEndTime = istAt_(dateKey, minToHhmm_(Math.min(endMin, 23 * 60 + 59)));
-        const closeAt = last.time > shiftEndTime ? new Date(last.time.getTime() + 60000) : shiftEndTime;
+        const outTime = istAt_(dateKey, outHhmm);
+        const closeAt = last.time > outTime ? new Date(last.time.getTime() + 60000) : outTime;
         const note = "AUTO: missed sign-out — day closed at " + fmt12_(closeAt);
         ctx.newAttRows.push([dateKey, member.id, member.name, "Signed Out", closeAt.toISOString(), note]);
         events.push({ status: "Signed Out", time: closeAt, note: note });
@@ -2690,11 +2740,11 @@ function processDay_(ctx, dateKey, byUser, team, shifts, isFinal, nowMin) {
       }
     }
 
-    // HOURS (judged once the day is over)
-    if (isFinal && firstWork && !halfDay) {
-      const hours = workingMsOf_(events, null) / 3600000;
-      if (hours < MIN_WORK_HOURS_) {
-        addFlag_(ctx, dateKey, member.id, member.name, "SHORT_HOURS", "Worked " + Math.floor(hours) + "h " + Math.round((hours % 1) * 60) + "m (minimum " + MIN_WORK_HOURS_ + "h)", Math.round((MIN_WORK_HOURS_ - hours) * 60));
+    // EARLY SIGN-OUT (the final sign-out of the day, made by the person, before their time)
+    if (isFinal && firstWork && !halfDay && last.status === "Signed Out" && !last.note) {
+      const early = outMin - istMinutes_(last.time);
+      if (early > 2) {
+        addFlag_(ctx, dateKey, member.id, member.name, "EARLY_SIGNOUT", "Signed out at " + fmt12_(last.time) + " — sign-out time was " + fmt12_(istAt_(dateKey, outHhmm)), early);
       }
     }
   });
@@ -2730,15 +2780,16 @@ function getDiscipline(userId, year, month, scope) {
   const flags = (scope === "all" && canAll) ? all : all.filter(f => f.userId === userId);
   const summary = {};
   flags.forEach(f => {
-    if (!summary[f.userId]) summary[f.userId] = { userId: f.userId, name: f.name, strikes: 0, pending: 0, excused: 0, byType: {} };
+    if (!summary[f.userId]) summary[f.userId] = { userId: f.userId, name: f.name, strikes: 0, pending: 0, excused: 0, dayCut: 0, byType: {} };
     const s = summary[f.userId];
     if (f.status === "Excused") { s.excused++; return; }
     if (f.status === "Requested") s.pending++;
-    s.strikes++;
     s.byType[f.type] = (s.byType[f.type] || 0) + 1;
+    if (FLAG_DAY_CUT_[f.type]) { s.dayCut += FLAG_DAY_CUT_[f.type]; return; }
+    s.strikes++;
   });
   Object.keys(summary).forEach(k => {
-    summary[k].halfDays = Math.floor(summary[k].strikes / STRIKES_PER_HALF_DAY_) * 0.5;
+    summary[k].halfDays = Math.floor(summary[k].strikes / STRIKES_PER_HALF_DAY_) * 0.5 + summary[k].dayCut;
   });
   // pending correction requests from ANY month, so HR never misses one
   const requests = canAll && scope === "all" ? readFlags_().filter(f => f.status === "Requested") : [];
@@ -3024,7 +3075,7 @@ function deleteTarget(id, userId) {
 // The review report shows every person, every day of a month, with totals that help at
 // salary time. Nothing is ever deleted — a leave is "Cancelled", not removed.
 // ============================================================
-const LEAVE_TYPES_ = ["Casual Leave", "Sick Leave", "Paid Leave", "Unpaid Leave", "Half Day", "Work From Home", "Official Duty", "Comp Off"];
+const LEAVE_TYPES_ = ["Casual Leave", "Sick Leave", "Paid Leave", "Unpaid Leave", "Half Day", "Saturday Off", "Work From Home", "Official Duty", "Comp Off"];
 const LEAVE_HEADERS_ = ["ID", "Date", "User ID", "Name", "Type", "Note", "Marked By", "Marked At", "Status"];
 
 function getLeavesSheet_() {
@@ -3058,8 +3109,18 @@ function leaveMap_() {
 }
 
 function markLeave(userIds, fromDate, toDate, leaveType, note, markerId, markerName) {
-  if (ATT_MANAGER_IDS_.indexOf(markerId) === -1) return jsonResponse({status: "error", message: "Only HR, PC or Shivendra can mark leave"});
   if (LEAVE_TYPES_.indexOf(leaveType) === -1) return jsonResponse({status: "error", message: "Unknown leave type"});
+  const isManager = ATT_MANAGER_IDS_.indexOf(markerId) !== -1;
+  const selfSaturday = leaveType === "Saturday Off" && (userIds || []).length === 1 && String(userIds[0]) === String(markerId);
+  if (!isManager && !selfSaturday) return jsonResponse({status: "error", message: "Only HR, PC or Shivendra can mark leave"});
+  // Saturday Off: Saturdays only, one per person per calendar month.
+  if (leaveType === "Saturday Off") {
+    if (new Date(fromDate + "T12:00:00+05:30").getUTCDay() !== 6) return jsonResponse({status: "error", message: "Saturday Off can only be on a Saturday"});
+    toDate = fromDate;
+    if (!isManager && fromDate < getIndiaDate()) return jsonResponse({status: "error", message: "Pick a Saturday that hasn't passed"});
+    const used = readLeaves_().find(l => l.status !== "Cancelled" && l.type === "Saturday Off" && l.userId === String(userIds[0]) && l.date.slice(0, 7) === fromDate.slice(0, 7) && l.date !== fromDate);
+    if (used) return jsonResponse({status: "error", code: "SAT_USED", message: "Saturday Off already used this month (" + used.date + ")"});
+  }
   const ids = (userIds || []).map(String).filter(x => x);
   if (!ids.length || !/^\d{4}-\d{2}-\d{2}$/.test(String(fromDate))) return jsonResponse({status: "error", message: "Pick people and a date"});
   const to = /^\d{4}-\d{2}-\d{2}$/.test(String(toDate)) ? String(toDate) : String(fromDate);
@@ -3096,7 +3157,7 @@ function markLeave(userIds, fromDate, toDate, leaveType, note, markerId, markerN
     readFlags_().forEach(f => {
       if (ids.indexOf(f.userId) === -1 || days.indexOf(f.date) === -1) return;
       if (f.status === "Excused") return;
-      if (halfOnly && ["LATE", "SHORT_HOURS", "LUNCH_NOT_MARKED"].indexOf(f.type) === -1) return;
+      if (halfOnly && ["LATE", "LATE_QUARTER", "LATE_HALF", "EARLY_SIGNOUT", "SHORT_HOURS", "LUNCH_NOT_MARKED"].indexOf(f.type) === -1) return;
       fsheet.getRange(f.row, 8).setValue("Excused");
       fsheet.getRange(f.row, 12, 1, 2).setValues([["Leave: " + leaveType + " (" + (markerName || markerId) + ")", now]]);
     });
@@ -3109,11 +3170,17 @@ function markLeave(userIds, fromDate, toDate, leaveType, note, markerId, markerN
 }
 
 function cancelLeave(id, markerId) {
-  if (ATT_MANAGER_IDS_.indexOf(markerId) === -1) return jsonResponse({status: "error", message: "Not allowed"});
   const l = readLeaves_().find(x => x.id === String(id));
   if (!l) return jsonResponse({status: "error", message: "Leave not found"});
+  const ownFutureSaturday = l.type === "Saturday Off" && l.userId === String(markerId) && l.date >= getIndiaDate();
+  if (ATT_MANAGER_IDS_.indexOf(markerId) === -1 && !ownFutureSaturday) return jsonResponse({status: "error", message: "Not allowed"});
   getLeavesSheet_().getRange(l.row, 9).setValue("Cancelled");
   return jsonResponse({status: "ok"});
+}
+
+function getMyLeaves(userId) {
+  const list = readLeaves_().filter(l => l.userId === String(userId) && l.status !== "Cancelled").map(l => { delete l.row; return l; });
+  return jsonResponse({status: "ok", leaves: list});
 }
 
 // Month review for HR / PC / Shivendra: every person × every day, plus salary-time totals.
@@ -3124,7 +3191,7 @@ function getAttendanceReport(viewerId, year, month) {
   const daysIn = daysInMonth_(y, m - 1);
   const today = getIndiaDate();
   const nowMs = Date.now();
-  const team = allTeam_().filter(x => x.active !== false && !x.isAdmin);
+  const team = attendanceTeam_();
   const shifts = getShiftMap_();
   const leaves = readLeaves_().filter(l => l.date.indexOf(prefix) === 0);
   const leaveBy = {};
@@ -3148,22 +3215,24 @@ function getAttendanceReport(viewerId, year, month) {
   }
 
   const people = team.map(mem => {
-    const shift = shifts[mem.id] || { start: "10:00", end: "19:00" };
+    const shift = { start: "09:00–10:14", end: "flexible" };
     const totals = { workingDays: 0, present: 0, absent: 0, halfDays: 0, leaveDays: 0, paidLeave: 0, unpaidLeave: 0, wfh: 0,
-      late: 0, workedMin: 0, strikes: 0, excused: 0, leavesByType: {} };
+      late: 0, lateCut: 0, early: 0, extraDays: 0, saturdayOff: 0, workedMin: 0, strikes: 0, excused: 0, leavesByType: {} };
     const days = [];
     for (let d = 1; d <= daysIn; d++) {
       const k = prefix + "-" + String(d).padStart(2, "0");
       const ev = (events[mem.id + "|" + k] || []).sort((a, b) => a.time - b.time);
       const leave = leaveBy[k + "|" + mem.id];
       const working = isWorkingDay_(k);
+      const counted = k >= REPORT_START_;
       const dayFlags = flags.filter(f => f.userId === mem.id && f.date === k);
-      const cell = { date: k, code: "", inAt: "", outAt: "", workedMin: 0, lunchMin: 0, leave: leave ? leave.type : "", leaveId: leave ? leave.id : "",
+      const cell = { date: k, code: "", inAt: "", outAt: "", requiredOut: "", workedMin: 0, lunchMin: 0, leave: leave ? leave.type : "", leaveId: leave ? leave.id : "",
         flags: dayFlags.map(f => ({ type: f.type, status: f.status, detail: f.detail })) };
       if (ev.length) {
         const first = ev.find(e => e.status === "Working" || e.status === "Meeting") || ev[0];
         const lastEv = ev[ev.length - 1];
         cell.inAt = Utilities.formatDate(first.time, "Asia/Kolkata", "HH:mm");
+        cell.requiredOut = minToHhmm_(requiredSignOutMin_(istMinutes_(first.time)));
         if (lastEv.status === "Signed Out") cell.outAt = Utilities.formatDate(lastEv.time, "Asia/Kolkata", "HH:mm");
         const until = k === today ? new Date(nowMs) : null;
         cell.workedMin = Math.round(workingMsOf_(ev, until) / 60000);
@@ -3171,38 +3240,47 @@ function getAttendanceReport(viewerId, year, month) {
         ev.forEach((e, i) => { if (e.status === "Lunch Break") { const end = i + 1 < ev.length ? ev[i + 1].time : (k === today ? new Date(nowMs) : e.time); lunch += Math.max(0, end - e.time); } });
         cell.lunchMin = Math.round(lunch / 60000);
       }
-      if (!working) cell.code = holidays.has(k) ? "HOL" : "OFF";
+      if (!counted) cell.code = "PRE";
+      else if (!working) cell.code = ev.length ? "X" : (holidays.has(k) ? "HOL" : "OFF");
       else if (k > today) cell.code = leave ? "LV" : "FUT";
       else if (leave && leave.type === "Work From Home") cell.code = "WFH";
       else if (leave && leave.type === "Half Day") cell.code = "HD";
+      else if (leave && leave.type === "Saturday Off") cell.code = "SO";
       else if (leave) cell.code = "LV";
       else if (ev.length) cell.code = "P";
       else cell.code = k === today ? "NS" : "A";
 
-      if (working && k <= today) {
+      if (counted && cell.code === "X") totals.extraDays++;
+      if (counted && working && k <= today) {
         totals.workingDays++;
         if (cell.code === "P" || cell.code === "WFH") totals.present++;
         if (cell.code === "WFH") totals.wfh++;
         if (cell.code === "HD") { totals.halfDays++; totals.present += 0.5; }
         if (cell.code === "A") totals.absent++;
+        if (cell.code === "SO") totals.saturdayOff++;
         if (cell.code === "LV") {
           totals.leaveDays++;
           totals.leavesByType[leave.type] = (totals.leavesByType[leave.type] || 0) + 1;
           if (leave.type === "Unpaid Leave") totals.unpaidLeave++; else totals.paidLeave++;
         }
       }
-      totals.workedMin += cell.workedMin;
-      dayFlags.forEach(f => {
-        if (f.status === "Excused") totals.excused++; else totals.strikes++;
-        if (f.type === "LATE" && f.status !== "Excused") totals.late++;
-      });
+      if (counted) {
+        totals.workedMin += cell.workedMin;
+        dayFlags.forEach(f => {
+          if (f.status === "Excused") { totals.excused++; return; }
+          if (FLAG_DAY_CUT_[f.type]) { totals.late++; totals.lateCut += FLAG_DAY_CUT_[f.type]; return; }
+          if (f.type === "EARLY_SIGNOUT") totals.early++;
+          totals.strikes++;
+        });
+      }
       days.push(cell);
     }
     totals.strikeDeduction = Math.floor(totals.strikes / STRIKES_PER_HALF_DAY_) * 0.5;
-    totals.deductionDays = totals.absent + totals.unpaidLeave + totals.halfDays * 0.5 + totals.strikeDeduction;
-    totals.avgWorkedMin = totals.present > 0 ? Math.round(totals.workedMin / totals.present) : 0;
+    totals.deductionDays = totals.absent + totals.unpaidLeave + totals.halfDays * 0.5 + totals.lateCut + totals.strikeDeduction;
+    const daysWorked = totals.present + totals.extraDays;
+    totals.avgWorkedMin = daysWorked > 0 ? Math.round(totals.workedMin / daysWorked) : 0;
     return { userId: mem.id, name: mem.name, shift: shift, days: days, totals: totals };
   });
-  return jsonResponse({ status: "ok", year: y, month: m, people: people, leaveTypes: LEAVE_TYPES_,
+  return jsonResponse({ status: "ok", year: y, month: m, people: people, leaveTypes: LEAVE_TYPES_, reportStart: REPORT_START_,
     leaves: leaves.map(l => { delete l.row; return l; }), rules: attendanceRules_() });
 }

@@ -306,6 +306,9 @@ const PLATFORMS = {
   pinterest: { label: 'Pinterest', Icon: SiPinterest, color: '#E60023', bg: '#E60023' },
   other: { label: 'Other', Icon: null, color: '#64748b', bg: '#64748b' }
 };
+// On the team for tasks, but not tracked for attendance.
+const NO_ATTENDANCE_IDS = ['jagdish'];
+
 // Platform chosen per channel in Manage Channels (overrides the automatic guess).
 let PLATFORM_OVERRIDES = {};
 function setPlatformOverrides(map) { PLATFORM_OVERRIDES = map || {}; }
@@ -1860,7 +1863,15 @@ function App() {
       if (lunch.taken) { pushNotif('🍽️ Lunch was already marked today.'); return; }
       if (!lunch.windowOpen) { pushNotif('🍽️ Lunch can only be marked between 1:00 and 2:00 PM.'); return; }
     }
-    if (newStatus === 'Signed Out' && !window.confirm('Sign out for today?')) return;
+    if (newStatus === 'Signed Out') {
+      const first = firstInOf(myLiveLog || attendance.find(a => a.userId === currentUser)?.log);
+      const outMin = first ? requiredOutMin(first.min) : null;
+      const early = outMin !== null && !isOffToday() && nowMinutes() < outMin;
+      const msg = early
+        ? `Your sign-out time today is ${minToClock(outMin)}.\n\nSigning out now counts as an early sign-out (a strike). Sign out anyway?`
+        : 'Sign out for today?';
+      if (!window.confirm(msg)) return;
+    }
     setAttendanceSwitching(true);
 
     const nowISO = new Date().toISOString();
@@ -1919,6 +1930,20 @@ function App() {
   }).filter(Boolean).sort((a, b) => a.time - b.time);
   const shiftOf = (userId) => attShifts[userId] || { start: '10:00', end: '19:00' };
 
+  // v16 — FLEXIBLE SHIFT (same rule as the server, see Code.gs):
+  // sign in 9:00–10:14 → sign out 9h15m later in 15-min slots (before 9:00 → 6 PM);
+  // 10:15–11:00 → ¼ day cut, after 11:00 → ½ day cut, both sign out 7:15 PM.
+  const requiredOutMin = (inMin) => inMin < 540 ? 1080 : inMin <= 614 ? 1095 + Math.floor((inMin - 540) / 15) * 15 : 1155;
+  const lateCutOf = (inMin) => inMin <= 614 ? 0 : inMin <= 660 ? 0.25 : 0.5;
+  const minToClock = (m) => fmtClock(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`);
+  const todayKeyIST = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const isOffToday = () => new Date().getDay() === 0 || holidays.some(h => String(h.date).slice(0, 10) === todayKeyIST());
+  const firstInOf = (log) => {
+    const ev = parseLog(log);
+    const first = ev.find(e => e.status === 'Working' || e.status === 'Meeting');
+    return first ? { time: first.time, min: first.time.getHours() * 60 + first.time.getMinutes() } : null;
+  };
+
   // Everything about today's lunch for a given activity log.
   const lunchInfoFromLog = (log) => {
     const ev = parseLog(log);
@@ -1937,25 +1962,33 @@ function App() {
   // Live warnings for one person's day (used on the personal card and on Team Status).
   const dayWarnings = (userId, log) => {
     const ev = parseLog(log);
-    const shift = shiftOf(userId);
-    const sMin = hhmmToMin(shift.start), eMin = hhmmToMin(shift.end);
     const nm = nowMinutes();
     const out = [];
-    if (ev.length === 0) {
-      if (nm >= sMin + attRules.lateGrace && nm < eMin) out.push({ kind: 'bad', text: 'Not signed in' });
+    if (isOffToday()) {
+      if (ev.length) out.push({ kind: 'ok', text: 'Extra working day' });
       return out;
     }
-    const first = ev.find(e => e.status === 'Working' || e.status === 'Meeting');
+    if (ev.length === 0) {
+      if (nm > 614 && nm < 1155) out.push({ kind: 'bad', text: 'Not signed in' });
+      return out;
+    }
+    const first = firstInOf(log);
     if (first) {
-      const late = (first.time.getHours() * 60 + first.time.getMinutes()) - sMin;
-      if (late > attRules.lateGrace) out.push({ kind: 'warn', text: `Late ${late}m` });
+      const cut = lateCutOf(first.min);
+      if (cut === 0.25) out.push({ kind: 'warn', text: '¼ day cut (late)' });
+      if (cut === 0.5) out.push({ kind: 'bad', text: '½ day cut (late)' });
     }
     const lunch = lunchInfoFromLog(log);
     if (lunch.onLunch && lunch.usedMin > attRules.lunchMinutes) out.push({ kind: 'bad', text: `Lunch +${Math.round(lunch.usedMin - attRules.lunchMinutes)}m` });
     if (lunch.taken && !lunch.onLunch && lunch.usedMin > attRules.lunchMinutes + attRules.lunchTolerance) out.push({ kind: 'warn', text: `Long lunch ${Math.round(lunch.usedMin)}m` });
     if (!lunch.taken && lunch.afterWindow) out.push({ kind: 'warn', text: 'Lunch not marked' });
     const last = ev[ev.length - 1];
-    if (last.status !== 'Signed Out' && nm >= eMin + 15) out.push({ kind: 'bad', text: `Past shift end (${fmtClock(shift.end)})` });
+    const outMin = first ? requiredOutMin(first.min) : 1155;
+    if (last.status !== 'Signed Out' && nm >= outMin + 15) out.push({ kind: 'bad', text: `Past sign-out time (${minToClock(outMin)})` });
+    if (last.status === 'Signed Out' && first) {
+      const lm = last.time.getHours() * 60 + last.time.getMinutes();
+      if (outMin - lm > 2) out.push({ kind: 'warn', text: `Left early (${minToClock(lm)})` });
+    }
     return out;
   };
 
@@ -2034,12 +2067,52 @@ function App() {
   // ============================================================
   // v14 — ATTENDANCE REVIEW + LEAVE (HR, PC, Shivendra): any day, any month, everyone.
   // ============================================================
-  const LEAVE_TYPES = ['Casual Leave', 'Sick Leave', 'Paid Leave', 'Unpaid Leave', 'Half Day', 'Work From Home', 'Official Duty', 'Comp Off'];
+  const LEAVE_TYPES = ['Casual Leave', 'Sick Leave', 'Paid Leave', 'Unpaid Leave', 'Half Day', 'Saturday Off', 'Work From Home', 'Official Duty', 'Comp Off'];
   const [review, setReview] = useState(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewDay, setReviewDay] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
   const [leaveForm, setLeaveForm] = useState({ userIds: [], from: '', to: '', type: 'Casual Leave', note: '' });
   const [reviewCell, setReviewCell] = useState(null);
+  const [myLeaves, setMyLeaves] = useState([]);
+  const [showSatOff, setShowSatOff] = useState(false);
+  const loadMyLeaves = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(API_URL + '?action=getMyLeaves&userId=' + encodeURIComponent(currentUser));
+      const data = await res.json();
+      if (data.status === 'ok' && Array.isArray(data.leaves)) setMyLeaves(data.leaves);
+    } catch (e) {}
+  };
+  useEffect(() => { if (currentUser) loadMyLeaves(); }, [currentUser]);
+  // Saturdays from today to the end of next month that can still be taken off.
+  const upcomingSaturdays = () => {
+    const out = [];
+    const d = new Date(); d.setHours(12, 0, 0, 0);
+    const end = new Date(d.getFullYear(), d.getMonth() + 2, 0, 12);
+    while (d <= end) {
+      if (d.getDay() === 6) out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  };
+  const takeSaturdayOff = async (date) => {
+    const used = myLeaves.find(l => l.type === 'Saturday Off' && l.date.slice(0, 7) === date.slice(0, 7));
+    if (used) { alert(`You already took ${new Date(used.date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} off this month. Cancel it first to pick another Saturday.`); return; }
+    if (!window.confirm(`Take Saturday ${new Date(date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })} off?`)) return;
+    try {
+      const payload = { userIds: [currentUser], fromDate: date, toDate: date, leaveType: 'Saturday Off', note: 'Monthly Saturday off', markerId: currentUser, markerName: currentUserInfo?.name };
+      const res = await fetch(API_URL + '?action=markLeaveSync&data=' + encodeURIComponent(JSON.stringify(payload)));
+      const data = await res.json();
+      if (data.status === 'ok') { pushNotif('🗓 Saturday off booked.'); loadMyLeaves(); }
+      else alert(data.message || 'Could not book it.');
+    } catch (e) { alert('Could not reach the server — try again.'); }
+  };
+  const cancelMySaturday = (l) => {
+    if (!window.confirm('Cancel this Saturday off?')) return;
+    setMyLeaves(prev => prev.filter(x => x.id !== l.id));
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'cancelLeave', id: l.id, markerId: currentUser }) }).catch(() => {});
+  };
 
   const loadReview = async (year = discYear, month = discMonth) => {
     if (!canManageAttendance) return;
@@ -2074,9 +2147,9 @@ function App() {
 
   const downloadSalaryCsv = () => {
     if (!review) return;
-    const head = ['Name', 'Working days', 'Present', 'Absent', 'Half days', 'Paid leave', 'Unpaid leave', 'WFH', 'Late marks', 'Strikes', 'Strike deduction (days)', 'Suggested deduction (days)', 'Total hours', 'Avg hours/day'];
-    const rows = review.people.map(p => [p.name, p.totals.workingDays, p.totals.present, p.totals.absent, p.totals.halfDays, p.totals.paidLeave, p.totals.unpaidLeave, p.totals.wfh,
-      p.totals.late, p.totals.strikes, p.totals.strikeDeduction, p.totals.deductionDays, (p.totals.workedMin / 60).toFixed(1), (p.totals.avgWorkedMin / 60).toFixed(1)]);
+    const head = ['Name', 'Working days', 'Present', 'Absent', 'Half-day leave', 'Paid leave', 'Unpaid leave', 'Saturday off', 'WFH', 'Extra days (Sun/holiday)', 'Late arrivals', 'Late cut (days)', 'Strikes', 'Strike deduction (days)', 'Suggested deduction (days)', 'Total hours', 'Avg hours/day'];
+    const rows = review.people.map(p => [p.name, p.totals.workingDays, p.totals.present, p.totals.absent, p.totals.halfDays, p.totals.paidLeave, p.totals.unpaidLeave, p.totals.saturdayOff || 0, p.totals.wfh,
+      p.totals.extraDays || 0, p.totals.late, p.totals.lateCut || 0, p.totals.strikes, p.totals.strikeDeduction, p.totals.deductionDays, (p.totals.workedMin / 60).toFixed(1), (p.totals.avgWorkedMin / 60).toFixed(1)]);
     const csv = [head, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -4574,6 +4647,18 @@ function App() {
                                     <span className="pf-icon" style={{ background: PLATFORMS[pk].bg }}><PlatformIcon channel={entry.channels} size={9} /></span>
                                     <span className="cc-format-tag">{({ 'Long video': 'Long', 'Community post': 'Community', 'Short video': 'Short' })[fmt.text] || fmt.text}</span>
                                     {entry.time && <span className="cc-chip-time">{fmtClockShort(entry.time)}</span>}
+                                    {(() => {
+                                      const order = ['liveLink', 'finalLink', 'draftLink', 'designLink', 'thumbnailLink', 'rawLink'];
+                                      const have = order.filter(k => toOpenableUrl(entry[k]));
+                                      if (!have.length) return <span className="cc-link-ind none" title="No link added yet">🔗</span>;
+                                      const label = { liveLink: 'Live post', finalLink: 'Final', draftLink: 'Draft', designLink: 'Design', thumbnailLink: 'Thumbnail', rawLink: 'Raw' };
+                                      return (
+                                        <a className={`cc-link-ind ${have.includes('finalLink') || have.includes('liveLink') ? 'final' : 'some'}`} href={toOpenableUrl(entry[have[0]])} target="_blank" rel="noopener noreferrer"
+                                          onClick={(e) => e.stopPropagation()} title={`Links: ${have.map(k => label[k]).join(', ')} — click to open ${label[have[0]]}`}>
+                                          🔗{have.length > 1 ? <sup>{have.length}</sup> : null}
+                                        </a>
+                                      );
+                                    })()}
                                     {isPublished ? <span className="cc-done" title="Published">✓</span>
                                       : stage === 'sched' ? <span className="cc-stage-dot st-sched" title="Scheduled"></span>
                                       : stage === 'edit' ? <span className="cc-stage-dot st-edit" title={entry.editingStatus}></span> : null}
@@ -4986,6 +5071,36 @@ function App() {
         </div>
       )}
 
+      {showSatOff && (
+        <div className="modal-overlay" onClick={() => setShowSatOff(false)}>
+          <div className="modal-content compact" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>🗓 Saturday off</h3>
+              <button className="modal-close" onClick={() => setShowSatOff(false)}>✕</button>
+            </div>
+            <div className="modal-body compact-body">
+              <p className="tm-hint">You can take one Saturday off every month. Pick it here — HR sees it right away.</p>
+              <div className="sat-grid">
+                {upcomingSaturdays().map(d => {
+                  const mine = myLeaves.find(l => l.date === d && l.type === 'Saturday Off');
+                  const monthUsed = myLeaves.find(l => l.type === 'Saturday Off' && l.date.slice(0, 7) === d.slice(0, 7));
+                  const otherLeave = myLeaves.find(l => l.date === d && l.type !== 'Saturday Off');
+                  return (
+                    <div key={d} className={`sat-day ${mine ? 'mine' : ''} ${!mine && monthUsed ? 'used' : ''}`}>
+                      <strong>{new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</strong>
+                      {mine ? <button className="btn-ghost" onClick={() => cancelMySaturday(mine)}>✓ Booked · cancel</button>
+                        : otherLeave ? <span className="sat-note">{otherLeave.type}</span>
+                        : monthUsed ? <span className="sat-note">Used this month</span>
+                        : <button className="btn-success" onClick={() => takeSaturdayOff(d)}>Take off</button>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TARGETS */}
       {showTargets && (
         <div className="modal-overlay" onClick={() => { setShowTargets(false); setTargetForm(null); }}>
@@ -5152,16 +5267,16 @@ function App() {
                 {canManageAttendance && <button className={disciplineTab === 'month' ? 'active' : ''} onClick={() => { setDisciplineTab('month'); if (!review) loadReview(); }}>Month sheet</button>}
                 {canManageAttendance && <button className={disciplineTab === 'leaves' ? 'active' : ''} onClick={() => { setDisciplineTab('leaves'); if (!review) loadReview(); }}>Leaves</button>}
                 {canManageAttendance && <button className={disciplineTab === 'salary' ? 'active' : ''} onClick={() => { setDisciplineTab('salary'); if (!review) loadReview(); }}>Salary summary</button>}
-                {canManageAttendance && <button className={disciplineTab === 'shifts' ? 'active' : ''} onClick={() => setDisciplineTab('shifts')}>Shifts</button>}
               </div>
 
               {(disciplineTab === 'mine' || disciplineTab === 'team') && <div className="disc-rules">
                 <strong>Rules</strong>
-                <span>Late after {attRules.lateGrace} min of shift start</span>
+                <span>Sign in 9:00–10:14 → sign out 9h15m later (before 9 → 6 PM)</span>
+                <span>10:15–11:00 → ¼ day cut · after 11 → ½ day cut</span>
                 <span>Lunch {fmtClock(attRules.lunchStart)}–{fmtClock(attRules.lunchEnd)}, {attRules.lunchMinutes} min, once</span>
                 <span>No lunch marked → 30 min deducted</span>
-                <span>Forgot sign-out → day closed at shift end</span>
-                <span>Under {attRules.minWorkHours}h worked</span>
+                <span>Left before sign-out time · forgot sign-out</span>
+                <span>Sunday week off · 1 Saturday off a month</span>
                 <span className="disc-rule-key">Each = 1 strike · every {attRules.strikesPerHalfDay} strikes in a month = ½ day deduction</span>
               </div>}
 
@@ -5225,7 +5340,7 @@ function App() {
 
               {disciplineTab === 'team' && canManageAttendance && disciplineData.team && (() => {
                 const team = disciplineData.team;
-                const rows = activeTeam.filter(m => !m.isAdmin).map(m => ({ m, s: team.summary?.[m.id] || { strikes: 0, halfDays: 0, excused: 0, pending: 0, byType: {} } }))
+                const rows = activeTeam.filter(m => !m.isAdmin && !NO_ATTENDANCE_IDS.includes(m.id)).map(m => ({ m, s: team.summary?.[m.id] || { strikes: 0, halfDays: 0, excused: 0, pending: 0, byType: {} } }))
                   .sort((a, b) => b.s.strikes - a.s.strikes);
                 return (
                   <>
@@ -5251,16 +5366,17 @@ function App() {
                     )}
                     <div className="disc-table-wrap">
                       <table className="monthly-table disc-table">
-                        <thead><tr><th>Person</th><th>Late</th><th>Lunch</th><th>No lunch</th><th>No sign-out</th><th>Short hrs</th><th>Strikes</th><th>Deduction</th></tr></thead>
+                        <thead><tr><th>Person</th><th>¼ day late</th><th>½ day late</th><th>Long lunch</th><th>No lunch</th><th>No sign-out</th><th>Left early</th><th>Strikes</th><th>Deduction</th></tr></thead>
                         <tbody>
                           {rows.map(({ m, s: sm }) => (
                             <tr key={m.id} className={sm.halfDays ? 'row-bad' : ''}>
                               <td><strong>{m.displayName}</strong></td>
-                              <td>{sm.byType?.LATE || 0}</td>
+                              <td>{sm.byType?.LATE_QUARTER || 0}</td>
+                              <td>{sm.byType?.LATE_HALF || 0}</td>
                               <td>{sm.byType?.LONG_LUNCH || 0}</td>
                               <td>{sm.byType?.LUNCH_NOT_MARKED || 0}</td>
                               <td>{sm.byType?.MISSED_SIGNOUT || 0}</td>
-                              <td>{sm.byType?.SHORT_HOURS || 0}</td>
+                              <td>{sm.byType?.EARLY_SIGNOUT || 0}</td>
                               <td><strong>{sm.strikes}</strong>{sm.excused ? <small> (+{sm.excused} excused)</small> : null}</td>
                               <td>{sm.halfDays ? `${sm.halfDays} day` : '—'}</td>
                             </tr>
@@ -5289,7 +5405,7 @@ function App() {
                 const [yy, mm] = reviewDay.split('-').map(Number);
                 const sameMonth = review && review.year === yy && review.month === mm;
                 const rows = sameMonth ? review.people.map(p => ({ p, d: p.days.find(x => x.date === reviewDay) })).filter(r => r.d) : [];
-                const codeLabel = { P: 'Present', A: 'Absent', LV: 'Leave', HD: 'Half day', WFH: 'Work from home', OFF: 'Sunday', HOL: 'Holiday', FUT: '—', NS: 'Not signed in' };
+                const codeLabel = { P: 'Present', A: 'Absent', LV: 'Leave', HD: 'Half day', WFH: 'Work from home', OFF: 'Week off', HOL: 'Holiday', FUT: '—', NS: 'Not signed in', X: 'Extra day', SO: 'Saturday off', PRE: 'Before tracking' };
                 const count = (c) => rows.filter(r => r.d.code === c).length;
                 return (
                   <>
@@ -5309,17 +5425,18 @@ function App() {
                     )}
                     <div className="disc-table-wrap">
                       <table className="monthly-table disc-table rv-day-table">
-                        <thead><tr><th>Person</th><th>Status</th><th>In</th><th>Out</th><th>Worked</th><th>Lunch</th><th>Flags</th></tr></thead>
+                        <thead><tr><th>Person</th><th>Status</th><th>In</th><th>Should leave</th><th>Out</th><th>Worked</th><th>Lunch</th><th>Flags</th></tr></thead>
                         <tbody>
                           {rows.map(({ p, d }) => (
                             <tr key={p.userId} className={`rv-row-${d.code}`}>
-                              <td><strong>{team.find(m => m.id === p.userId)?.displayName || p.name}</strong><small className="rv-shift">{p.shift.start}–{p.shift.end}</small></td>
+                              <td><strong>{team.find(m => m.id === p.userId)?.displayName || p.name}</strong></td>
                               <td><span className={`rv-code rv-${d.code}`}>{d.leave || codeLabel[d.code] || d.code}</span></td>
                               <td>{d.inAt ? fmtClock(d.inAt) : '—'}</td>
-                              <td>{d.outAt ? fmtClock(d.outAt) : (d.inAt ? 'not signed out' : '—')}</td>
+                              <td>{d.requiredOut ? fmtClock(d.requiredOut) : '—'}</td>
+                              <td className={d.outAt && d.requiredOut && d.outAt < d.requiredOut ? 'rv-bad' : ''}>{d.outAt ? fmtClock(d.outAt) : (d.inAt ? 'not signed out' : '—')}</td>
                               <td>{fmtMin(d.workedMin)}</td>
                               <td className={d.lunchMin > attRules.lunchMinutes + attRules.lunchTolerance ? 'rv-bad' : ''}>{d.lunchMin ? `${d.lunchMin}m` : '—'}</td>
-                              <td className="rv-flags">{d.flags.length ? d.flags.map((f, i) => <span key={i} className={`warn-chip ${f.status === 'Excused' ? 'ok' : 'bad'}`} title={f.detail}>{({ LATE: 'Late', LONG_LUNCH: 'Long lunch', LUNCH_NOT_MARKED: 'No lunch', MISSED_SIGNOUT: 'No sign-out', SHORT_HOURS: 'Short hrs' })[f.type] || f.type}</span>) : '—'}</td>
+                              <td className="rv-flags">{d.flags.length ? d.flags.map((f, i) => <span key={i} className={`warn-chip ${f.status === 'Excused' ? 'ok' : 'bad'}`} title={f.detail}>{({ LATE: 'Late', LATE_QUARTER: '¼ day late', LATE_HALF: '½ day late', EARLY_SIGNOUT: 'Left early', LONG_LUNCH: 'Long lunch', LUNCH_NOT_MARKED: 'No lunch', MISSED_SIGNOUT: 'No sign-out', SHORT_HOURS: 'Short hrs' })[f.type] || f.type}</span>) : '—'}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -5332,7 +5449,7 @@ function App() {
               {disciplineTab === 'month' && canManageAttendance && review && (
                 <>
                   <div className="rv-legend">
-                    <span className="rv-code rv-P">P</span> Present <span className="rv-code rv-A">A</span> Absent <span className="rv-code rv-LV">L</span> Leave <span className="rv-code rv-HD">½</span> Half day <span className="rv-code rv-WFH">W</span> WFH <span className="rv-code rv-OFF">·</span> Sunday/holiday <span className="rv-dot-flag"></span> flag — tap a cell for details
+                    <span className="rv-code rv-P">P</span> Present <span className="rv-code rv-A">A</span> Absent <span className="rv-code rv-LV">L</span> Leave <span className="rv-code rv-HD">½</span> Half day <span className="rv-code rv-WFH">W</span> WFH <span className="rv-code rv-SO">S</span> Saturday off <span className="rv-code rv-X">+</span> Extra day (Sunday/holiday work) <span className="rv-code rv-OFF">·</span> Week off/holiday <span className="rv-dot-flag"></span> flag — tap a cell for details
                   </div>
                   <div className="rv-grid-wrap">
                     <table className="rv-grid">
@@ -5344,7 +5461,7 @@ function App() {
                           <tr key={p.userId}>
                             <td className="rv-name-col">{team.find(m => m.id === p.userId)?.displayName || p.name}</td>
                             {p.days.map(d => {
-                              const short = { P: 'P', A: 'A', LV: 'L', HD: '½', WFH: 'W', OFF: '·', HOL: '·', FUT: '', NS: '?' }[d.code];
+                              const short = { P: 'P', A: 'A', LV: 'L', HD: '½', WFH: 'W', OFF: '·', HOL: '·', FUT: '', NS: '?', X: '+', SO: 'S', PRE: '' }[d.code];
                               const bad = d.flags.some(f => f.status !== 'Excused');
                               return (
                                 <td key={d.date} className={`rv-cell rv-${d.code}`} onClick={() => setReviewCell({ p, d })} title={`${d.date} · ${d.leave || d.code}${d.inAt ? ` · in ${d.inAt}` : ''}${d.outAt ? ` · out ${d.outAt}` : ''}`}>
@@ -5381,7 +5498,7 @@ function App() {
                     <div className="form-group">
                       <label>Who ({leaveForm.userIds.length} selected)</label>
                       <div className="assignee-avatars-select">
-                        {activeTeam.filter(m => !m.isAdmin).map(m => (
+                        {activeTeam.filter(m => !m.isAdmin && !NO_ATTENDANCE_IDS.includes(m.id)).map(m => (
                           <div key={m.id} title={m.displayName} className={`avatar-select ${leaveForm.userIds.includes(m.id) ? 'checked' : ''}`}
                             onClick={() => setLeaveForm(f => ({ ...f, userIds: f.userIds.includes(m.id) ? f.userIds.filter(x => x !== m.id) : [...f.userIds, m.id] }))}>{m.avatar}</div>
                         ))}
@@ -5418,18 +5535,18 @@ function App() {
               {disciplineTab === 'salary' && canManageAttendance && review && (
                 <>
                   <div className="rv-salary-head">
-                    <p className="tm-hint">Up to today. “Suggested deduction” = absent days + unpaid leave + ½ per half day + strike deductions. Check it before using it for salary.</p>
+                    <p className="tm-hint">Counting starts fresh from {review.reportStart ? new Date(review.reportStart + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'the start date'}, up to today. “Suggested deduction” = absent + unpaid leave + ½ per half-day leave + late cuts (¼ / ½) + strike deductions. Extra days (Sunday/holiday work) are shown separately. Check before using for salary.</p>
                     <button className="btn-success" onClick={downloadSalaryCsv}><FiDownload /> Download (Excel/CSV)</button>
                   </div>
                   <div className="disc-table-wrap">
                     <table className="monthly-table disc-table">
-                      <thead><tr><th>Person</th><th>Working days</th><th>Present</th><th>Absent</th><th>Half days</th><th>Paid leave</th><th>Unpaid</th><th>Late</th><th>Strikes</th><th>Avg hours</th><th>Suggested deduction</th></tr></thead>
+                      <thead><tr><th>Person</th><th>Working days</th><th>Present</th><th>Absent</th><th>Leave</th><th>Sat off</th><th>Extra days</th><th>Late cut</th><th>Strikes</th><th>Avg hours</th><th>Suggested deduction</th></tr></thead>
                       <tbody>
                         {review.people.map(p => (
                           <tr key={p.userId} className={p.totals.deductionDays ? 'row-bad' : ''}>
                             <td><strong>{team.find(m => m.id === p.userId)?.displayName || p.name}</strong></td>
-                            <td>{p.totals.workingDays}</td><td>{p.totals.present}</td><td>{p.totals.absent}</td><td>{p.totals.halfDays}</td>
-                            <td>{p.totals.paidLeave}</td><td>{p.totals.unpaidLeave}</td><td>{p.totals.late}</td><td>{p.totals.strikes}</td>
+                            <td>{p.totals.workingDays}</td><td>{p.totals.present}</td><td>{p.totals.absent}</td><td>{p.totals.paidLeave + p.totals.unpaidLeave + p.totals.halfDays * 0.5}</td>
+                            <td>{p.totals.saturdayOff || 0}</td><td className={p.totals.extraDays ? 'rv-good' : ''}>{p.totals.extraDays || 0}</td><td>{p.totals.lateCut ? `${p.totals.lateCut} day` : '—'}</td><td>{p.totals.strikes}</td>
                             <td>{fmtMin(p.totals.avgWorkedMin)}</td><td><strong>{p.totals.deductionDays ? `${p.totals.deductionDays} day` : '—'}</strong></td>
                           </tr>
                         ))}
@@ -5634,15 +5751,22 @@ function App() {
 
       {!loading && (
         <>
-          {(!isAdmin || isHR) && (() => {
+          {(!isAdmin || isHR) && !NO_ATTENDANCE_IDS.includes(currentUser) && (() => {
             const log = myLiveLog || attendance.find(a => a.userId === currentUser)?.log;
             const times = calculateWorkingTime(log);
-            const shift = shiftOf(currentUser);
+            const offToday = isOffToday();
+            const first = firstInOf(log);
+            const outMin = first ? requiredOutMin(first.min) : null;
+            const cut = first ? lateCutOf(first.min) : 0;
+            const nmNow = nowMinutes();
+            const leftToOut = outMin !== null ? outMin - nmNow : null;
+            const mySatOff = myLeaves.filter(l => l.type === 'Saturday Off');
             const lunch = lunchInfoFromLog(log);
             const warnings = dayWarnings(currentUser, log);
             const signedIn = !(myStatus === 'Not Signed In' || myStatus === 'Signed Out');
             const mySummary = disciplineData.mine?.summary?.[currentUser];
             const strikes = mySummary ? mySummary.strikes : 0;
+            const dayCutMonth = mySummary ? (mySummary.dayCut || 0) : 0;
             const perHalf = attRules.strikesPerHalfDay || 3;
             const lunchLeft = lunch.onLunch ? attRules.lunchMinutes - lunch.usedMin : null;
             const lunchDisabledReason = lunch.taken ? 'Lunch already marked today' : !lunch.windowOpen ? `Lunch can be marked only ${fmtClock(attRules.lunchStart)} – ${fmtClock(attRules.lunchEnd)}` : '';
@@ -5653,18 +5777,34 @@ function App() {
                     <span className="att-status-dot" style={{ background: attendanceColors[myStatus] }}></span>
                     <div>
                       <div className="att-status-label">{myStatus}</div>
-                      <div className="att-shift"><FiClock /> Shift {fmtClock(shift.start)} – {fmtClock(shift.end)} · Lunch {fmtClock(attRules.lunchStart)}–{fmtClock(attRules.lunchEnd)} ({attRules.lunchMinutes} min)</div>
+                      <div className="att-shift"><FiClock /> {offToday ? 'Week off today — signing in counts as an extra working day' : `Flexible start 9:00–10:14 AM · Lunch ${fmtClock(attRules.lunchStart)}–${fmtClock(attRules.lunchEnd)} (${attRules.lunchMinutes} min)`}</div>
                     </div>
                   </div>
                   <div className="att-metrics">
+                    {outMin !== null && !offToday && (
+                      <div className={`att-outtime ${myStatus === 'Signed Out' ? '' : leftToOut <= 0 ? 'done' : ''}`}>
+                        <span>Sign out at</span><strong>{minToClock(outMin)}</strong>
+                        {myStatus !== 'Signed Out' && <em>{leftToOut > 0 ? `in ${Math.floor(leftToOut / 60)}h ${leftToOut % 60}m` : 'you can leave ✓'}</em>}
+                      </div>
+                    )}
                     <div><span>Worked</span><strong>{times.working}</strong></div>
                     <div><span>Break</span><strong>{times.breaks}</strong></div>
                     <div className={`att-strikes ${strikes >= perHalf ? 'bad' : strikes > 0 ? 'warn' : ''}`} onClick={() => openDiscipline('mine')} title="Open my attendance record">
-                      <span>Strikes ({new Date().toLocaleDateString('en-IN', { month: 'short' })})</span><strong>{strikes}</strong>
+                      <span>Strikes ({new Date().toLocaleDateString('en-IN', { month: 'short' })})</span><strong>{strikes}{dayCutMonth ? <small className="att-cut"> · {dayCutMonth}d cut</small> : null}</strong>
                     </div>
                   </div>
                 </div>
 
+                {!offToday && !first && !signedIn && (
+                  <div className={`att-note ${nmNow > 614 ? 'att-note-bad' : 'att-note-info'}`}>
+                    🕘 {nmNow <= 614
+                      ? `Sign in by 10:14 AM for a full day. Signing in now → sign-out at ${minToClock(requiredOutMin(nmNow))}.`
+                      : nmNow <= 660 ? 'It is after 10:14 AM — signing in now cuts ¼ day (sign-out 7:15 PM).' : 'It is after 11:00 AM — signing in now cuts ½ day (sign-out 7:15 PM).'}
+                  </div>
+                )}
+                {first && cut > 0 && !offToday && (
+                  <div className="att-note att-note-warn">⏰ Signed in at {first.time.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} — {cut === 0.25 ? '¼' : '½'} day is cut today.</div>
+                )}
                 {lunch.onLunch && (
                   <div className={`lunch-meter ${lunchLeft < 0 ? 'over' : lunchLeft <= 5 ? 'ending' : ''}`}>
                     <div className="lunch-meter-text">
@@ -5682,9 +5822,9 @@ function App() {
                 {lunch.taken && !lunch.onLunch && lunch.end && (
                   <div className="att-note att-note-ok">✓ Lunch {lunch.start.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} – {lunch.end.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} ({Math.round(lunch.usedMin)} min)</div>
                 )}
-                {warnings.filter(w => !/^Lunch|^Long lunch/.test(w.text)).map(w => (
-                  <div key={w.text} className={`att-note att-note-${w.kind === 'bad' ? 'bad' : 'warn'}`}>
-                    <FiAlertTriangle /> {w.text.startsWith('Past shift end') ? `Your shift ended at ${fmtClock(shift.end)} — sign out before you leave. A forgotten sign-out is closed automatically at night and counts as a strike.` : w.text.startsWith('Late') ? `Signed in ${w.text.replace('Late ', '')} after your shift start (${fmtClock(shift.start)}) — counts as a late mark.` : w.text === 'Not signed in' ? `You haven't signed in yet — your shift started at ${fmtClock(shift.start)}.` : w.text}
+                {warnings.filter(w => /^Past sign-out|^Not signed in/.test(w.text)).map(w => (
+                  <div key={w.text} className="att-note att-note-bad">
+                    <FiAlertTriangle /> {w.text.startsWith('Past') ? `Your sign-out time was ${minToClock(outMin || 1155)} — sign out before you leave. A forgotten sign-out is closed automatically at night and counts as a strike.` : 'You have not signed in yet.'}
                   </div>
                 ))}
 
@@ -5704,6 +5844,7 @@ function App() {
                     </>
                   )}
                   <span className="att-btn-spacer"></span>
+                  <button className="btn-ghost" onClick={() => setShowSatOff(true)} title="One Saturday off per month">🗓 Saturday off{mySatOff.length ? ` (${mySatOff.filter(l => l.date.slice(0, 7) === todayKeyIST().slice(0, 7)).length ? 'used' : 'available'})` : ''}</button>
                   <button className="btn-ghost" onClick={() => openDiscipline('mine')}>My record</button>
                   <button className="btn-ghost" onClick={openMonthlyAttendance}>Monthly hours</button>
                 </div>
@@ -5718,25 +5859,25 @@ function App() {
                 {canManageAttendance && (
                   <span className="ts-actions">
                     <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('day'); }}><FiCalendar /> Attendance review &amp; leave</button>
-                    <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('team'); }}><FiShield /> Discipline &amp; shifts</button>
+                    <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); openDiscipline('team'); }}><FiShield /> Discipline</button>
                   </span>
                 )}
               </div>
               {showAttendance && (
                 <div className="team-status-grid">
-                  {activeTeam.filter(m => !m.isAdmin).map(member => {
+                  {activeTeam.filter(m => !m.isAdmin && !NO_ATTENDANCE_IDS.includes(m.id)).map(member => {
                     const memberAttendance = attendance.find(a => a.userId === member.id);
+                    const mFirst = memberAttendance ? firstInOf(memberAttendance.log) : null;
                     const status = memberAttendance?.status || 'Not Signed In';
                     const times = memberAttendance ? calculateWorkingTime(memberAttendance.log) : { working: '0h 0m 0s', breaks: '0h 0m 0s', productivity: 0 };
                     const warns = dayWarnings(member.id, memberAttendance?.log);
-                    const shift = shiftOf(member.id);
                     return (
                       <div key={member.id} className={`status-card ${warns.some(w => w.kind === 'bad') ? 'has-bad' : ''}`}>
                         <div className="status-avatar" style={{background: attendanceColors[status]}}>{member.avatar}</div>
                         <div className="status-details">
                           <strong>{member.displayName} {member.isHR ? '(HR)' : ''}</strong>
-                          <span className="status-text" style={{color: attendanceColors[status]}}>{status}</span>
-                          <span className="status-time">⏱ {times.working} · ☕ {times.breaks} · 🕘 {fmtClock(shift.start)}–{fmtClock(shift.end)}</span>
+                          <span className="status-text" style={{color: attendanceColors[status]}}>{status === 'Not Signed In' && isOffToday() ? 'Week off' : status}</span>
+                          <span className="status-time">⏱ {times.working} · ☕ {times.breaks}{mFirst ? ` · in ${mFirst.time.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })} → out ${minToClock(requiredOutMin(mFirst.min))}` : ''}</span>
                           {warns.length > 0 && (
                             <span className="status-warns">{warns.map(w => <span key={w.text} className={`warn-chip ${w.kind}`}>{w.text}</span>)}</span>
                           )}

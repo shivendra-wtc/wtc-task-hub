@@ -15,6 +15,44 @@
     </script>
   </head>
   <body>
+    <!-- Opening animation: shown the instant the app opens (before the app's code has even
+         loaded), then faded out by src/main.jsx once the app is ready. -->
+    <div id="wtc-splash" aria-hidden="true">
+      <style>
+        #wtc-splash { position: fixed; inset: 0; z-index: 99999; display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background: radial-gradient(1200px 600px at 50% 40%, #1f3566 0%, #16264a 45%, #0e1a33 100%); color: #fff;
+          font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; transition: opacity .55s ease, visibility .55s ease; }
+        #wtc-splash.hide { opacity: 0; visibility: hidden; }
+        #wtc-splash .ws-glow { position: absolute; width: 340px; height: 340px; border-radius: 50%; background: radial-gradient(circle, rgba(246,194,28,.35) 0%, rgba(246,194,28,0) 70%);
+          animation: ws-glow 2.2s ease-in-out infinite; }
+        #wtc-splash .ws-tile { position: relative; animation-fill-mode: both; background: #fff; border-radius: 22px; padding: 18px 26px; box-shadow: 0 20px 60px rgba(0,0,0,.45);
+          animation: ws-pop .9s cubic-bezier(.2,1.4,.4,1) both; }
+        #wtc-splash .ws-tile img { display: block; height: 92px; width: auto; }
+        #wtc-splash .ws-bulb { position: absolute; top: 14px; right: 20px; width: 22px; height: 22px; border-radius: 50%; background: rgba(246,194,28,.0);
+          animation: ws-bulb 1.8s ease-in-out .6s infinite; }
+        #wtc-splash h1 { color: #fff !important; font-family: inherit !important; margin: 26px 0 4px; font-size: 30px; font-weight: 800; letter-spacing: .5px; opacity: 0; animation: ws-up .6s ease .45s forwards; }
+        #wtc-splash h1 span { color: #f6c21c; }
+        #wtc-splash p.ws-sub { font-family: inherit; margin: 0; font-size: 13px; letter-spacing: 3px; text-transform: uppercase; color: rgba(255,255,255,.65); opacity: 0; animation: ws-up .6s ease .65s forwards; }
+        #wtc-splash .ws-bar { margin-top: 28px; width: 180px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; opacity: 0; animation: ws-up .4s ease .8s forwards; }
+        #wtc-splash .ws-bar i { display: block; height: 100%; width: 40%; border-radius: 4px; background: linear-gradient(90deg, #f6c21c, #ffe27a); animation: ws-load 1.1s ease-in-out infinite; }
+        #wtc-splash .ws-love { position: absolute; bottom: 34px; font-size: 13px; color: rgba(255,255,255,.75); opacity: 0; animation: ws-up .7s ease 1s forwards; letter-spacing: .3px; }
+        #wtc-splash .ws-love b { color: #fff; }
+        #wtc-splash .ws-heart { display: inline-block; color: #ff4d6d; animation: ws-beat 1s ease-in-out 1.2s infinite; }
+        @keyframes ws-pop { 0% { transform: scale(.4) rotate(-8deg); opacity: 0; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+        @keyframes ws-up { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes ws-glow { 0%,100% { transform: scale(.9); opacity: .7; } 50% { transform: scale(1.12); opacity: 1; } }
+        @keyframes ws-bulb { 0%,100% { box-shadow: 0 0 0 0 rgba(246,194,28,0); } 50% { box-shadow: 0 0 22px 10px rgba(246,194,28,.55); } }
+        @keyframes ws-load { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+        @keyframes ws-beat { 0%,100% { transform: scale(1); } 30% { transform: scale(1.3); } 60% { transform: scale(.95); } }
+        @media (prefers-reduced-motion: reduce) { #wtc-splash * { animation-duration: .01s !important; animation-iteration-count: 1 !important; } }
+      </style>
+      <div class="ws-glow"></div>
+      <div class="ws-tile"><img src="/wtc-logo-tight.png" alt="WTC"></div>
+      <h1>WTC <span>Hub</span></h1>
+      <p class="ws-sub">Write Track Creations</p>
+      <div class="ws-bar"><i></i></div>
+      <div class="ws-love">Made with <span class="ws-heart">❤</span> by <b>Shivendra</b></div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

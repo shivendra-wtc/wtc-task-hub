@@ -6,6 +6,7 @@ import {
   FiPhone, FiMessageSquare, FiRefreshCw, FiPlus, FiShield, FiSettings, FiBellOff, FiClock, FiAlertTriangle, FiTarget, FiDownload
 } from 'react-icons/fi'
 import { LuBellRing as FiBellRing } from 'react-icons/lu'
+import { parseTaskCommand, looksLikeTaskCommand, findAnswer } from './zora'
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -2528,6 +2529,165 @@ function App() {
   Object.keys(bucketed).forEach(k => bucketed[k].sort(sortByDueDate));
   const remindedTasks = boardTasks.filter(t => reminderByTask[String(t.id)] && t.status !== 'Completed' && isTaskAssignedToMe(t));
   const openCount = bucketed.delayed.length + bucketed.today.length + bucketed.upcoming.length + bucketed.hold.length;
+
+  // ============================================================
+  // ZORA — WTC Hub's assistant (see src/zora.js). Everyone can ask about rules, policies
+  // and their own day; PC, Shivendra and HR can also assign tasks by voice or text —
+  // Zora only fills the New Task form, a person always reviews it and presses Create.
+  // ============================================================
+  const canAssignZora = canManageAttendance;
+  const zoraNotes = Array.isArray(appSettings.zoraKnowledge) ? appSettings.zoraKnowledge : [];
+  const [showZora, setShowZora] = useState(false);
+  const [zoraMsgs, setZoraMsgs] = useState([]);
+  const [zoraInput, setZoraInput] = useState('');
+  const [zoraListening, setZoraListening] = useState(false);
+  const [zoraTeach, setZoraTeach] = useState(null); // { q, a } while adding a policy note
+  const zoraRecRef = useRef(null);
+  const zoraEndRef = useRef(null);
+  useEffect(() => { if (zoraEndRef.current) zoraEndRef.current.scrollIntoView({ block: 'end' }); }, [zoraMsgs, showZora]);
+
+  const zoraFirstName = String(currentUserInfo?.displayName || '').split(' ')[0];
+  const zoraSay = (text, extra = {}) => setZoraMsgs(prev => [...prev, { from: 'zora', text, at: Date.now(), ...extra }]);
+
+  const openZora = () => {
+    setShowZora(true);
+    if (zoraMsgs.length === 0) {
+      zoraSay(`Hi ${zoraFirstName || 'there'}! I'm Zora 👋 ${canAssignZora
+        ? 'Tell me a task — like “Naman, Rudra reel edit, high priority, Thursday, AG Insta” — or ask me about office rules and policies.'
+        : 'Ask me about office timings, lunch, leave, Saturday off, strikes, or your own tasks and sign-out time.'}`);
+    }
+  };
+
+  const zoraCtx = {
+    canAssign: canAssignZora,
+    mySignOut: () => {
+      if (isAdmin && !isHR) return 'You are not on attendance tracking, so you have no sign-out time.';
+      if (isOffToday()) return 'Today is a week off / holiday — if you are working, sign in and it counts as an extra working day.';
+      const first = firstInOf(myLiveLog || attendance.find(a => a.userId === currentUser)?.log);
+      if (!first) {
+        const nm = nowMinutes();
+        return nm <= 614
+          ? `You haven't signed in yet. If you sign in now, your sign-out time will be ${minToClock(requiredOutMin(nm))}. Sign in by 10:14 AM for a full day.`
+          : `You haven't signed in yet. It is past 10:14 AM, so signing in now cuts ${nm <= 660 ? '¼' : '½'} day and your sign-out time will be 7:15 PM.`;
+      }
+      const out = requiredOutMin(first.min);
+      const left = out - nowMinutes();
+      return `You signed in at ${first.time.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}, so you can sign out at ${minToClock(out)}${myStatus === 'Signed Out' ? ' (you have already signed out).' : left > 0 ? ` — ${Math.floor(left / 60)}h ${left % 60}m to go.` : ' — you can leave now ✓'}`;
+    },
+    lunchAnswer: () => {
+      const l = myLunchInfo();
+      const base = 'Lunch is 30 minutes and can be started only between 1:00 and 2:00 PM, once a day. Over 35 minutes counts as a long lunch (1 strike); if no lunch is marked by 2 PM, 30 minutes are deducted automatically.';
+      if (isAdmin && !isHR) return base;
+      if (l.onLunch) return `${base} You are on lunch now — ${Math.max(0, Math.round(30 - l.usedMin))} min left.`;
+      if (l.taken) return `${base} You have already had lunch today ✓`;
+      return base;
+    },
+    myStrikes: () => {
+      if (isAdmin && !isHR) return 'You are not on attendance tracking.';
+      const sm = disciplineData.mine?.summary?.[currentUser];
+      if (!sm || (!sm.strikes && !sm.dayCut)) return 'You have no strikes this month — clean record ✓';
+      return `This month: ${sm.strikes} strike(s)${sm.dayCut ? ` and ${sm.dayCut} day cut for late arrival` : ''}. Every 3 strikes = ½ day deduction. Open “My record” on your attendance card for details or to request a correction.`;
+    },
+    saturdayAnswer: () => {
+      const month = todayKeyIST().slice(0, 7);
+      const used = myLeaves.find(l => l.type === 'Saturday Off' && l.date.slice(0, 7) === month);
+      const base = 'Everyone can take 1 Saturday off every month. Book it yourself with the “🗓 Saturday off” button on your attendance card (you can cancel before the day).';
+      return used ? `${base} You have already booked ${new Date(used.date + 'T12:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })} this month.` : `${base} You haven't used this month's Saturday off yet.`;
+    },
+    nextHoliday: () => {
+      const t = todayKeyIST();
+      const next = holidays.map(h => ({ ...h, d: String(h.date).slice(0, 10) })).filter(h => h.d >= t).sort((a, b) => a.d.localeCompare(b.d))[0];
+      return next ? `The next holiday is ${next.name} on ${new Date(next.d + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}. Sundays are always the weekly off.` : 'No upcoming holiday is listed yet. Sundays are always the weekly off — check the Holiday Calendar for updates.';
+    },
+    myTasks: () => {
+      const mine = tasks.filter(t => isTaskAssignedToMe(t) && t.status !== 'Completed');
+      if (!mine.length) return 'You have no pending tasks right now 🎉';
+      const b = { delayed: 0, today: 0, upcoming: 0, hold: 0 };
+      mine.forEach(t => { const k = bucketOf(t); if (b[k] !== undefined) b[k]++; });
+      const top = mine.filter(t => bucketOf(t) === 'delayed' || bucketOf(t) === 'today').slice(0, 3).map(t => `• ${t.taskDetails}`).join('\n');
+      return `You have ${mine.length} pending task(s): ${b.delayed} delayed, ${b.today} due today, ${b.upcoming} upcoming${b.hold ? `, ${b.hold} on hold` : ''}.${top ? `\nStart with:\n${top}` : ''}`;
+    },
+    myTargets: () => {
+      const mine = targets.filter(t => t.ownerId === currentUser && t.status !== 'Cancelled');
+      const base = 'Open “Targets” at the top to set your own targets and update progress. PC, Shivendra and HR can also assign targets.';
+      if (!mine.length) return `${base} You have no targets yet.`;
+      return `${base}\n` + mine.slice(0, 4).map(t => `• ${t.title}: ${t.achieved}/${t.target} ${t.unit} (${targetHealth(t).label})`).join('\n');
+    }
+  };
+
+  const zoraFillTaskForm = (r) => {
+    setSelectedAssignees(r.assignees);
+    setSelectedChannels(r.channels);
+    setNewTask(prev => ({ ...prev, taskType: 'General', taskDetails: r.taskDetails, priority: r.priority, targetDate: r.targetDate, category: r.category || prev.category }));
+    setShowZora(false);
+    setShowNewTaskForm(true);
+  };
+
+  const zoraHandle = (raw) => {
+    const text = String(raw || '').trim();
+    if (!text) return;
+    setZoraMsgs(prev => [...prev, { from: 'me', text, at: Date.now() }]);
+    setZoraInput('');
+    if (canAssignZora && looksLikeTaskCommand(text, activeTeam)) {
+      const r = parseTaskCommand(text, { team: activeTeam, channels: allChannelOptions.filter(c => c !== 'Other'), today: new Date(), me: currentUserInfo?.name });
+      const miss = r.missing.map(x => ({ person: 'who it is for', task: 'what the task is', date: 'the due date' })[x]);
+      zoraSay(miss.length ? `I got most of it — please add ${miss.join(' and ')} in the form.` : 'Here is the task. Check it and press “Review & create”.', { card: r });
+      return;
+    }
+    const hit = findAnswer(text, zoraNotes);
+    if (hit && hit.private) {
+      zoraSay("I'm Zora, WTC Hub's assistant — I help with tasks, office rules and policies. For anything about the app itself or access, please speak to PC or Shivendra.");
+      return;
+    }
+    if (hit) {
+      const a = hit.item.a;
+      zoraSay(typeof a === 'function' ? a(zoraCtx) : a);
+      return;
+    }
+    if (!canAssignZora && /\b(assign|task de|task do)\b/i.test(text)) {
+      zoraSay('Assigning tasks through Zora is for PC, Shivendra and HR. You can create a task with “New Task” at the top.');
+      return;
+    }
+    zoraSay("I don't have an answer for that yet. Please check with HR (Pari) — and HR can teach me the answer for everyone.");
+  };
+
+  const zoraMic = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { zoraSay('Voice is not available in this browser — please use the WTC Hub app in Chrome or Edge, or type instead.'); return; }
+    if (zoraListening && zoraRecRef.current) { try { zoraRecRef.current.stop(); } catch (e) {} return; }
+    const rec = new SR();
+    rec.lang = 'en-IN';
+    rec.interimResults = true;
+    rec.continuous = false;
+    let finalText = '';
+    rec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      setZoraInput((finalText + ' ' + interim).trim());
+    };
+    rec.onerror = (e) => {
+      setZoraListening(false);
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') zoraSay('Please allow the microphone for WTC Hub (🔒 next to the address → Microphone → Allow), then tap 🎤 again.');
+      else if (e.error === 'no-speech') zoraSay("I didn't hear anything — tap 🎤 and speak again.");
+    };
+    rec.onend = () => {
+      setZoraListening(false);
+      zoraRecRef.current = null;
+      if (finalText.trim()) zoraHandle(finalText);
+    };
+    zoraRecRef.current = rec;
+    setZoraListening(true);
+    try { rec.start(); } catch (e) { setZoraListening(false); }
+  };
+
+  const saveZoraNotes = (list) => {
+    setAppSettings(prev => { const next = { ...prev, zoraKnowledge: list }; cacheSet('settings', next); return next; });
+    fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveSetting', key: 'zoraKnowledge', value: list, userId: currentUser }) }).catch(() => {});
+  };
 
   const handleAddTask = async () => {
     if (selectedAssignees.length === 0 || !newTask.taskDetails) {
@@ -6414,6 +6574,75 @@ function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ZORA */}
+      {currentUserInfo && !showZora && (
+        <button className="zora-fab" onClick={openZora} title="Ask Zora">
+          <span className="zora-orb">✦</span><span className="zora-fab-label">Zora</span>
+        </button>
+      )}
+      {showZora && (
+        <div className="zora-panel" role="dialog" aria-label="Zora assistant">
+          <div className="zora-head">
+            <span className="zora-orb">✦</span>
+            <div className="zora-title"><strong>Zora</strong><span>{canAssignZora ? 'Tasks · rules · policies' : 'Rules · policies · your day'}</span></div>
+            {canAssignZora && <button className="zora-head-btn" onClick={() => setZoraTeach(zoraTeach ? null : { q: '', a: '' })} title="Teach Zora a policy answer">{zoraTeach ? 'Back' : 'Teach'}</button>}
+            <button className="zora-head-btn" onClick={() => setShowZora(false)} aria-label="Close"><FiX /></button>
+          </div>
+
+          {zoraTeach ? (
+            <div className="zora-teach">
+              <p className="tm-hint">Add a policy answer for the whole team. Zora replies with it when someone asks something similar.</p>
+              <input type="text" placeholder="Question, e.g. What is the dress code?" value={zoraTeach.q} onChange={(e) => setZoraTeach({ ...zoraTeach, q: e.target.value })} />
+              <textarea rows="3" placeholder="Answer" value={zoraTeach.a} onChange={(e) => setZoraTeach({ ...zoraTeach, a: e.target.value })} />
+              <button className="btn-success" onClick={() => {
+                if (!zoraTeach.q.trim() || !zoraTeach.a.trim()) { alert('Write both the question and the answer.'); return; }
+                saveZoraNotes([...zoraNotes, { q: zoraTeach.q.trim(), a: zoraTeach.a.trim(), by: currentUserInfo?.name, at: new Date().toISOString() }]);
+                setZoraTeach({ q: '', a: '' });
+                pushNotif('✦ Zora learned a new answer.');
+              }}>Save answer</button>
+              <div className="zora-notes">
+                {zoraNotes.length === 0 ? <p className="empty-text">No custom answers yet.</p> : zoraNotes.map((n, i) => (
+                  <div key={i} className="zora-note">
+                    <div><strong>{n.q}</strong><p>{n.a}</p></div>
+                    <button className="btn-ghost tg-del" onClick={() => { if (window.confirm('Remove this answer?')) saveZoraNotes(zoraNotes.filter((_, j) => j !== i)); }}><FiTrash2 /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="zora-msgs">
+                {zoraMsgs.map((m, i) => (
+                  <div key={i} className={`zora-msg ${m.from}`}>
+                    <div className="zora-bubble">{m.text}</div>
+                    {m.card && (
+                      <div className="zora-card">
+                        <div><span>For</span><strong>{m.card.assignees.length ? m.card.assignees.join(', ') : '— add in form'}</strong></div>
+                        <div><span>Task</span><strong>{m.card.taskDetails || '— add in form'}</strong></div>
+                        <div><span>Priority</span><strong className={`zp-${m.card.priority.toLowerCase()}`}>{m.card.priority}</strong></div>
+                        <div><span>Due</span><strong>{m.card.targetDate ? new Date(m.card.targetDate + 'T12:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : '— add in form'}</strong></div>
+                        {m.card.channels.length > 0 && <div><span>Channel</span><strong>{m.card.channels.join(', ')}</strong></div>}
+                        <button className="btn-success" onClick={() => zoraFillTaskForm(m.card)}>Review &amp; create →</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div ref={zoraEndRef}></div>
+              </div>
+              <div className="zora-chips">
+                {(canAssignZora ? ['How do I assign a task?', 'Office timings', 'Lunch rules', 'Leave policy'] : ['When can I sign out?', 'My pending tasks', 'My strikes', 'Saturday off', 'Lunch rules', 'Next holiday'])
+                  .map(c => <button key={c} onClick={() => zoraHandle(c)}>{c}</button>)}
+              </div>
+              <form className="zora-input" onSubmit={(e) => { e.preventDefault(); zoraHandle(zoraInput); }}>
+                <input type="text" value={zoraInput} onChange={(e) => setZoraInput(e.target.value)} placeholder={zoraListening ? 'Listening…' : canAssignZora ? 'Say or type a task, or ask a question…' : 'Ask Zora…'} />
+                <button type="button" className={`zora-mic ${zoraListening ? 'on' : ''}`} onClick={zoraMic} title={zoraListening ? 'Stop' : 'Speak'}>🎤</button>
+                <button type="submit" className="zora-send" disabled={!zoraInput.trim()}>➤</button>
+              </form>
+            </>
+          )}
         </div>
       )}
 

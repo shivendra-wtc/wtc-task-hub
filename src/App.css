@@ -4444,3 +4444,52 @@ input.switch:checked::after { transform: translateX(18px); }
 .cc-legend-block { display: inline-block; font-size: 9px; font-weight: 800; border-radius: 4px; padding: 1px 5px; margin-right: 2px; }
 .cc-legend-block.long { background: #E53935; color: #fff; }
 .cc-legend-block.short { background: #fde8d7; color: #c2410c; border-left: 3px solid #F97316; }
+
+/* =====================  ZORA  ===================== */
+.zora-fab { position: fixed; right: 22px; bottom: 22px; z-index: 950; display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, #16264a, #2d4a8a); color: #fff; padding: 10px 16px 10px 10px; border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(22,38,74,0.35), 0 0 0 3px rgba(246,194,28,0.35); font-weight: 800; font-size: 14px; transition: transform .2s; }
+.zora-fab:hover { transform: translateY(-2px); }
+.zora-orb { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: #16264a;
+  background: radial-gradient(circle at 35% 30%, #fff6c8, #f6c21c 60%, #e0a800); box-shadow: 0 0 14px rgba(246,194,28,0.7); animation: zora-breathe 3s ease-in-out infinite; flex-shrink: 0; }
+@keyframes zora-breathe { 0%,100% { box-shadow: 0 0 8px rgba(246,194,28,0.5); } 50% { box-shadow: 0 0 18px rgba(246,194,28,0.9); } }
+.zora-panel { position: fixed; right: 22px; bottom: 22px; z-index: 990; width: 390px; max-width: calc(100vw - 24px); height: min(600px, calc(100vh - 110px));
+  background: #fff; border-radius: 18px; box-shadow: 0 24px 60px rgba(14,26,51,0.35); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--line);
+  animation: zora-in .25s ease; }
+@keyframes zora-in { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.zora-head { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 14px; background: linear-gradient(135deg, #16264a, #24407a); color: #fff; }
+.zora-title { flex: 1; display: flex; flex-direction: column; text-align: left; }
+.zora-title strong { font-size: 15px; }
+.zora-title span { font-size: 11.5px; color: rgba(255,255,255,.7); }
+.zora-head-btn { background: rgba(255,255,255,.12); border: none; color: #fff; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-weight: 700; font-size: 12px; display: inline-flex; align-items: center; }
+.zora-head-btn:hover { background: rgba(255,255,255,.22); }
+.zora-msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #f7f9fc; }
+.zora-msg { display: flex; flex-direction: column; align-items: flex-start; max-width: 88%; text-align: left; }
+.zora-msg.me { align-self: flex-end; align-items: flex-end; }
+.zora-bubble { padding: 9px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.45; white-space: pre-line; background: #fff; border: 1px solid var(--line); color: var(--ink); border-top-left-radius: 4px; }
+.zora-msg.me .zora-bubble { background: #16264a; color: #fff; border-color: #16264a; border-top-left-radius: 14px; border-top-right-radius: 4px; }
+.zora-card { margin-top: 6px; background: #fff; border: 1px solid #c7d7fb; border-left: 4px solid #f6c21c; border-radius: 12px; padding: 10px 12px; width: 280px; max-width: 100%; display: flex; flex-direction: column; gap: 5px; }
+.zora-card div { display: flex; gap: 8px; font-size: 12.5px; }
+.zora-card span { width: 60px; color: var(--ink-3); flex-shrink: 0; }
+.zora-card strong { color: var(--ink); }
+.zp-high { color: var(--bad) !important; } .zp-low { color: var(--ok) !important; }
+.zora-card .btn-success { margin-top: 6px; }
+.zora-chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 12px; border-top: 1px solid var(--line); scrollbar-width: none; background: #fff; }
+.zora-chips::-webkit-scrollbar { display: none; }
+.zora-chips button { flex-shrink: 0; border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 5px 11px; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.zora-chips button:hover { border-color: #16264a; color: #16264a; }
+.zora-input { display: flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); background: #fff; }
+.zora-input input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 999px; padding: 9px 14px; font: inherit; font-size: 13.5px; }
+.zora-mic, .zora-send { width: 38px; height: 38px; border-radius: 50%; border: none; cursor: pointer; font-size: 16px; flex-shrink: 0; }
+.zora-mic { background: #eef2f9; }
+.zora-mic.on { background: #e11d48; color: #fff; animation: zora-pulse 1.1s ease-out infinite; }
+@keyframes zora-pulse { 0% { box-shadow: 0 0 0 0 rgba(225,29,72,.5); } 100% { box-shadow: 0 0 0 12px rgba(225,29,72,0); } }
+.zora-send { background: #16264a; color: #fff; }
+.zora-send:disabled { opacity: .4; cursor: default; }
+.zora-teach { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; text-align: left; }
+.zora-teach input, .zora-teach textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; }
+.zora-notes { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.zora-note { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.zora-note div { flex: 1; font-size: 12.5px; }
+.zora-note p { margin: 3px 0 0; color: var(--ink-2); }
+@media (max-width: 640px) { .zora-fab-label { display: none; } .zora-fab { padding: 8px; right: 14px; bottom: 14px; } .zora-panel { right: 8px; bottom: 8px; height: calc(100vh - 80px); } }

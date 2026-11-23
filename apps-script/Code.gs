@@ -2912,8 +2912,14 @@ function getSettings() {
 }
 
 function saveSetting(key, value, userId) {
-  if (APP_ADMIN_IDS_.indexOf(userId) === -1) return jsonResponse({status: "error", message: "Only PC or Shivendra can change this"});
-  if (["contentCalendarAccess"].indexOf(key) === -1) return jsonResponse({status: "error", message: "Unknown setting"});
+  if (["contentCalendarAccess", "zoraKnowledge"].indexOf(key) === -1) return jsonResponse({status: "error", message: "Unknown setting"});
+  // Content Calendar access: PC/Shivendra. Zora's policy answers: PC/Shivendra/HR.
+  const allowed = key === "zoraKnowledge" ? ATT_MANAGER_IDS_ : APP_ADMIN_IDS_;
+  if (allowed.indexOf(userId) === -1) return jsonResponse({status: "error", message: "Not allowed"});
+  if (key === "zoraKnowledge") {
+    if (!Array.isArray(value)) return jsonResponse({status: "error", message: "Bad value"});
+    value = value.slice(0, 200).map(n => ({ q: String(n.q || "").slice(0, 300), a: String(n.a || "").slice(0, 2000), by: String(n.by || ""), at: String(n.at || "") }));
+  }
   const sheet = getSettingsSheet_();
   const rows = sheet.getDataRange().getValues();
   const json = JSON.stringify(value);

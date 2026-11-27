@@ -910,18 +910,25 @@ function App() {
     return !!record && WORK_STATUSES.includes(record.status);
   };
 
-  // FIX — louder and more noticeable: volume maxed out (was 0.5) and a quick double-beep
-  // instead of a single short beep, so it actually cuts through when someone's not looking.
+  // v20 — NOTIFICATION sound made clearly noticeable: a bright bell "ping-ping-PING"
+  // (G6, G6, C7 with a bell overtone) through the loud output chain, ~0.9 s long.
+  // The old version was a tiny wav click that many phones barely played.
   const playNotifSound = () => {
     try {
-      const beep = () => {
+      const ctx = getRingCtx_();
+      if (!ctx) throw new Error('no-ctx');
+      const out = loudOut_(ctx);
+      const t0 = ctx.currentTime + 0.02;
+      bellNote_(ctx, out, 1567.98, t0, 0.28, 0.9);
+      bellNote_(ctx, out, 1567.98, t0 + 0.17, 0.28, 0.9);
+      bellNote_(ctx, out, 2093.0, t0 + 0.36, 0.6, 1.0);
+    } catch (e) {
+      try {
         const audio = new Audio('data:audio/wav;base64,UklGRlwFAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YTgFAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGnt/yv2wiBTGH0PLTgjMGHm7A7+OZURE');
         audio.volume = 1.0;
-        audio.play().catch(e => {});
-      };
-      beep();
-      setTimeout(beep, 220);
-    } catch(e) {}
+        audio.play().catch(() => {});
+      } catch (e2) {}
+    }
   };
 
   // FIX #9 — Desktop/browser notification (foreground or backgrounded tab, same browser session).
@@ -1063,6 +1070,31 @@ function App() {
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     return ctx;
   };
+  // v20 — LOUD output chain shared by every short alert sound: a compressor squeezes the
+  // peaks so the whole sound can be pushed much louder (makeup gain) without harsh
+  // clipping. This is what makes reminders/notifications cut through on phone speakers.
+  const loudOut_ = (ctx) => {
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 4; comp.ratio.value = 10;
+    comp.attack.value = 0.002; comp.release.value = 0.12;
+    const makeup = ctx.createGain();
+    makeup.gain.value = 1.7;
+    comp.connect(makeup); makeup.connect(ctx.destination);
+    return comp;
+  };
+  // A bell-like note: fundamental + quieter 2.76x overtone, fast attack, ringing decay.
+  const bellNote_ = (ctx, out, freq, at, dur, peak) => {
+    [[freq, 'triangle', peak], [freq * 2.76, 'sine', peak * 0.35]].forEach(([f, type, g]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type; osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.001, at);
+      gain.gain.exponentialRampToValueAtTime(g, at + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + dur);
+      osc.connect(gain); gain.connect(out);
+      osc.start(at); osc.stop(at + dur + 0.03);
+    });
+  };
   useEffect(() => {
     const unlockAudio = () => {
       if (audioUnlockedRef.current) return;
@@ -1137,28 +1169,37 @@ function App() {
     if (incomingCallTimeoutRef.current) { clearTimeout(incomingCallTimeoutRef.current); incomingCallTimeoutRef.current = null; }
   };
 
-  // TASK REMINDER sound — a "knock-knock" woodblock (two short low square-wave knocks,
-  // twice). Different from the call ring, the notification ding and the meeting bell.
+  // TASK REMINDER sound (v20) — still the "knock-knock" so people recognise it, but now
+  // LOUD and lasting a full 4 seconds: five rounds of a double knock, each knock with a
+  // punchy low body plus a bright click on top, all through the loud output chain.
   const playReminderTone = () => {
     try {
       const ctx = getRingCtx_();
       if (!ctx) return;
-      const knock = (start, freq) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        const filter = ctx.createBiquadFilter();
-        osc.type = 'square';
-        osc.frequency.value = freq;
-        filter.type = 'lowpass';
-        filter.frequency.value = 1400;
-        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + start + 0.005);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.11);
-        osc.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
-        osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + 0.13);
+      const out = loudOut_(ctx);
+      const t0 = ctx.currentTime + 0.03;
+      const knock = (at, freq) => {
+        [[freq, 'square', 0.95, 0.14, 1800], [freq * 3, 'triangle', 0.5, 0.07, 6000]].forEach(([f, type, peak, len, cut]) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const filter = ctx.createBiquadFilter();
+          osc.type = type; osc.frequency.value = f;
+          filter.type = 'lowpass'; filter.frequency.value = cut;
+          gain.gain.setValueAtTime(0.001, at);
+          gain.gain.exponentialRampToValueAtTime(peak, at + 0.004);
+          gain.gain.exponentialRampToValueAtTime(0.001, at + len);
+          osc.connect(filter); filter.connect(gain); gain.connect(out);
+          osc.start(at); osc.stop(at + len + 0.03);
+        });
       };
-      knock(0, 520); knock(0.16, 470); knock(0.55, 520); knock(0.71, 470);
+      // 5 rounds, 0.86 s apart = a full 4 s of knocking
+      for (let r = 0; r < 5; r++) {
+        const at = t0 + r * 0.86;
+        knock(at, 560);
+        knock(at + 0.17, 500);
+        knock(at + 0.34, 560);
+      }
+      try { if (navigator.vibrate) navigator.vibrate([180, 80, 180, 420, 180, 80, 180, 420, 180, 80, 180]); } catch (e) {}
     } catch (e) {}
   };
 
@@ -1167,15 +1208,16 @@ function App() {
     try {
       const ctx = getRingCtx_();
       if (!ctx) return;
+      const out = loudOut_(ctx);
       [[784, 0], [587.33, 0.22]].forEach(([freq, start]) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
         osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.8, ctx.currentTime + start + 0.02);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.35);
-        osc.connect(gain); gain.connect(ctx.destination);
+        osc.connect(gain); gain.connect(out);
         osc.start(ctx.currentTime + start);
         osc.stop(ctx.currentTime + start + 0.4);
       });
@@ -2552,7 +2594,7 @@ function App() {
   const openZora = () => {
     setShowZora(true);
     if (zoraMsgs.length === 0) {
-      zoraSay(`Hi ${zoraFirstName || 'there'}! I'm Zora 👋 ${canAssignZora
+      zoraSay(`Hi ${zoraFirstName || 'there'}! I'm Zora 👋 — still in training 🌱, learning a little more every day. ${canAssignZora
         ? 'Tell me a task — like “Naman, Rudra reel edit, high priority, Thursday, AG Insta” — or ask me about office rules and policies.'
         : 'Ask me about office timings, lunch, leave, Saturday off, strikes, or your own tasks and sign-out time.'}`);
     }
@@ -2819,19 +2861,11 @@ function App() {
     try {
       const ctx = getRingCtx_();
       if (!ctx) return;
-      [523.25, 659.25, 783.99].forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        const start = idx * 0.09;
-        gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
-        gain.gain.exponentialRampToValueAtTime(0.35, ctx.currentTime + start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.25);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + 0.3);
+      // v20 — louder: C6 → E6 → G6 → C7 sparkle arpeggio through the loud output chain.
+      const out = loudOut_(ctx);
+      const t0 = ctx.currentTime + 0.02;
+      [1046.5, 1318.51, 1567.98, 2093.0].forEach((freq, idx) => {
+        bellNote_(ctx, out, freq, t0 + idx * 0.11, idx === 3 ? 0.7 : 0.3, 0.9);
       });
     } catch (e) {}
   };
@@ -6580,16 +6614,27 @@ function App() {
       {/* ZORA */}
       {currentUserInfo && !showZora && (
         <button className="zora-fab" onClick={openZora} title="Ask Zora">
-          <span className="zora-orb">✦</span><span className="zora-fab-label">Zora</span>
+          <span className="zora-orb">✦</span><span className="zora-fab-label">Zora</span><span className="zora-beta-tag">BETA</span>
         </button>
       )}
       {showZora && (
         <div className="zora-panel" role="dialog" aria-label="Zora assistant">
           <div className="zora-head">
             <span className="zora-orb">✦</span>
-            <div className="zora-title"><strong>Zora</strong><span>{canAssignZora ? 'Tasks · rules · policies' : 'Rules · policies · your day'}</span></div>
+            <div className="zora-title"><strong>Zora <span className="zora-beta-pill">🌱 In training</span></strong><span>{canAssignZora ? 'Tasks · rules · policies' : 'Rules · policies · your day'}</span></div>
             {canAssignZora && <button className="zora-head-btn" onClick={() => setZoraTeach(zoraTeach ? null : { q: '', a: '' })} title="Teach Zora a policy answer">{zoraTeach ? 'Back' : 'Teach'}</button>}
             <button className="zora-head-btn" onClick={() => setShowZora(false)} aria-label="Close"><FiX /></button>
+          </div>
+
+          <div className="zora-dev" role="note">
+            <div className="zora-dev-row">
+              <span className="zora-dev-icon" aria-hidden="true">🛠️</span>
+              <div className="zora-dev-text">
+                <strong>Zora is under development</strong>
+                <span>She's still learning — a few answers may be simple for now. Smarter Zora coming soon ✨</span>
+              </div>
+            </div>
+            <div className="zora-dev-bar" aria-hidden="true"><i></i></div>
           </div>
 
           {zoraTeach ? (

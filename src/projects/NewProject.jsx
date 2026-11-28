@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { BUILTIN_TEMPLATES, PROJECT_ICONS, PROJECT_COLORS, FORMATS, EFFORTS, suggestAssignee } from './templates';
 import { addDaysYmd, diffDays, fmtShort, todayYmd, parseYmd } from './pmUtils';
+import DateField from './DateField';
 
 // Turns an existing project into a reusable template definition.
 export function projectToDefinition(project, tasks, team) {
@@ -23,6 +24,7 @@ export function projectToDefinition(project, tasks, team) {
   };
   return {
     keyDateLabel: project.keyDateLabel || 'Key date',
+    milestones: (project.milestones || []).map(m => ({ id: m.id, label: m.label, offset: diffDays(key, m.date) })),
     phases: (project.phases || []).map(p => ({ id: p.id, name: p.name, color: p.color })),
     kpis: (project.kpis || []).map(k => ({ name: k.name, unit: k.unit || '' })),
     tasks: ordered.map(t => ({
@@ -36,7 +38,7 @@ export function projectToDefinition(project, tasks, team) {
 function templateFromCustom(c) {
   const d = c.definition || {};
   return { id: c.id, name: c.name, icon: c.icon || '📁', color: c.color || '#2563eb', accent: '#e8eefc', tagline: c.description || 'Saved from a real project',
-    description: c.description || '', keyDateLabel: d.keyDateLabel || 'Key date', kpis: d.kpis || [], phases: d.phases || [], tasks: d.tasks || [], custom: true, createdBy: c.createdBy };
+    description: c.description || '', keyDateLabel: d.keyDateLabel || 'Key date', milestones: d.milestones || [], kpis: d.kpis || [], phases: d.phases || [], tasks: d.tasks || [], custom: true, createdBy: c.createdBy };
 }
 
 function spanOf(tpl) {
@@ -86,7 +88,8 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
     setTpl(t);
     setForm({
       name: '', icon: t.icon, color: t.color, brand: brands[0] || '', keyDate: key, keyDateLabel: t.keyDateLabel || 'Key date',
-      start: t.tasks.length ? addDaysYmd(key, Math.min(...t.tasks.map(x => x.s))) : todayYmd(),
+      milestones: (t.milestones || []).map(m => ({ id: m.id, label: m.label, date: addDaysYmd(key, m.offset), offset: m.offset })),
+      start: '', startTouched: false,
       description: '', leadId: me.id, members: [], kpis: (t.kpis || []).map(k => ({ ...k, target: '' })), qc: true, autoCalendar: true,
     });
     setPreview(null);
@@ -106,10 +109,22 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
   }, [form, activeTeam]);
   const leadName = form ? (activeTeam.find(m => m.id === form.leadId) || {}).name || me.name : me.name;
 
+  // A task follows its key date: the main one, or a milestone such as “Cover reveal”.
+  const anchorBase = (f, anchor) => {
+    const m = anchor && (f.milestones || []).find(x => x.id === anchor);
+    const tm = anchor && (tpl.milestones || []).find(x => x.id === anchor);
+    return m && tm ? { date: m.date, offset: tm.offset } : { date: f.keyDate, offset: 0 };
+  };
+  const datesFor = (f, t) => { const b = anchorBase(f, t.anchor); return { start: addDaysYmd(b.date, t.s - b.offset), due: addDaysYmd(b.date, t.d - b.offset) }; };
+  const autoStart = (f) => {
+    if (!tpl || !tpl.tasks.length || !f.keyDate) return todayYmd();
+    return tpl.tasks.map(t => datesFor(f, t).start).sort()[0];
+  };
+  const startShown = form ? (form.startTouched && form.start ? form.start : autoStart(form)) : '';
   const buildPlan = () => {
     const rows = tpl.tasks.map((t, i) => ({
-      key: 'k' + i, title: t.t, phase: t.ph || (tpl.phases[0] && tpl.phases[0].id), s: t.s, d: t.d,
-      start: addDaysYmd(form.keyDate, t.s), due: addDaysYmd(form.keyDate, t.d), effort: t.e || 'M', format: t.fmt || '',
+      key: 'k' + i, title: t.t, phase: t.ph || (tpl.phases[0] && tpl.phases[0].id), s: t.s, d: t.d, anchor: t.anchor || '',
+      ...datesFor(form, t), effort: t.e || 'M', format: t.fmt || '',
       channel: t.ch || '', priority: t.pr || 'Medium', deps: (t.dep || []).map(j => 'k' + j), assignee: suggestAssignee(t.role, people, leadName), role: t.role,
     }));
     setPlan(rows);
@@ -118,18 +133,31 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
   const goStep3 = () => {
     if (!form.name.trim()) { setErr('Give the project a name.'); return; }
     if (!form.keyDate) { setErr(`Pick the ${form.keyDateLabel.toLowerCase()}.`); return; }
+    const badM = (form.milestones || []).find(m => !m.label.trim() || !m.date);
+    if (badM) { setErr('Every key date needs a name and a date (or remove it).'); return; }
     setErr('');
     buildPlan();
     setStep(3);
   };
 
-  // Moving the key date re-flows every task date (only on the plan step).
+  // Moving the main key date moves the tasks that follow it (on the plan step).
   const setKeyDate = (v) => {
     if (!v) return;
     const shift = form.keyDate ? diffDays(form.keyDate, v) : 0;
-    setForm(f => ({ ...f, keyDate: v, start: f.start ? addDaysYmd(f.start, shift) : f.start }));
-    if (step === 3) setPlan(p => p.map(r => ({ ...r, start: addDaysYmd(r.start, shift), due: addDaysYmd(r.due, shift) })));
+    setForm(f => ({ ...f, keyDate: v }));
+    if (step === 3 && shift) setPlan(p => p.map(r => (r.anchor ? r : { ...r, start: addDaysYmd(r.start, shift), due: addDaysYmd(r.due, shift) })));
   };
+  // Moving a milestone (e.g. Cover reveal) moves only the tasks that follow it.
+  const setMilestone = (id, patch) => {
+    const old = (form.milestones || []).find(m => m.id === id);
+    setForm(f => ({ ...f, milestones: f.milestones.map(m => (m.id === id ? { ...m, ...patch } : m)) }));
+    if (step === 3 && patch.date && old && old.date) {
+      const shift = diffDays(old.date, patch.date);
+      if (shift) setPlan(p => p.map(r => (r.anchor === id ? { ...r, start: addDaysYmd(r.start, shift), due: addDaysYmd(r.due, shift) } : r)));
+    }
+  };
+  const addMilestone = () => setForm(f => ({ ...f, milestones: [...(f.milestones || []), { id: 'm' + Date.now().toString(36), label: '', date: f.keyDate, offset: null }] }));
+  const removeMilestone = (id) => { setForm(f => ({ ...f, milestones: f.milestones.filter(m => m.id !== id) })); setPlan(p => p.map(r => (r.anchor === id ? { ...r, anchor: '' } : r))); };
 
   const updRow = (key, patch) => setPlan(p => p.map(r => (r.key === key ? { ...r, ...patch } : r)));
   const addRow = (phase) => setPlan(p => [...p, { key: 'n' + Date.now(), title: '', phase, start: form.keyDate, due: form.keyDate, effort: 'M', format: '', channel: '', priority: 'Medium', deps: [], assignee: leadName }]);
@@ -143,7 +171,9 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
     const id = 'p' + Date.now().toString(36);
     const project = {
       id, name: form.name.trim(), icon: form.icon, color: form.color, brand: form.brand, template: tpl.copiedFrom ? 'Copy of ' + tpl.copiedFrom : tpl.name,
-      start: form.start, keyDate: form.keyDate, keyDateLabel: form.keyDateLabel, leadId: form.leadId,
+      start: rows.length ? rows.reduce((m, r) => (r.start < m ? r.start : m), rows[0].start) < startShown ? rows.reduce((m, r) => (r.start < m ? r.start : m), rows[0].start) : startShown : startShown,
+      keyDate: form.keyDate, keyDateLabel: form.keyDateLabel, leadId: form.leadId,
+      milestones: (form.milestones || []).filter(m => m.label.trim() && m.date).map(m => ({ id: m.id, label: m.label.trim(), date: m.date })),
       members: form.members.filter(m => m.id !== form.leadId), description: form.description.trim(),
       phases: tpl.phases, kpis: form.kpis.filter(k => k.name.trim()).map((k, i) => ({ id: 'k' + i, name: k.name.trim(), unit: k.unit || '', target: Number(k.target) || 0, history: [] })),
       brief: { objective: form.description.trim() }, links: [], settings: { qc: form.qc, autoCalendar: form.autoCalendar },
@@ -284,15 +314,27 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
               <div className="np-colors">{PROJECT_COLORS.map(c => <button key={c} type="button" aria-label={c} className={form.color === c ? 'on' : ''} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} />)}</div>
             </div>
           </div>
+          <div className="np-field">Key dates <small>the plan is built backwards from these — add as many as the project needs</small>
+            <div className="np-keydates">
+              <div className="np-kd main">
+                <span className="np-kd-tag">Main</span>
+                <input className="np-kd-name" value={form.keyDateLabel} onChange={e => setForm({ ...form, keyDateLabel: e.target.value })} aria-label="Key date name" placeholder="e.g. Launch date" />
+                <DateField value={form.keyDate} onChange={setKeyDate} label={form.keyDateLabel} />
+              </div>
+              {(form.milestones || []).map(m => (
+                <div key={m.id} className="np-kd">
+                  <span className="np-kd-tag">◆</span>
+                  <input className="np-kd-name" value={m.label} onChange={e => setMilestone(m.id, { label: e.target.value })} aria-label="Key date name" placeholder="e.g. Cover reveal" />
+                  <DateField value={m.date} onChange={v => setMilestone(m.id, { date: v })} label={m.label || 'Key date'} />
+                  <button type="button" className="pm-x" onClick={() => removeMilestone(m.id)} aria-label={'Remove ' + (m.label || 'key date')}>✕</button>
+                </div>
+              ))}
+              <button type="button" className="pm-btn ghost sm np-kd-add" onClick={addMilestone}>+ Add key date</button>
+            </div>
+          </div>
           <div className="np-row">
-            <label className="np-field">{form.keyDateLabel}
-              <input type="date" value={form.keyDate} onChange={e => setKeyDate(e.target.value)} />
-            </label>
-            <label className="np-field">Starts
-              <input type="date" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} />
-            </label>
-            <label className="np-field">Key date name
-              <input value={form.keyDateLabel} onChange={e => setForm({ ...form, keyDateLabel: e.target.value })} />
+            <label className="np-field">Project starts <small>{form.startTouched ? 'set by you' : 'automatic — first task date'}</small>
+              <DateField value={startShown} onChange={v => setForm({ ...form, start: v, startTouched: true })} label="Project start" />
             </label>
           </div>
           <label className="np-field">Goal (one line everyone should know)
@@ -305,7 +347,7 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
               </select>
             </label>
           </div>
-          <div className="np-field">Team <small>tap to add · choose Member (works on tasks) or Viewer (sees progress)</small>
+          <div className="np-field">Team <small>tap to add · Co-lead (helps run the project) · Member (works on tasks) · Viewer (sees progress)</small>
             <div className="np-people">
               {activeTeam.filter(m => m.id !== form.leadId).map(m => {
                 const sel = form.members.find(x => x.id === m.id);
@@ -314,7 +356,8 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
                     <button type="button" onClick={() => toggleMember(m.id)}><span className="pm-av">{(m.avatar || m.name.slice(0, 2)).slice(0, 2)}</span><span><b>{m.name}</b><small>{m.role}</small></span></button>
                     {sel && (
                       <div className="np-role">
-                        <button type="button" className={sel.role !== 'viewer' ? 'on' : ''} onClick={() => setMemberRole(m.id, 'member')}>Member</button>
+                        <button type="button" className={sel.role === 'colead' ? 'on' : ''} onClick={() => setMemberRole(m.id, 'colead')}>Co-lead</button>
+                        <button type="button" className={sel.role === 'member' || !sel.role ? 'on' : ''} onClick={() => setMemberRole(m.id, 'member')}>Member</button>
                         <button type="button" className={sel.role === 'viewer' ? 'on' : ''} onClick={() => setMemberRole(m.id, 'viewer')}>Viewer</button>
                       </div>
                     )}
@@ -350,11 +393,16 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
       {step === 3 && form && (
         <div className="np-body np-plan">
           <div className="np-plan-bar">
-            <div><b>{form.icon} {form.name}</b><small>{form.keyDateLabel}: {fmtShort(form.keyDate)} · Lead: {leadName}</small></div>
-            <label className="np-inline">{form.keyDateLabel}<input type="date" value={form.keyDate} onChange={e => setKeyDate(e.target.value)} /></label>
+            <div><b>{form.icon} {form.name}</b><small>Lead: {leadName}{form.members.some(m => m.role === 'colead') ? ` · Co-lead: ${form.members.filter(m => m.role === 'colead').map(m => (activeTeam.find(x => x.id === m.id) || {}).name).join(', ')}` : ''}</small></div>
+            <div className="np-plan-dates">
+              <label className="np-inline">{form.keyDateLabel}<DateField value={form.keyDate} onChange={setKeyDate} label={form.keyDateLabel} /></label>
+              {(form.milestones || []).filter(m => m.label.trim()).map(m => (
+                <label key={m.id} className="np-inline ms">◆ {m.label}<DateField value={m.date} onChange={v => setMilestone(m.id, { date: v })} label={m.label} /></label>
+              ))}
+            </div>
             <div className="np-plan-stats"><span><b>{plan.filter(r => r.title.trim()).length}</b> tasks</span><span><b>{planPeople}</b> people</span><span><b>{planSpan}</b> days</span></div>
           </div>
-          <p className="np-hint">Dates are set from the {form.keyDateLabel.toLowerCase()} — change it above and every task moves with it. People were suggested from their roles; change any of them.</p>
+          <p className="np-hint">Dates are set from your key dates — change one above and the tasks that belong to it move with it{(form.milestones || []).length ? ' (e.g. cover-reveal tasks follow the ' + ((form.milestones[0] || {}).label || 'first key date') + ')' : ''}. People were suggested from their roles; change any of them.</p>
           {tpl.phases.map(ph => {
             const rows = plan.filter(r => r.phase === ph.id);
             return (
@@ -368,8 +416,8 @@ export default function NewProject({ me, team, channelGroups, customTemplates, p
                       <select value={r.assignee} onChange={e => updRow(r.key, { assignee: e.target.value })} aria-label="Assignee">
                         {activeTeam.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
                       </select>
-                      <input type="date" value={r.start} onChange={e => updRow(r.key, { start: e.target.value })} aria-label="Start" />
-                      <input type="date" value={r.due} onChange={e => updRow(r.key, { due: e.target.value })} aria-label="Due" className={r.due < r.start ? 'bad' : ''} />
+                      <DateField value={r.start} onChange={v => updRow(r.key, { start: v })} label="Start" />
+                      <DateField value={r.due} onChange={v => updRow(r.key, { due: v })} label="Due" invalid={r.due < r.start} />
                       <select value={r.effort} onChange={e => updRow(r.key, { effort: e.target.value })} aria-label="Effort">{EFFORTS.map(x => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
                       <select value={r.format} onChange={e => updRow(r.key, { format: e.target.value })} aria-label="Format"><option value="">—</option>{FORMATS.map(f => <option key={f}>{f}</option>)}</select>
                       <button type="button" className="pm-x" onClick={() => setPlan(p => p.filter(x => x.key !== r.key))} aria-label="Remove task">✕</button>

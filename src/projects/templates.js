@@ -12,6 +12,7 @@ export const BUILTIN_TEMPLATES = [
     tagline: 'Launch a book with a 6-week buzz-to-reviews campaign',
     description: 'Teasers, cover reveal, author content, pre-order push, launch week and reader reviews — the full playbook for a book launch.',
     keyDateLabel: 'Launch date',
+    milestones: [{ id: 'cover', label: 'Cover reveal', offset: -19, phase: 'reveal' }],
     kpis: [{ name: 'Pre-orders', unit: '' }, { name: 'Reel views', unit: '' }, { name: 'Followers gained', unit: '' }],
     phases: [P('plan', 'Plan & brief', '#475569'), P('buzz', 'Pre-launch buzz', '#7c3aed'), P('reveal', 'Cover reveal & pre-orders', '#d97706'), P('launch', 'Launch week', '#dc2626'), P('post', 'Post-launch & reviews', '#059669')],
     tasks: [
@@ -47,6 +48,7 @@ export const BUILTIN_TEMPLATES = [
     tagline: 'Research to release for a multi-episode series',
     description: 'Topic research, scripts, shoots, edits, thumbnails and SEO, then a release plan with Shorts cut-downs.',
     keyDateLabel: 'Episode 1 release',
+    milestones: [{ id: 'shoot', label: 'Shoot day', offset: -16, phase: 'shoot' }],
     kpis: [{ name: 'Views', unit: '' }, { name: 'Watch hours', unit: 'h' }, { name: 'Subscribers gained', unit: '' }],
     phases: [P('research', 'Research & scripts', '#475569'), P('shoot', 'Production', '#7c3aed'), P('edit', 'Post-production', '#2563eb'), P('release', 'Release & promotion', '#059669')],
     tasks: [
@@ -92,6 +94,7 @@ export const BUILTIN_TEMPLATES = [
     tagline: 'Brief to brand report for a paid partnership',
     description: 'Contract, script approval, shoot, brand review rounds, publishing and the results report for the brand.',
     keyDateLabel: 'Go-live date',
+    milestones: [{ id: 'approval', label: 'Brand script approval', offset: -10, phase: 'script' }],
     kpis: [{ name: 'Views', unit: '' }, { name: 'Link clicks', unit: '' }, { name: 'Engagement rate', unit: '%' }],
     phases: [P('brief', 'Brief & contract', '#475569'), P('script', 'Script & approval', '#7c3aed'), P('produce', 'Shoot & edit', '#2563eb'), P('review', 'Brand review', '#d97706'), P('live', 'Publish & report', '#059669')],
     tasks: [
@@ -113,6 +116,7 @@ export const BUILTIN_TEMPLATES = [
     tagline: 'Plan, promote and run a live event',
     description: 'Logistics, guests, promotion, the day itself and the follow-up content from it.',
     keyDateLabel: 'Event day',
+    milestones: [{ id: 'reg', label: 'Registrations open', offset: -14, phase: 'promote' }],
     kpis: [{ name: 'Registrations', unit: '' }, { name: 'Live viewers', unit: '' }, { name: 'Content pieces', unit: '' }],
     phases: [P('plan', 'Plan', '#475569'), P('promote', 'Promotion', '#7c3aed'), P('day', 'Event day', '#dc2626'), P('follow', 'Follow-up', '#059669')],
     tasks: [
@@ -140,6 +144,13 @@ export const BUILTIN_TEMPLATES = [
     tasks: [],
   },
 ];
+
+// Tasks in a milestone's phase follow that milestone's date (e.g. every cover-reveal task
+// moves when the Cover reveal date moves).
+BUILTIN_TEMPLATES.forEach(t => {
+  t.milestones = t.milestones || [];
+  t.milestones.forEach(m => t.tasks.forEach(x => { if (x.ph === m.phase) x.anchor = m.id; }));
+});
 
 export const PROJECT_ICONS = ['📕', '🎬', '🪔', '🤝', '🎤', '📄', '📣', '🚀', '🎯', '📸', '🎙️', '🛍️', '📚', '🕉️', '✨', '🏆'];
 export const PROJECT_COLORS = ['#b45309', '#dc2626', '#ea580c', '#0f766e', '#7c3aed', '#2563eb', '#db2777', '#059669', '#334155', '#16264a'];

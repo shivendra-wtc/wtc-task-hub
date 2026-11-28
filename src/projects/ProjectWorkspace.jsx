@@ -7,6 +7,7 @@ import {
 import { FORMATS, EFFORTS, PROJECT_ICONS, PROJECT_COLORS } from './templates';
 import { ProgressRing, BurnUpChart, StackedBars, Donut, KpiChart } from './Charts';
 import { projectToDefinition } from './NewProject';
+import DateField from './DateField';
 
 const COLS = [
   { id: 'todo', label: 'To do', hint: 'Not started' },
@@ -54,14 +55,16 @@ export default function ProjectWorkspace(props) {
   const [openTaskId, setOpenTaskId] = useState(null);
   const [menu, setMenu] = useState(false);
   const [modal, setModal] = useState(null);
-  const canManage = role === 'owner' || role === 'lead';
+  const canManage = role === 'owner' || role === 'lead' || role === 'colead';
+  const canChooseCoLeads = role === 'owner' || role === 'lead';
   const canWork = canManage || role === 'member';
   const pReviews = reviews.filter(r => r.projectId === project.id);
   const pUpdates = updates.filter(u => u.projectId === project.id);
   const dh = displayHealth(project, tasks, updates);
   const progress = projectProgress(tasks);
   const leadName = (team.find(m => m.id === project.leadId) || {}).name || '—';
-  const memberNames = (project.members || []).map(m => (team.find(x => x.id === m.id) || {}).name).filter(Boolean);
+  const coLeadNames = (project.members || []).filter(m => m.role === 'colead').map(m => (team.find(x => x.id === m.id) || {}).name).filter(Boolean);
+  const memberNames = (project.members || []).filter(m => m.role !== 'colead').map(m => (team.find(x => x.id === m.id) || {}).name).filter(Boolean);
   const daysLeft = project.keyDate ? diffDays(todayYmd(), project.keyDate) : null;
   const pendingMine = pReviews.filter(r => r.status === 'Pending' && ((r.stage === 'lead' && canManage) || (r.stage === 'qc' && isOwner))).length;
   const openTask = openTaskId ? tasks.find(t => String(t.id) === String(openTaskId)) : null;
@@ -69,7 +72,7 @@ export default function ProjectWorkspace(props) {
   useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
   useEffect(() => { if (openTaskId && !openTask) setOpenTaskId(null); }, [openTaskId, openTask]);
 
-  const ctx = { apiUrl, project, tasks, reviews: pReviews, updates: pUpdates, team, me, role, isOwner, canManage, canWork, api, reload, notify, openTask: setOpenTaskId, holidays, leaves, allTasks, allProjectTasks, channels, leadName };
+  const ctx = { canChooseCoLeads, coLeadNames, apiUrl, project, tasks, reviews: pReviews, updates: pUpdates, team, me, role, isOwner, canManage, canWork, api, reload, notify, openTask: setOpenTaskId, holidays, leaves, allTasks, allProjectTasks, channels, leadName };
 
   const setStatus = async (t, status) => {
     if (!(canManage || splitNames(t.assignedTo).includes(me.name))) { notify('Only the people on this task or the Lead can move it.'); return; }
@@ -89,10 +92,13 @@ export default function ProjectWorkspace(props) {
             {project.brand && <span className="pm-chip">{project.brand}</span>}
             <HealthPill health={dh.health} />
             {dh.byLead && <span className="pw-bylead" title={dh.byLead.note}>set by {dh.byLead.by} · {timeAgo(dh.byLead.at)}</span>}
+            {(project.milestones || []).filter(m => m.date >= todayYmd()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 2).map(m => (
+              <span key={m.id} className="pw-key ms">◆ {m.label}: <b>{fmtShort(m.date)}</b><em className={diffDays(todayYmd(), m.date) <= 7 ? 'soon' : ''}>{diffDays(todayYmd(), m.date) === 0 ? 'today' : `${diffDays(todayYmd(), m.date)}d`}</em></span>
+            ))}
             {project.keyDate && <span className="pw-key">{project.keyDateLabel || 'Key date'}: <b>{fmtShort(project.keyDate)}</b>{project.status !== 'Completed' && daysLeft !== null && <em className={daysLeft < 0 ? 'late' : daysLeft <= 7 ? 'soon' : ''}>{daysLeft < 0 ? `${-daysLeft}d past` : daysLeft === 0 ? 'today' : `${daysLeft}d left`}</em>}</span>}
           </div>
         </div>
-        <div className="pw-people"><Av name={leadName} team={team} size={30} ring /><Avatars names={memberNames} team={team} max={4} size={28} /></div>
+        <div className="pw-people"><Av name={leadName} team={team} size={30} ring />{coLeadNames.map(n => <Av key={n} name={n} team={team} size={28} ring />)}<Avatars names={memberNames} team={team} max={4} size={28} /></div>
         <div className="pw-actions">
           {canManage && project.status !== 'Completed' && <button className="pm-btn primary sm" onClick={() => setTab('updates')}>📊 Post status</button>}
           <div className="pm-menu-wrap">
@@ -233,10 +239,20 @@ function Overview({ ctx, setTab, dh, progress }) {
           )}
         </section>
         <section className="ov-card">
+          <header><h4>Key dates</h4></header>
+          <ul className="ov-keydates">
+            {[...(project.milestones || []).map(m => ({ ...m, ms: true })), ...(project.keyDate ? [{ id: 'main', label: project.keyDateLabel || 'Key date', date: project.keyDate }] : [])]
+              .sort((a, b) => a.date.localeCompare(b.date)).map(k => {
+                const d = diffDays(todayYmd(), k.date);
+                return <li key={k.id} className={d < 0 ? 'past' : ''}><i className={k.ms ? 'ms' : 'main'} /><span><b>{k.label}</b><small>{fmtLong(k.date)}</small></span><em>{d < 0 ? 'done' : d === 0 ? 'today' : d + 'd'}</em></li>;
+              })}
+          </ul>
+        </section>
+        <section className="ov-card">
           <header><h4>Team</h4><button className="pm-link" onClick={() => setTab('team')}>Manage →</button></header>
           <ul className="ov-team">
             <li><Av name={leadName} team={team} ring /><span><b>{leadName}</b><small>Project Lead</small></span></li>
-            {(project.members || []).map(m => { const t = team.find(x => x.id === m.id); return t ? <li key={m.id}><Av name={t.name} team={team} /><span><b>{t.name}</b><small>{m.role === 'viewer' ? 'Viewer' : t.role || 'Member'}</small></span></li> : null; })}
+            {(project.members || []).slice().sort((a, b) => (a.role === 'colead' ? 0 : 1) - (b.role === 'colead' ? 0 : 1)).map(m => { const t = team.find(x => x.id === m.id); return t ? <li key={m.id}><Av name={t.name} team={team} ring={m.role === 'colead'} /><span><b>{t.name}</b><small>{m.role === 'viewer' ? 'Viewer' : m.role === 'colead' ? 'Co-lead' : t.role || 'Member'}</small></span></li> : null; })}
           </ul>
         </section>
         {lastStatus && (
@@ -331,7 +347,7 @@ function QuickAdd({ ctx, phase }) {
     <div className="ls-quick">
       <input autoFocus placeholder="Task name" value={f.title} onChange={e => setF({ ...f, title: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setOpen(false); }} />
       <select value={f.who} onChange={e => setF({ ...f, who: e.target.value })}>{team.filter(m => m.active !== false).map(m => <option key={m.id}>{m.name}</option>)}</select>
-      <input type="date" value={f.due} onChange={e => setF({ ...f, due: e.target.value })} />
+      <DateField value={f.due} onChange={v => setF({ ...f, due: v })} label="Due" />
       <select value={f.effort} onChange={e => setF({ ...f, effort: e.target.value })}>{EFFORTS.map(x => <option key={x.id} value={x.id}>{x.id}</option>)}</select>
       <button className="pm-btn primary sm" onClick={save}>Add</button><button className="pm-btn ghost sm" onClick={() => setOpen(false)}>Cancel</button>
     </div>
@@ -403,7 +419,7 @@ function Timeline({ ctx }) {
   const starts = tasks.map(taskStart).filter(Boolean);
   const ends = tasks.map(t => t.targetDate).filter(Boolean);
   const rangeStart = addDaysYmd([project.start, ...starts, today].filter(Boolean).sort()[0], -2);
-  const rangeEnd = addDaysYmd([project.keyDate, ...ends, today].filter(Boolean).sort().pop(), 5);
+  const rangeEnd = addDaysYmd([project.keyDate, ...(project.milestones || []).map(m => m.date), ...ends, today].filter(Boolean).sort().pop(), 5);
   const nDays = Math.max(7, diffDays(rangeStart, rangeEnd) + 1);
   const xOf = (d) => diffDays(rangeStart, d) * dayW;
   const rows = [];
@@ -471,6 +487,9 @@ function Timeline({ ctx }) {
               <div className="tl-corner" style={{ width: LABEL_W }}>Task</div>
               <div className="tl-scale" style={{ width }}>
                 {months.map(m => <span key={m.x} className="tl-month" style={{ left: m.x }}>{m.label}</span>)}
+                {[...(project.keyDate ? [{ id: 'main', label: project.keyDateLabel || 'Key date', date: project.keyDate, main: true }] : []), ...(project.milestones || [])].filter(m => m.date >= rangeStart && m.date <= rangeEnd).map(m => (
+                  <span key={'k' + m.id} className={`tl-kflag ${m.main ? 'main' : ''}`} style={{ left: xOf(m.date) + dayW / 2 }}>◆ {m.label}</span>
+                ))}
                 {days.map(d => (zoom === 'day' || (zoom === 'week' && d.dow === 1) || (zoom === 'month' && (d.n === 1 || d.n === 15))) && (
                   <span key={d.d} className={`tl-day ${d.d === today ? 'today' : ''}`} style={{ left: d.x, width: zoom === 'day' ? dayW : 'auto' }}>{zoom === 'day' ? d.n : fmtShort(d.d)}</span>
                 ))}
@@ -481,6 +500,7 @@ function Timeline({ ctx }) {
                 {zoom !== 'month' && days.filter(d => d.dow === 0).map(d => <span key={d.d} className="tl-sun" style={{ left: d.x, width: dayW }} />)}
                 <span className="tl-today" style={{ left: xOf(today) + dayW / 2 }} title="Today" />
                 {project.keyDate && <span className="tl-keyline" style={{ left: xOf(project.keyDate) + dayW / 2 }} title={project.keyDateLabel} />}
+                {(project.milestones || []).filter(m => m.date >= rangeStart && m.date <= rangeEnd).map(m => <span key={m.id} className="tl-msline" style={{ left: xOf(m.date) + dayW / 2 }} title={m.label} />)}
               </div>
               {rows.map((r, i) => {
                 if (r.kind === 'phase') {
@@ -757,8 +777,8 @@ function TaskDrawer({ ctx, task: t, onClose }) {
               {canEdit ? <select value={f.phase} onChange={e => setF({ ...f, phase: e.target.value })}>{(project.phases || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
                 : <span>{((project.phases || []).find(p => p.id === t.phase) || {}).name || '—'}</span>}
             </label>
-            <label>Start{canEdit ? <input type="date" value={f.start} onChange={e => setF({ ...f, start: e.target.value })} /> : <span>{fmtShort(taskStart(t))}</span>}</label>
-            <label>Due{canEdit ? <input type="date" value={f.targetDate} onChange={e => setF({ ...f, targetDate: e.target.value })} /> : <span>{fmtShort(t.targetDate)}</span>}</label>
+            <label>Start{canEdit ? <DateField value={f.start} onChange={v => setF({ ...f, start: v })} label="Start" /> : <span>{fmtShort(taskStart(t))}</span>}</label>
+            <label>Due{canEdit ? <DateField value={f.targetDate} onChange={v => setF({ ...f, targetDate: v })} label="Due" invalid={f.start && f.targetDate < f.start} /> : <span>{fmtShort(t.targetDate)}</span>}</label>
             <label>Effort{canEdit ? <select value={f.effort} onChange={e => setF({ ...f, effort: e.target.value })}>{EFFORTS.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}</select> : <span>{t.effort} · ~{EFFORT_HOURS[t.effort] || 4}h</span>}</label>
             <label>Priority{canEdit ? <select value={f.priority} onChange={e => setF({ ...f, priority: e.target.value })}>{['Low', 'Medium', 'High', 'Urgent'].map(x => <option key={x}>{x}</option>)}</select> : <span>{t.priority}</span>}</label>
             <label>Format{canEdit ? <select value={f.format} onChange={e => setF({ ...f, format: e.target.value })}><option value="">—</option>{FORMATS.map(x => <option key={x}>{x}</option>)}</select> : <span>{t.format || '—'}</span>}</label>
@@ -1077,7 +1097,7 @@ function Files({ ctx }) {
 
 // ============================================================ TEAM
 function TeamTab({ ctx }) {
-  const { project, tasks, team, canManage, isOwner, api, reload, notify } = ctx;
+  const { project, tasks, team, canManage, canChooseCoLeads, isOwner, api, reload, notify } = ctx;
   const [addId, setAddId] = useState('');
   const [addRole, setAddRole] = useState('member');
   const today = todayYmd();
@@ -1102,10 +1122,10 @@ function TeamTab({ ctx }) {
         <span className="tm-stats">{s.open} open · {s.done} done{s.late ? <em> · {s.late} late</em> : ''}</span>
         {canManage && memberRole && (
           <span className="tm-acts">
-            <select value={memberRole} onChange={e => save({ members: members.map(x => (x.id === m.id ? { ...x, role: e.target.value } : x)) }, 'Role changed')} aria-label="Role">
-              <option value="member">Member</option><option value="viewer">Viewer</option>
+            <select value={memberRole} disabled={memberRole === 'colead' && !canChooseCoLeads} onChange={e => save({ members: members.map(x => (x.id === m.id ? { ...x, role: e.target.value } : x)) }, 'Role changed')} aria-label="Role">
+              {(canChooseCoLeads || memberRole === 'colead') && <option value="colead">Co-lead</option>}<option value="member">Member</option><option value="viewer">Viewer</option>
             </select>
-            <button className="pm-x" onClick={() => { if (window.confirm(`Remove ${m.name} from the project? Their tasks stay.`)) save({ members: members.filter(x => x.id !== m.id) }, `${m.name} removed`); }} aria-label={'Remove ' + m.name}>✕</button>
+            {(memberRole !== 'colead' || canChooseCoLeads) && <button className="pm-x" onClick={() => { if (window.confirm(`Remove ${m.name} from the project? Their tasks stay.`)) save({ members: members.filter(x => x.id !== m.id) }, `${m.name} removed`); }} aria-label={'Remove ' + m.name}>✕</button>}
           </span>
         )}
       </li>
@@ -1116,17 +1136,18 @@ function TeamTab({ ctx }) {
       <div className="tm-roles">
         <div><b>Owner</b><span>PC & Shivendra — see and change everything</span></div>
         <div><b>Lead</b><span>Runs the project: people, tasks, dates, reviews, status</span></div>
+        <div><b>Co-lead</b><span>The Lead's helping hand — same powers, except choosing the Lead or co-leads</span></div>
         <div><b>Member</b><span>Works on tasks, submits versions, comments</span></div>
         <div><b>Viewer</b><span>Sees progress only</span></div>
       </div>
       <ul className="tm-list">
         {lead && <Row m={lead} roleLabel="Project Lead" />}
-        {members.map(x => { const m = team.find(y => y.id === x.id); return m ? <Row key={x.id} m={m} roleLabel={x.role === 'viewer' ? 'Viewer' : 'Member'} memberRole={x.role === 'viewer' ? 'viewer' : 'member'} /> : null; })}
+        {members.slice().sort((a, b) => (a.role === 'colead' ? 0 : 1) - (b.role === 'colead' ? 0 : 1)).map(x => { const m = team.find(y => y.id === x.id); return m ? <Row key={x.id} m={m} roleLabel={x.role === 'viewer' ? 'Viewer' : x.role === 'colead' ? 'Co-lead' : 'Member'} memberRole={x.role === 'viewer' ? 'viewer' : x.role === 'colead' ? 'colead' : 'member'} /> : null; })}
       </ul>
       {canManage && (
         <div className="tm-add">
           <select value={addId} onChange={e => setAddId(e.target.value)} aria-label="Person"><option value="">+ Add someone to the project…</option>{team.filter(m => m.active !== false && !inProject.has(m.id)).map(m => <option key={m.id} value={m.id}>{m.name} — {m.role}</option>)}</select>
-          <select value={addRole} onChange={e => setAddRole(e.target.value)} aria-label="Role"><option value="member">Member</option><option value="viewer">Viewer</option></select>
+          <select value={addRole} onChange={e => setAddRole(e.target.value)} aria-label="Role">{canChooseCoLeads && <option value="colead">Co-lead</option>}<option value="member">Member</option><option value="viewer">Viewer</option></select>
           <button className="pm-btn primary sm" disabled={!addId} onClick={() => { save({ members: [...members, { id: addId, role: addRole }] }, 'Added — they have been notified'); setAddId(''); }}>Add</button>
         </div>
       )}
@@ -1156,11 +1177,12 @@ function Modal({ title, onClose, children, wide }) {
 
 function EditProject({ ctx, onClose }) {
   const { project, api, reload, notify } = ctx;
-  const [f, setF] = useState({ name: project.name, icon: project.icon, color: project.color, brand: project.brand, start: project.start, keyDate: project.keyDate, keyDateLabel: project.keyDateLabel || 'Key date',
+  const [f, setF] = useState({ milestones: (project.milestones || []).map(m => ({ ...m })), name: project.name, icon: project.icon, color: project.color, brand: project.brand, start: project.start, keyDate: project.keyDate, keyDateLabel: project.keyDateLabel || 'Key date',
     description: project.description || '', qc: project.settings?.qc !== false, autoCalendar: project.settings?.autoCalendar !== false, phases: (project.phases || []).map(p => ({ ...p })) });
   const save = async () => {
     if (!f.name.trim()) { notify('Name is empty.'); return; }
-    const r = await api('updateProject', { projectId: project.id, updates: { name: f.name.trim(), icon: f.icon, color: f.color, brand: f.brand, start: f.start, keyDate: f.keyDate, keyDateLabel: f.keyDateLabel, description: f.description,
+    if (f.milestones.some(m => !m.label.trim() || !m.date)) { notify('Every key date needs a name and a date.'); return; }
+    const r = await api('updateProject', { projectId: project.id, updates: { milestones: f.milestones.map(m => ({ id: m.id, label: m.label.trim(), date: m.date })), name: f.name.trim(), icon: f.icon, color: f.color, brand: f.brand, start: f.start, keyDate: f.keyDate, keyDateLabel: f.keyDateLabel, description: f.description,
       settings: { ...(project.settings || {}), qc: f.qc, autoCalendar: f.autoCalendar }, phases: f.phases.filter(p => p.name.trim()) } });
     if (r.status === 'ok') { notify('Project updated'); onClose(); reload(); } else notify(r.message || 'Could not save.');
   };
@@ -1174,9 +1196,21 @@ function EditProject({ ctx, onClose }) {
           <div className="np-field">Colour<div className="np-colors">{PROJECT_COLORS.map(c => <button key={c} type="button" aria-label={c} className={f.color === c ? 'on' : ''} style={{ background: c }} onClick={() => setF({ ...f, color: c })} />)}</div></div>
         </div>
         <div className="np-row">
-          <label className="np-field">Starts<input type="date" value={f.start} onChange={e => setF({ ...f, start: e.target.value })} /></label>
-          <label className="np-field">{f.keyDateLabel}<input type="date" value={f.keyDate} onChange={e => setF({ ...f, keyDate: e.target.value })} /></label>
-          <label className="np-field">Key date name<input value={f.keyDateLabel} onChange={e => setF({ ...f, keyDateLabel: e.target.value })} /></label>
+          <label className="np-field">Starts<DateField value={f.start} onChange={v => setF({ ...f, start: v })} label="Starts" /></label>
+        </div>
+        <div className="np-field">Key dates
+          <div className="np-keydates">
+            <div className="np-kd main"><span className="np-kd-tag">Main</span><input className="np-kd-name" value={f.keyDateLabel} onChange={e => setF({ ...f, keyDateLabel: e.target.value })} aria-label="Key date name" /><DateField value={f.keyDate} onChange={v => setF({ ...f, keyDate: v })} label={f.keyDateLabel} /></div>
+            {f.milestones.map((m, i) => (
+              <div key={m.id} className="np-kd"><span className="np-kd-tag">◆</span>
+                <input className="np-kd-name" value={m.label} placeholder="e.g. Cover reveal" onChange={e => setF({ ...f, milestones: f.milestones.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)) })} aria-label="Key date name" />
+                <DateField value={m.date} onChange={v => setF({ ...f, milestones: f.milestones.map((x, j) => (j === i ? { ...x, date: v } : x)) })} label={m.label || 'Key date'} />
+                <button type="button" className="pm-x" onClick={() => setF({ ...f, milestones: f.milestones.filter((_, j) => j !== i) })} aria-label="Remove key date">✕</button>
+              </div>
+            ))}
+            <button type="button" className="pm-btn ghost sm np-kd-add" onClick={() => setF({ ...f, milestones: [...f.milestones, { id: 'm' + Date.now().toString(36), label: '', date: f.keyDate }] })}>+ Add key date</button>
+          </div>
+          <small className="muted">Changing a date here doesn't move tasks — move tasks from the Timeline or List.</small>
         </div>
         <label className="np-field">Goal<input value={f.description} onChange={e => setF({ ...f, description: e.target.value })} /></label>
         <div className="np-field">Phases

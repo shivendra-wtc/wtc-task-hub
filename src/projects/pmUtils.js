@@ -106,7 +106,9 @@ export function nextMilestone(project, tasks) {
     if (!pts.length || pts.every(isDone)) return null;
     const end = pts.reduce((m, t) => (t.targetDate > m ? t.targetDate : m), '');
     return { label: ph.name, date: end };
-  }).filter(Boolean).sort((a, b) => a.date.localeCompare(b.date));
+  }).filter(Boolean);
+  (project.milestones || []).forEach(m => { if (m.date >= today) phaseEnds.push({ label: '◆ ' + m.label, date: m.date }); });
+  phaseEnds.sort((a, b) => a.date.localeCompare(b.date));
   if (phaseEnds.length) return phaseEnds[0];
   if (open.length) return { label: open[0].taskDetails, date: open[0].targetDate };
   if (project.keyDate && project.keyDate >= today) return { label: project.keyDateLabel || 'Key date', date: project.keyDate };

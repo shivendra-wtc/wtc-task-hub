@@ -719,3 +719,41 @@ thead .wl-name { background: #f8fafc; }
 .pm-chart-box .pm-chart { width: 100%; height: auto; max-width: 100%; }
 .dr-pchip.ro { padding: 2px 10px 2px 3px; gap: 6px; }
 .dr-pchip.ro .pm-av { border-width: 0; }
+
+/* v22 — date field with calendar button, key dates, co-lead */
+.pm-date { position: relative; display: inline-flex; align-items: center; width: 100%; min-width: 0; }
+.pm-date input { width: 100%; padding-right: 36px !important; }
+.pm-date input::-webkit-calendar-picker-indicator { display: none; }
+.pm-date-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border: none; border-radius: 7px; background: #eef2fb; color: var(--navy); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.pm-date:hover .pm-date-btn { background: #dfe7f8; }
+.pm-date.bad input { border-color: var(--bad) !important; }
+.np-keydates { display: flex; flex-direction: column; gap: 8px; font-weight: 500; }
+.np-kd { display: grid; grid-template-columns: 54px minmax(160px, 1fr) 190px 30px; gap: 8px; align-items: center; background: #f8fafd; border: 1px solid var(--line); border-radius: 12px; padding: 6px 8px; }
+.np-kd.main { grid-template-columns: 54px minmax(160px, 1fr) 190px 30px; border-color: #f3d98a; background: #fffbea; }
+.np-kd-tag { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; text-align: center; color: #8a6d1f; }
+.np-kd:not(.main) .np-kd-tag { color: #7c3aed; font-size: 14px; }
+.np-kd-name { font-weight: 650 !important; }
+.np-kd-add { align-self: flex-start; }
+.np-plan-dates { display: flex; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+.np-plan-dates .np-inline { margin-left: 0; }
+.np-plan-dates .pm-date { width: 170px; }
+.np-inline.ms { color: #6d28d9; }
+.pw-key.ms { color: #6d28d9; }
+.pw-key.ms em { background: #f1eafe !important; color: #6d28d9 !important; }
+.ov-keydates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ov-keydates li { display: flex; align-items: center; gap: 10px; }
+.ov-keydates li span { display: flex; flex-direction: column; flex: 1; }
+.ov-keydates li small { color: var(--ink-3); font-size: 11.5px; }
+.ov-keydates li em { font-style: normal; font-weight: 800; font-size: 12px; color: var(--navy); background: var(--line-2); border-radius: 999px; padding: 2px 9px; }
+.ov-keydates li.past { opacity: .55; }
+.ov-keydates i { width: 10px; height: 10px; transform: rotate(45deg); border-radius: 2px; flex-shrink: 0; }
+.ov-keydates i.main { background: var(--gold); }
+.ov-keydates i.ms { background: #7c3aed; }
+.tl-msline { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed #7c3aed; opacity: .7; z-index: 2; }
+.tl-kflag { position: absolute; top: 24px; transform: translateX(-50%); font-size: 10px; font-weight: 800; color: #6d28d9; background: #f1eafe; border-radius: 999px; padding: 0 7px; white-space: nowrap; z-index: 3; }
+.tl-kflag.main { color: #7a5600; background: #fff3c4; }
+.np-role button { font-size: 11px; padding: 5px 2px; }
+@media (max-width: 760px) {
+  .np-kd, .np-kd.main { grid-template-columns: 40px 1fr 30px; }
+  .np-kd .pm-date { grid-column: 1 / -1; }
+}

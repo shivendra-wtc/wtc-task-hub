@@ -22,7 +22,7 @@ function roleIn(p, userId) {
   if (OWNER_IDS.includes(userId)) return 'owner';
   if (String(p.leadId) === String(userId)) return 'lead';
   const m = (p.members || []).find(x => String(x.id) === String(userId));
-  return m ? (m.role === 'viewer' ? 'viewer' : 'member') : '';
+  return m ? (m.role === 'viewer' ? 'viewer' : m.role === 'colead' ? 'colead' : 'member') : '';
 }
 
 export default function Projects({ apiUrl, me, team, holidays, channels, allTasks, initial, onClose, notify, onChanged }) {
@@ -101,7 +101,7 @@ export default function Projects({ apiUrl, me, team, holidays, channels, allTask
     if (filter === 'hold' && st !== 'On hold') return false;
     if (filter === 'done' && st !== 'Completed') return false;
     if (brand && c.p.brand !== brand) return false;
-    if (onlyMine && !['lead', 'member', 'viewer'].includes(c.role) && !(c.p.createdBy === me.name)) return false;
+    if (onlyMine && !['lead', 'colead', 'member', 'viewer'].includes(c.role) && !(c.p.createdBy === me.name)) return false;
     if (q && !(c.p.name.toLowerCase().includes(q.toLowerCase()) || (c.p.brand || '').toLowerCase().includes(q.toLowerCase()))) return false;
     return true;
   }).sort((a, b) => (a.p.keyDate || '9999').localeCompare(b.p.keyDate || '9999'));
@@ -235,7 +235,7 @@ function ProjectCard({ c, team, today, onOpen }) {
           {overdue > 0 && <span className="bad" title="Overdue">🔥 {overdue}</span>}
           {pending > 0 && <span className="rev" title="Waiting for review" onClick={e => { e.stopPropagation(); onOpen('reviews'); }}>🧐 {pending}</span>}
         </span>
-        {role && role !== 'owner' && <span className="ph-role">{role === 'lead' ? 'You lead' : role === 'viewer' ? 'Viewer' : 'Member'}</span>}
+        {role && role !== 'owner' && <span className="ph-role">{role === 'lead' ? 'You lead' : role === 'colead' ? 'Co-lead' : role === 'viewer' ? 'Viewer' : 'Member'}</span>}
       </footer>
     </article>
   );
@@ -248,6 +248,7 @@ function Portfolio({ cards, tasks, team, holidays, leaves, allTasks, open }) {
   const milestones = [];
   live.forEach(c => {
     if (c.p.keyDate && c.p.keyDate >= today && c.p.keyDate <= in14) milestones.push({ date: c.p.keyDate, label: c.p.keyDateLabel || 'Key date', c, key: true });
+    (c.p.milestones || []).forEach(m => { if (m.date >= today && m.date <= in14) milestones.push({ date: m.date, label: m.label, c, key: true }); });
     (c.p.phases || []).forEach(ph => {
       const pts = c.ts.filter(t => t.phase === ph.id);
       if (!pts.length || pts.every(isDone)) return;

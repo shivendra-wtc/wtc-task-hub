@@ -3345,7 +3345,8 @@ function getAttendanceReport(viewerId, year, month) {
 // ============================================================
 const PROJECT_HEADERS_ = ["ID", "Name", "Icon", "Color", "Brand", "Template", "Status", "Start", "Key Date",
   "Lead ID", "Members (JSON)", "Brief (JSON)", "KPIs (JSON)", "Phases (JSON)", "Links (JSON)", "Settings (JSON)",
-  "Created By", "Created At", "Updated At", "Closed At", "Retro (JSON)", "Description", "Key Date Label"];
+  "Created By", "Created At", "Updated At", "Closed At", "Retro (JSON)", "Description", "Key Date Label", "Key Dates (JSON)"];
+const PM_MEMBER_ROLES_ = ["colead", "member", "viewer"];
 const REVIEW_HEADERS_ = ["ID", "Project ID", "Task ID", "Version", "Link", "Note", "Submitted By", "Submitted At",
   "Stage", "Status", "Comments (JSON)", "Decided By", "Decided At", "Task Title"];
 const PUPDATE_HEADERS_ = ["ID", "Project ID", "Type", "By", "At", "Health", "Note", "Snapshot (JSON)"];
@@ -3367,7 +3368,11 @@ function pmSheet_(name, headers, textCols) {
   }
   return sheet;
 }
-function getProjectsSheet_() { return pmSheet_("Projects", PROJECT_HEADERS_, [8, 9]); }
+function getProjectsSheet_() {
+  const sheet = pmSheet_("Projects", PROJECT_HEADERS_, [8, 9]);
+  if (sheet.getLastColumn() < PROJECT_HEADERS_.length) sheet.getRange(1, 1, 1, PROJECT_HEADERS_.length).setValues([PROJECT_HEADERS_]);
+  return sheet;
+}
 function getReviewsSheet_() { return pmSheet_("ProjectReviews", REVIEW_HEADERS_, [3]); }
 function getPUpdatesSheet_() { return pmSheet_("ProjectUpdates", PUPDATE_HEADERS_, []); }
 function getPTemplatesSheet_() { return pmSheet_("ProjectTemplates", PTEMPLATE_HEADERS_, []); }
@@ -3407,7 +3412,7 @@ function readProjects_() {
       members: pj_(r[10], []), brief: pj_(r[11], {}), kpis: pj_(r[12], []), phases: pj_(r[13], []), links: pj_(r[14], []),
       settings: pj_(r[15], { qc: true, autoCalendar: true }), createdBy: r[16] || "", createdAt: String(r[17] || ""),
       updatedAt: String(r[18] || ""), closedAt: String(r[19] || ""), retro: pj_(r[20], null), description: r[21] || "",
-      keyDateLabel: r[22] || "Key date"
+      keyDateLabel: r[22] || "Key date", milestones: pj_(r[23], [])
     });
   }
   return out;
@@ -3418,7 +3423,11 @@ function projectRowValues_(p) {
     JSON.stringify(p.members || []), JSON.stringify(p.brief || {}), JSON.stringify(p.kpis || []),
     JSON.stringify(p.phases || []), JSON.stringify(p.links || []), JSON.stringify(p.settings || {}),
     p.createdBy, p.createdAt, p.updatedAt, p.closedAt || "", p.retro ? JSON.stringify(p.retro) : "", p.description || "",
-    p.keyDateLabel || "Key date"];
+    p.keyDateLabel || "Key date", JSON.stringify(pmCleanMilestones_(p.milestones))];
+}
+function pmCleanMilestones_(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 12).map(m => ({ id: pmStr_(m.id || ("m" + Math.random().toString(36).slice(2, 7)), 20), label: pmStr_(m.label, 60), date: pmDate_(m.date) }))
+    .filter(m => m.label && m.date);
 }
 function writeProject_(p) {
   const sheet = getProjectsSheet_();
@@ -3433,9 +3442,10 @@ function pmRole_(p, userId) {
   if (pmIsOwner_(userId)) return "owner";
   if (String(p.leadId) === String(userId)) return "lead";
   const m = (p.members || []).find(x => String(x.id) === String(userId));
-  return m ? (m.role === "viewer" ? "viewer" : "member") : "";
+  return m ? (m.role === "viewer" ? "viewer" : m.role === "colead" ? "colead" : "member") : "";
 }
-function pmCanManage_(p, userId) { const r = pmRole_(p, userId); return r === "owner" || r === "lead"; }
+function pmCanManage_(p, userId) { const r = pmRole_(p, userId); return r === "owner" || r === "lead" || r === "colead"; }
+function pmCoLeadIds_(p) { return (p.members || []).filter(m => m.role === "colead").map(m => String(m.id)); }
 function pmTeamMap_() {
   const map = {};
   allTeam_().forEach(m => { map[String(m.id)] = m.name; });
@@ -3450,6 +3460,7 @@ function pmNames_(p, opts) {
   const map = pmTeamMap_();
   const names = {};
   if (opts.lead && p.leadId && map[p.leadId]) names[map[p.leadId]] = true;
+  if (opts.lead) pmCoLeadIds_(p).forEach(id => { if (map[id]) names[map[id]] = true; });
   if (opts.owners) APP_ADMIN_IDS_.forEach(id => { if (map[id]) names[map[id]] = true; });
   if (opts.creator && p.createdBy) names[p.createdBy] = true;
   if (opts.members) (p.members || []).forEach(m => { if (map[m.id]) names[map[m.id]] = true; });
@@ -3590,7 +3601,7 @@ function createProject(project, tasks, userId, userName) {
     if (existing) return jsonResponse({status: "ok", id: existing.id, duplicate: true});
     const sheet = getProjectsSheet_();
     const now = getIndiaTimeISO();
-    const members = (project.members || []).map(m => ({ id: String(m.id), role: ["member", "viewer"].indexOf(m.role) !== -1 ? m.role : "member" }))
+    const members = (project.members || []).map(m => ({ id: String(m.id), role: PM_MEMBER_ROLES_.indexOf(m.role) !== -1 ? m.role : "member" }))
       .filter((m, i, a) => m.id && a.findIndex(x => x.id === m.id) === i && m.id !== String(project.leadId));
     const p = {
       id: pmStr_(project.id, 40), name: pmStr_(project.name, 120), icon: pmStr_(project.icon || "📁", 8), color: pmStr_(project.color || "#2563eb", 20),
@@ -3599,7 +3610,8 @@ function createProject(project, tasks, userId, userName) {
       members: members, brief: project.brief || {}, kpis: (project.kpis || []).slice(0, 12), phases: (project.phases || []).slice(0, 20),
       links: (project.links || []).slice(0, 100), settings: Object.assign({ qc: true, autoCalendar: true }, project.settings || {}),
       createdBy: userName || "", createdAt: now, updatedAt: now, closedAt: "", retro: null,
-      description: pmStr_(project.description, 1000), keyDateLabel: pmStr_(project.keyDateLabel || "Key date", 40)
+      description: pmStr_(project.description, 1000), keyDateLabel: pmStr_(project.keyDateLabel || "Key date", 40),
+      milestones: pmCleanMilestones_(project.milestones)
     };
     const row = sheet.getLastRow() + 1;
     sheet.getRange(row, 8, 1, 2).setNumberFormat('@');
@@ -3634,7 +3646,8 @@ function createProject(project, tasks, userId, userName) {
       if (!name || name === userName || notified[name]) return;
       notified[name] = true;
       const n = perPerson[name] || 0;
-      const role = id === p.leadId ? "Lead" : (p.members.find(m => m.id === id) || {}).role === "viewer" ? "Viewer" : "Member";
+      const mr = (p.members.find(m => m.id === id) || {}).role;
+      const role = id === p.leadId ? "Lead" : mr === "viewer" ? "Viewer" : mr === "colead" ? "Co-lead" : "Member";
       pmNotify_([name], "project_added", p, p.name + " — you're " + (role === "Lead" ? "the Lead" : "a " + role) + (n ? " · " + n + " task" + (n > 1 ? "s" : "") + " for you" : ""), userName);
     });
     Object.keys(perPerson).forEach(name => {
@@ -3645,13 +3658,13 @@ function createProject(project, tasks, userId, userName) {
   });
 }
 
-const PROJECT_EDITABLE_ = ["name", "icon", "color", "brand", "status", "start", "keyDate", "keyDateLabel", "brief", "kpis", "phases", "links", "settings", "description", "members", "leadId"];
+const PROJECT_EDITABLE_ = ["name", "icon", "color", "brand", "status", "start", "keyDate", "keyDateLabel", "brief", "kpis", "phases", "links", "settings", "description", "members", "leadId", "milestones"];
 function updateProject(projectId, updates, userId, userName) {
   return withScriptLock_(() => {
     const p = readProjects_().find(x => x.id === String(projectId));
     if (!p) return jsonResponse({status: "error", message: "Project not found"});
     const role = pmRole_(p, userId);
-    const canManage = role === "owner" || role === "lead";
+    const canManage = role === "owner" || role === "lead" || role === "colead";
     // Members may update KPI numbers and add links; everything else needs the Lead/owner.
     const keys = Object.keys(updates || {}).filter(k => PROJECT_EDITABLE_.indexOf(k) !== -1);
     for (let i = 0; i < keys.length; i++) {
@@ -3659,13 +3672,19 @@ function updateProject(projectId, updates, userId, userName) {
       if (k === "leadId" && role !== "owner") return jsonResponse({status: "error", message: "Only PC or Shivendra can change the Lead."});
       if (!canManage && !(role === "member" && (k === "kpis" || k === "links"))) return jsonResponse({status: "error", message: "Only the project Lead can change this."});
     }
+    if (role === "colead" && updates.members) {
+      const before = pmCoLeadIds_(p).sort().join(",");
+      const after = (updates.members || []).filter(m => m.role === "colead").map(m => String(m.id)).sort().join(",");
+      if (before !== after) return jsonResponse({status: "error", message: "Only the Lead (or PC / Shivendra) can choose co-leads."});
+    }
     const map = pmTeamMap_();
     const beforeIds = {}; [p.leadId].concat((p.members || []).map(m => m.id)).forEach(id => { beforeIds[id] = true; });
     keys.forEach(k => {
       let v = updates[k];
       if (k === "start" || k === "keyDate") v = pmDate_(v);
-      else if (k === "members") v = (v || []).map(m => ({ id: String(m.id), role: ["member", "viewer"].indexOf(m.role) !== -1 ? m.role : "member" }))
+      else if (k === "members") v = (v || []).map(m => ({ id: String(m.id), role: PM_MEMBER_ROLES_.indexOf(m.role) !== -1 ? m.role : "member" }))
         .filter((m, i, a) => m.id && map[m.id] && a.findIndex(x => x.id === m.id) === i);
+      else if (k === "milestones") v = pmCleanMilestones_(v);
       else if (k === "status") v = ["Active", "On hold", "Completed", "Archived"].indexOf(v) !== -1 ? v : p.status;
       else if (typeof v === "string") v = pmStr_(v, 1000);
       p[k] = v;
@@ -3677,11 +3696,12 @@ function updateProject(projectId, updates, userId, userName) {
     // Newly added people get told.
     const added = [p.leadId].concat(p.members.map(m => m.id)).filter(id => !beforeIds[id] && map[id] && map[id] !== userName);
     added.forEach(id => {
-      const r = id === p.leadId ? "the Lead" : ((p.members.find(m => m.id === id) || {}).role === "viewer" ? "a Viewer" : "a Member");
+      const mr = (p.members.find(m => m.id === id) || {}).role;
+      const r = id === p.leadId ? "the Lead" : mr === "viewer" ? "a Viewer" : mr === "colead" ? "a Co-lead" : "a Member";
       pmNotify_([map[id]], "project_added", p, userName + " added you to " + p.name + " as " + r, userName);
     });
     const what = keys.map(k => ({ name: "name", icon: "icon", color: "colour", brand: "brand", status: "status → " + p.status, start: "start date", keyDate: (p.keyDateLabel || "key date").toLowerCase(),
-      keyDateLabel: "key date label", brief: "brief", kpis: "KPIs", phases: "phases", links: "links", settings: "settings", description: "description", members: "team", leadId: "Lead → " + (map[p.leadId] || "") }[k])).join(", ");
+      keyDateLabel: "key date label", milestones: "key dates", brief: "brief", kpis: "KPIs", phases: "phases", links: "links", settings: "settings", description: "description", members: "team", leadId: "Lead → " + (map[p.leadId] || "") }[k])).join(", ");
     if (what) logProject_(p.id, userName, "updated " + what);
     return jsonResponse({status: "ok"});
   });
@@ -3843,7 +3863,7 @@ function submitReview(projectId, taskId, link, note, userId, userName, reviewId)
       }
     }
     version++;
-    const isLead = String(p.leadId) === String(userId) || role === "owner";
+    const isLead = String(p.leadId) === String(userId) || role === "owner" || role === "colead";
     const qc = !(p.settings && p.settings.qc === false);
     let stage = "lead";
     if (isLead) stage = qc && role !== "owner" ? "qc" : "final";
@@ -3875,7 +3895,7 @@ function decideReview(reviewId, decision, comment, userId, userName) {
     if (!p) return jsonResponse({status: "error", message: "Project not found"});
     const role = pmRole_(p, userId);
     const stage = r[8];
-    if (stage === "lead" && !(role === "owner" || role === "lead")) return jsonResponse({status: "error", message: "Only the project Lead can review this stage."});
+    if (stage === "lead" && !(role === "owner" || role === "lead" || role === "colead")) return jsonResponse({status: "error", message: "Only the project Lead or a co-lead can review this stage."});
     if (stage === "qc" && role !== "owner") return jsonResponse({status: "error", message: "Final QC is done by PC or Shivendra."});
     const comments = pj_(r[10], []);
     if (String(comment || "").trim()) {
@@ -4033,14 +4053,15 @@ function projectsWatchdog_() {
       pmNotify_(pmNames_(p, { lead: true, creator: true }), "project_alert", p,
         "⚠️ " + p.name + ": " + late.length + " task" + (late.length > 1 ? "s" : "") + " overdue 2+ days — " + late.slice(0, 3).map(t => t.taskDetails).join(", "), "WTC Hub", "list");
     }
-    if (p.keyDate) {
-      const daysLeft = Math.round((new Date(p.keyDate + "T12:00:00+05:30") - new Date(today + "T12:00:00+05:30")) / 86400000);
-      const open = mine.filter(t => t.status !== "Completed").length;
-      if ((daysLeft === 3 || daysLeft === 7) && open) {
+    const open = mine.filter(t => t.status !== "Completed").length;
+    const keyDates = (p.keyDate ? [{ label: p.keyDateLabel || "key date", date: p.keyDate }] : []).concat(p.milestones || []);
+    keyDates.forEach(k => {
+      const daysLeft = Math.round((new Date(k.date + "T12:00:00+05:30") - new Date(today + "T12:00:00+05:30")) / 86400000);
+      if ((daysLeft === 3 || daysLeft === 7 || daysLeft === 1) && open) {
         pmNotify_(pmNames_(p, { lead: true, creator: true }), "project_alert", p,
-          "⏳ " + p.name + ": " + (p.keyDateLabel || "key date") + " in " + daysLeft + " days — " + open + " task" + (open > 1 ? "s" : "") + " still open", "WTC Hub");
+          "⏳ " + p.name + ": " + k.label + (daysLeft === 1 ? " is TOMORROW" : " in " + daysLeft + " days") + " — " + open + " task" + (open > 1 ? "s" : "") + " still open", "WTC Hub");
       }
-    }
+    });
     if (isMonday && map[p.leadId]) {
       pmNotify_([map[p.leadId]], "project_alert", p, "📊 Monday check-in: post this week's status for " + p.name, "WTC Hub", "updates");
     }

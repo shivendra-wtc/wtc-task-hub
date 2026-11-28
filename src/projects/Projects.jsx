@@ -30,15 +30,22 @@ export default function Projects({ apiUrl, me, team, holidays, channels, allTask
   const loadSeq = useRef(0);
   const isOwner = OWNER_IDS.includes(me.id);
 
-  const load = useCallback(async () => {
+  const hasData = useRef(false);
+  const load = useCallback(async (attempt = 1) => {
     const seq = ++loadSeq.current;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
-      const res = await fetch(apiUrl + '?action=getProjectsData&userId=' + encodeURIComponent(me.id));
+      const res = await fetch(apiUrl + '?action=getProjectsData&userId=' + encodeURIComponent(me.id), { signal: ctrl.signal });
       const d = await res.json();
       if (seq !== loadSeq.current) return;
       if (d.status === 'ok' && !Array.isArray(d.projects)) { setError('Projects needs the latest server update. Shivendra: paste the new Code.gs in Apps Script and deploy a new version.'); return; }
-      if (d.status === 'ok') { setData(d); setError(''); } else setError(d.message || 'Could not load projects.');
-    } catch (e) { if (!data) setError('Could not reach the server. Check the connection and try again.'); }
+      if (d.status === 'ok') { hasData.current = true; setData(d); setError(''); } else if (!hasData.current) setError(d.message || 'Could not load projects.');
+    } catch (e) {
+      if (seq !== loadSeq.current || hasData.current) return;
+      if (attempt < 2) { load(attempt + 1); return; }
+      setError('The server is taking too long to answer. Check the connection and try again.');
+    } finally { clearTimeout(timer); }
   }, [apiUrl, me.id]);
 
   useEffect(() => { load(); }, [load]);
@@ -123,8 +130,8 @@ export default function Projects({ apiUrl, me, team, holidays, channels, allTask
       </div>
 
       <div className="pm-main">
-        {!data && !error && <div className="pm-loading"><span className="pm-spinner" />Loading projects…</div>}
-        {error && !data && <div className="pm-loading"><p>{error}</p><button className="pm-btn primary" onClick={load}>Try again</button></div>}
+        {!data && !error && <div className="pm-loading"><span className="pm-spinner" />Loading projects…<small className="muted">The first open can take a few seconds.</small></div>}
+        {error && !data && <div className="pm-loading"><p>{error}</p><button className="pm-btn primary" onClick={() => { setError(''); load(); }}>Try again</button></div>}
 
         {data && view.kind === 'new' && (
           <NewProject me={me} team={team} channelGroups={channels} customTemplates={data.templates} busy={busy}

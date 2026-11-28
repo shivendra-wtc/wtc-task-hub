@@ -132,24 +132,29 @@ function doPost(e) {
     if (action === "saveTarget") return saveTarget(data.target, data.userId, data.userName);
     if (action === "updateTargetProgress") return updateTargetProgress(data.id, data.achieved, data.note, data.userId, data.userName);
     if (action === "deleteTarget") return deleteTarget(data.id, data.userId);
-    if (action === "markLeave") return markLeave(data.userIds, data.fromDate, data.toDate, data.leaveType, data.note, data.markerId, data.markerName);
-    if (action === "cancelLeave") return cancelLeave(data.id, data.markerId);
-    if (action === "createProject") return createProject(data.project, data.tasks, data.userId, data.userName);
-    if (action === "updateProject") return updateProject(data.projectId, data.updates, data.userId, data.userName);
-    if (action === "addProjectTask") return addProjectTask(data.projectId, data.task, data.userId, data.userName);
-    if (action === "updateProjectTasks") return updateProjectTasks(data.projectId, data.items, data.userId, data.userName);
-    if (action === "deleteProjectTask") return deleteProjectTask(data.projectId, data.taskId, data.userId, data.userName);
-    if (action === "submitReview") return submitReview(data.projectId, data.taskId, data.link, data.note, data.userId, data.userName, data.reviewId);
-    if (action === "decideReview") return decideReview(data.reviewId, data.decision, data.comment, data.userId, data.userName);
-    if (action === "commentReview") return commentReview(data.reviewId, data.text, data.at, data.userId, data.userName);
-    if (action === "postProjectUpdate") return postProjectUpdate(data.projectId, data.health, data.note, data.snapshot, data.userId, data.userName);
-    if (action === "saveProjectTemplate") return saveProjectTemplate(data.template, data.userId, data.userName);
-    if (action === "deleteProjectTemplate") return deleteProjectTemplate(data.id, data.userId);
-    if (action === "closeProject") return closeProject(data.projectId, data.retro, data.userId, data.userName);
+    if (action === "markLeave") { const out = markLeave(data.userIds, data.fromDate, data.toDate, data.leaveType, data.note, data.markerId, data.markerName); pmBump_(); return out; }
+    if (action === "cancelLeave") { const out = cancelLeave(data.id, data.markerId); pmBump_(); return out; }
+    if (PM_ACTIONS_.indexOf(action) !== -1 && action !== "markLeave" && action !== "cancelLeave") { const out = doPostProjects_(action, data); pmBump_(); return out; }
     return jsonResponse({status: "error", message: "Unknown action"});
   } catch (error) {
     return jsonResponse({status: "error", message: error.toString()});
   }
+}
+
+function doPostProjects_(action, data) {
+  if (action === "createProject") return createProject(data.project, data.tasks, data.userId, data.userName);
+  if (action === "updateProject") return updateProject(data.projectId, data.updates, data.userId, data.userName);
+  if (action === "addProjectTask") return addProjectTask(data.projectId, data.task, data.userId, data.userName);
+  if (action === "updateProjectTasks") return updateProjectTasks(data.projectId, data.items, data.userId, data.userName);
+  if (action === "deleteProjectTask") return deleteProjectTask(data.projectId, data.taskId, data.userId, data.userName);
+  if (action === "submitReview") return submitReview(data.projectId, data.taskId, data.link, data.note, data.userId, data.userName, data.reviewId);
+  if (action === "decideReview") return decideReview(data.reviewId, data.decision, data.comment, data.userId, data.userName);
+  if (action === "commentReview") return commentReview(data.reviewId, data.text, data.at, data.userId, data.userName);
+  if (action === "postProjectUpdate") return postProjectUpdate(data.projectId, data.health, data.note, data.snapshot, data.userId, data.userName);
+  if (action === "saveProjectTemplate") return saveProjectTemplate(data.template, data.userId, data.userName);
+  if (action === "deleteProjectTemplate") return deleteProjectTemplate(data.id, data.userId);
+  if (action === "closeProject") return closeProject(data.projectId, data.retro, data.userId, data.userName);
+  return jsonResponse({status: "error", message: "Unknown action"});
 }
 
 function jsonResponse(data) {
@@ -3345,6 +3350,8 @@ const REVIEW_HEADERS_ = ["ID", "Project ID", "Task ID", "Version", "Link", "Note
   "Stage", "Status", "Comments (JSON)", "Decided By", "Decided At", "Task Title"];
 const PUPDATE_HEADERS_ = ["ID", "Project ID", "Type", "By", "At", "Health", "Note", "Snapshot (JSON)"];
 const PTEMPLATE_HEADERS_ = ["ID", "Name", "Icon", "Color", "Description", "Definition (JSON)", "Created By", "Created At", "Active"];
+const PM_ACTIONS_ = ["createProject", "updateProject", "addProjectTask", "updateProjectTasks", "deleteProjectTask", "submitReview",
+  "decideReview", "commentReview", "postProjectUpdate", "saveProjectTemplate", "deleteProjectTemplate", "closeProject", "markLeave", "cancelLeave"];
 const PROJECT_TASK_COL_ = 24;   // X — Project ID
 const PROJECT_INFO_COL_ = 25;   // Y — Project Info (auto)
 const EFFORT_HOURS_ = { S: 2, M: 4, L: 8, XL: 16 };
@@ -3418,6 +3425,7 @@ function writeProject_(p) {
   p.updatedAt = getIndiaTimeISO();
   sheet.getRange(p.row, 8, 1, 2).setNumberFormat('@');
   sheet.getRange(p.row, 1, 1, PROJECT_HEADERS_.length).setValues([projectRowValues_(p)]);
+  pmBump_();
 }
 
 function pmIsOwner_(userId) { return APP_ADMIN_IDS_.indexOf(String(userId)) !== -1; }
@@ -3458,18 +3466,28 @@ function logProject_(projectId, by, text) {
     const sheet = getPUpdatesSheet_();
     sheet.appendRow([nextIdFromTail_(sheet), projectId, "activity", by || "", getIndiaTimeISO(), "", pmStr_(text, 500), ""]);
   } catch (e) { Logger.log("logProject_ failed: " + e); }
+  pmBump_();
 }
 
 function readProjectTasks_(projectIds) {
+  if (!projectIds || !projectIds.length) return [];
   const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks");
-  const data = sheet.getDataRange().getValues();
+  const last = sheet.getLastRow();
+  if (last < 2 || sheet.getLastColumn() < PROJECT_TASK_COL_) return [];
   const want = {};
-  (projectIds || []).forEach(id => { want[String(id)] = true; });
+  projectIds.forEach(id => { want[String(id)] = true; });
+  // Read ONLY the Project ID column first (fast), then just the rows between the first and
+  // last project task — not the whole 7,000-row sheet.
+  const col = sheet.getRange(2, PROJECT_TASK_COL_, last - 1, 1).getValues();
+  let first = -1, lastHit = -1;
+  for (let i = 0; i < col.length; i++) if (col[i][0] && want[String(col[i][0])]) { if (first < 0) first = i; lastHit = i; }
+  if (first < 0) return [];
+  const data = sheet.getRange(first + 2, 1, lastHit - first + 1, PROJECT_INFO_COL_).getValues();
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const out = [];
-  for (let i = 1; i < data.length; i++) {
+  for (let i = 0; i < data.length; i++) {
     const r = data[i];
-    if (!r[0] || r.length < PROJECT_TASK_COL_) continue;
+    if (!r[0]) continue;
     const pid = String(r[PROJECT_TASK_COL_ - 1] || "");
     if (!pid || !want[pid]) continue;
     const info = pj_(r[PROJECT_INFO_COL_ - 1], {});
@@ -3490,8 +3508,16 @@ function readProjectTasks_(projectIds) {
   return out;
 }
 
+// Short server cache for getProjectsData (per person). Any project change bumps the version,
+// so people never see stale data after a change; otherwise it expires after 2 minutes.
+function pmCacheVer_() { return CacheService.getScriptCache().get("pm_ver") || "0"; }
+function pmBump_() { try { CacheService.getScriptCache().put("pm_ver", Date.now().toString(36) + Math.random().toString(36).slice(2, 7), 21600); } catch (e) {} }
+
 // ONE call that loads everything the Projects screen needs for this person.
 function getProjectsData(userId) {
+  const cache = CacheService.getScriptCache();
+  const ckey = "pmd_" + pmCacheVer_() + "_" + String(userId || "").slice(0, 40);
+  try { const hit = cache.get(ckey); if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON); } catch (e) {}
   const isOwner = pmIsOwner_(userId);
   const all = readProjects_().filter(p => p.status !== "Archived");
   const visible = all.filter(p => isOwner || pmRole_(p, userId));
@@ -3533,8 +3559,10 @@ function getProjectsData(userId) {
       .map(l => ({ date: l.date, userId: l.userId, type: l.type }));
   }
   const allNames = isOwner ? all.map(p => ({ id: p.id, name: p.name, icon: p.icon })) : [];
-  return jsonResponse({ status: "ok", projects: visible.map(p => { const c = Object.assign({}, p); delete c.row; return c; }),
+  const json = JSON.stringify({ status: "ok", projects: visible.map(p => { const c = Object.assign({}, p); delete c.row; return c; }),
     tasks: tasks, reviews: reviews, updates: updates, templates: templates, leaves: leaves, isOwner: isOwner, allProjects: allNames });
+  try { if (json.length < 95000) cache.put(ckey, json, 120); } catch (e) {}
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 function pmTaskRow_(t, projectId, assignedBy, info) {
@@ -3755,6 +3783,7 @@ function deleteProjectTask(projectId, taskId, userId, userName) {
 function projectOnStatus_(row, taskId, newStatus, userName) {
   const projectId = String(row[PROJECT_TASK_COL_ - 1] || "");
   if (!projectId) return;
+  pmBump_();
   const p = readProjects_().find(x => x.id === projectId);
   if (!p) return;
   logProject_(p.id, userName, "moved “" + pmStr_(row[2], 120) + "” to " + newStatus);
@@ -3889,6 +3918,7 @@ function commentReview(reviewId, text, at, userId, userName) {
       const comments = pj_(rr.rows[k][10], []);
       comments.push({ by: userName, at: getIndiaTimeISO(), text: pmStr_(text, 1000), ts: pmStr_(at, 12) });
       rr.sheet.getRange(k + 1, 11).setValue(JSON.stringify(comments.slice(-200)));
+      pmBump_();
       const submitter = rr.rows[k][6];
       const to = submitter === userName ? pmNames_(p, { lead: true, exclude: [userName] }) : [submitter];
       pmNotify_(to, "review_decision", p, "💬 " + userName + " on “" + rr.rows[k][13] + "” v" + rr.rows[k][3] + (at ? " @" + at : "") + ": " + pmStr_(text, 120), userName, "reviews");
@@ -3935,6 +3965,7 @@ function postProjectUpdate(projectId, health, note, snapshot, userId, userName) 
   const h = ["ok", "risk", "delayed"].indexOf(health) !== -1 ? health : "ok";
   const sheet = getPUpdatesSheet_();
   sheet.appendRow([nextIdFromTail_(sheet), p.id, "status", userName, getIndiaTimeISO(), h, pmStr_(note, 2000), JSON.stringify(snapshot || {}).slice(0, 5000)]);
+  pmBump_();
   const label = { ok: "🟢 On track", risk: "🟡 At risk", delayed: "🔴 Delayed" }[h];
   pmNotify_(pmNames_(p, { owners: true, creator: true, members: true, exclude: [userName] }), "project_status", p,
     p.name + " status: " + label + (note ? " — " + pmStr_(note, 120) : ""), userName, "updates");

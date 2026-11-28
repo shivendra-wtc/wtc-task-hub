@@ -9,6 +9,14 @@ import {
 import { Donut, StackedBars } from './Charts';
 
 const OWNER_IDS = ['pcwtc45', 'shivendrawtc77'];
+// Last loaded projects, kept on this device so Projects opens instantly next time.
+export const pmCacheKey = (userId) => 'wtc_pm_v1_' + userId;
+export function pmCacheRead(userId) {
+  try { const raw = localStorage.getItem(pmCacheKey(userId)); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+export function pmCacheWrite(userId, d) {
+  try { localStorage.setItem(pmCacheKey(userId), JSON.stringify(d)); } catch (e) { /* storage full or blocked */ }
+}
 
 function roleIn(p, userId) {
   if (OWNER_IDS.includes(userId)) return 'owner';
@@ -18,7 +26,8 @@ function roleIn(p, userId) {
 }
 
 export default function Projects({ apiUrl, me, team, holidays, channels, allTasks, initial, onClose, notify, onChanged }) {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(() => pmCacheRead(me.id));
+  const [refreshing, setRefreshing] = useState(true);
   const [error, setError] = useState('');
   const [view, setView] = useState(initial?.projectId ? { kind: 'project', id: initial.projectId, tab: initial.tab } : { kind: 'home' });
   const [homeTab, setHomeTab] = useState('projects');
@@ -30,7 +39,7 @@ export default function Projects({ apiUrl, me, team, holidays, channels, allTask
   const loadSeq = useRef(0);
   const isOwner = OWNER_IDS.includes(me.id);
 
-  const hasData = useRef(false);
+  const hasData = useRef(!!pmCacheRead(me.id));
   const load = useCallback(async (attempt = 1) => {
     const seq = ++loadSeq.current;
     const ctrl = new AbortController();
@@ -40,12 +49,12 @@ export default function Projects({ apiUrl, me, team, holidays, channels, allTask
       const d = await res.json();
       if (seq !== loadSeq.current) return;
       if (d.status === 'ok' && !Array.isArray(d.projects)) { setError('Projects needs the latest server update. Shivendra: paste the new Code.gs in Apps Script and deploy a new version.'); return; }
-      if (d.status === 'ok') { hasData.current = true; setData(d); setError(''); } else if (!hasData.current) setError(d.message || 'Could not load projects.');
+      if (d.status === 'ok') { hasData.current = true; setData(d); setError(''); setRefreshing(false); pmCacheWrite(me.id, d); } else if (!hasData.current) setError(d.message || 'Could not load projects.');
     } catch (e) {
       if (seq !== loadSeq.current || hasData.current) return;
       if (attempt < 2) { load(attempt + 1); return; }
       setError('The server is taking too long to answer. Check the connection and try again.');
-    } finally { clearTimeout(timer); }
+    } finally { clearTimeout(timer); if (seq === loadSeq.current) setRefreshing(false); }
   }, [apiUrl, me.id]);
 
   useEffect(() => { load(); }, [load]);
@@ -122,7 +131,7 @@ export default function Projects({ apiUrl, me, team, holidays, channels, allTask
   return (
     <div className="pm-shell" role="dialog" aria-label="Projects">
       <div className="pm-topbar">
-        <div className="pm-brand"><span className="pm-logo">📁</span><div><h1>Projects</h1><small>Plan · assign · review · report</small></div></div>
+        <div className="pm-brand"><span className="pm-logo">📁</span><div><h1>Projects</h1><small>{refreshing && data ? 'Updating…' : 'Plan · assign · review · report'}</small></div></div>
         <div className="pm-top-actions">
           {isOwner && view.kind === 'home' && <button className="pm-btn gold" onClick={() => setView({ kind: 'new' })}>+ New project</button>}
           <button className="pm-close" onClick={onClose} aria-label="Close Projects">✕</button>

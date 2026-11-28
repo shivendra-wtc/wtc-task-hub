@@ -2302,13 +2302,15 @@ function App() {
     openProjects(m[1], m[2] || 'overview');
     return true;
   };
-  // Names for the 📁 chip on task cards (one light call, only when a task belongs to a project).
+  // Loads projects once in the background (a few seconds after the app opens) so the
+  // Projects screen opens instantly, and gives names for the 📁 chip on task cards.
   const loadProjectNames = async () => {
     if (!currentUser) return;
     try {
       const res = await fetch(API_URL + '?action=getProjectsData&userId=' + encodeURIComponent(currentUser));
       const d = await res.json();
-      if (d.status !== 'ok') return;
+      if (d.status !== 'ok' || !Array.isArray(d.projects)) return;
+      try { localStorage.setItem('wtc_pm_v1_' + currentUser, JSON.stringify(d)); } catch (e) {}
       const m = {};
       tasksRef.current.forEach(t => { if (t.projectId) m[t.projectId] = ''; });
       (d.allProjects || []).forEach(p => { m[p.id] = p.name; });
@@ -2321,6 +2323,14 @@ function App() {
     if (tasks.some(t => t.projectId && !(t.projectId in projectNames))) loadProjectNames();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, currentUser]);
+  const projectsWarmRef = useRef(false);
+  useEffect(() => {
+    if (!currentUser || projectsWarmRef.current) return;
+    projectsWarmRef.current = true;
+    const t = setTimeout(() => { loadProjectNames(); import('./projects/Projects').catch(() => {}); }, 5000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser]);
   const [targetView, setTargetView] = useState('mine'); // mine | assigned | all
   const [targetPersonFilter, setTargetPersonFilter] = useState('all');
   const [targetForm, setTargetForm] = useState(null);

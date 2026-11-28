@@ -4517,3 +4517,8 @@ input.switch:checked::after { transform: translateX(18px); }
   background: linear-gradient(90deg, #f6c21c, #ffb703, #f6c21c); background-size: 200% 100%; animation: zora-shine 1.6s linear infinite; }
 .zora-input input { background: #fff !important; color: var(--ink) !important; }
 .zora-input input::placeholder { color: #8a94a8; }
+
+/* v21 — project chip on task cards */
+.badge-project { border: 1px solid #c7d3ea; background: #eef2fb; color: #16264a; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; cursor: pointer; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge-project:hover { background: #dfe7f8; }
+.pm-lazy { position: fixed; inset: 0; z-index: 980; background: #f4f6fa; display: flex; align-items: center; justify-content: center; color: #44506a; font-weight: 600; }

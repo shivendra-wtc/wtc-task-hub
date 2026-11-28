@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import { SiInstagram, SiYoutube, SiFacebook, SiSpotify, SiX, SiThreads, SiPinterest } from 'react-icons/si'
 import { FaLinkedin } from 'react-icons/fa'
 import {
   FiBell, FiX, FiCheckCircle, FiCalendar, FiEdit2, FiTrash2, FiClipboard, FiSun, FiUsers, FiRepeat,
-  FiPhone, FiMessageSquare, FiRefreshCw, FiPlus, FiShield, FiSettings, FiBellOff, FiClock, FiAlertTriangle, FiTarget, FiDownload
+  FiPhone, FiMessageSquare, FiRefreshCw, FiPlus, FiShield, FiSettings, FiBellOff, FiClock, FiAlertTriangle, FiTarget, FiDownload, FiFolder
 } from 'react-icons/fi'
 import { LuBellRing as FiBellRing } from 'react-icons/lu'
 import { parseTaskCommand, looksLikeTaskCommand, findAnswer } from './zora'
+const Projects = lazy(() => import('./projects/Projects'))
 import './App.css'
 
 const API_URL = "https://script.google.com/macros/s/AKfycbxhrBrgG4x5U6v7YzYYbREaptULHIKprzL5ZAdCUySbdQBrqTkib2mEdujKYensAhkR-A/exec";
@@ -1816,6 +1817,12 @@ function App() {
       case 'attendance': return { icon: '🕘', title: 'Attendance update', toast: `🕘 ${item.title}` };
       case 'new_target': return { icon: '🎯', title: `${item.from} set you a target`, toast: `🎯 New target from ${item.from}: ${item.title}` };
       case 'target_achieved': return { icon: '🏆', title: `${item.from} achieved a target`, toast: `🏆 ${item.from} achieved: ${item.title}` };
+      case 'project_added': return { icon: '📁', title: 'Project', toast: `📁 ${item.title}` };
+      case 'review_request': return { icon: '🧐', title: `Review needed — from ${item.from}`, toast: `🧐 ${item.title}` };
+      case 'review_decision': return { icon: '📝', title: `Review update from ${item.from}`, toast: `📝 ${item.title}` };
+      case 'project_alert': return { icon: '⚠️', title: 'Project alert', toast: `⚠️ ${item.title}` };
+      case 'project_status': return { icon: '📊', title: `Project status from ${item.from}`, toast: `📊 ${item.title}` };
+      case 'project_ready': return { icon: '▶️', title: `Ready to start — ${item.from} finished first step`, toast: `▶️ ${item.title}` };
       default: return { icon: '📌', title: `New task from ${item.from}`, toast: `📌 New task from ${item.from}: ${item.title}` };
     }
   };
@@ -2279,6 +2286,41 @@ function App() {
   const [targets, setTargets] = useState([]);
   const [targetsCanSeeAll, setTargetsCanSeeAll] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
+  // v21 — Projects
+  const [showProjects, setShowProjects] = useState(false);
+  const [projectsInit, setProjectsInit] = useState(null);
+  const [projectNames, setProjectNames] = useState({});
+  const openProjects = (projectId, tab) => {
+    setShowInbox(false);
+    setProjectsInit(projectId ? { projectId, tab: tab || 'overview', at: Date.now() } : null);
+    setShowProjects(true);
+  };
+  // "project_<id>" or "project_<id>~<tab>" (from notifications)
+  const openProjectRef = (ref) => {
+    const m = String(ref || '').match(/^project_([^~]+)(?:~(\w+))?$/);
+    if (!m) return false;
+    openProjects(m[1], m[2] || 'overview');
+    return true;
+  };
+  // Names for the 📁 chip on task cards (one light call, only when a task belongs to a project).
+  const loadProjectNames = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(API_URL + '?action=getProjectsData&userId=' + encodeURIComponent(currentUser));
+      const d = await res.json();
+      if (d.status !== 'ok') return;
+      const m = {};
+      tasksRef.current.forEach(t => { if (t.projectId) m[t.projectId] = ''; });
+      (d.allProjects || []).forEach(p => { m[p.id] = p.name; });
+      (d.projects || []).forEach(p => { m[p.id] = p.name; });
+      setProjectNames(m);
+    } catch (e) {}
+  };
+  useEffect(() => {
+    if (!currentUser) return;
+    if (tasks.some(t => t.projectId && !(t.projectId in projectNames))) loadProjectNames();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, currentUser]);
   const [targetView, setTargetView] = useState('mine'); // mine | assigned | all
   const [targetPersonFilter, setTargetPersonFilter] = useState('all');
   const [targetForm, setTargetForm] = useState(null);
@@ -3091,6 +3133,7 @@ function App() {
     }
     if (msg.type === 'wtc-notification-click') {
       if (isMeeting) { openMeetings(); return; }
+      if (openProjectRef(extra.taskId)) return;
       if (extra.taskId) navigateToTask(extra.taskId);
     }
   };
@@ -3119,6 +3162,7 @@ function App() {
       window.history.replaceState({}, '', url.toString());
     } catch (e) {}
     if (taskParam.startsWith('meeting_')) openMeetings();
+    else if (openProjectRef(taskParam)) return;
     else navigateToTask(taskParam);
   }, [currentUser, tasks]);
 
@@ -3140,6 +3184,7 @@ function App() {
     if (item.type === 'new_meeting' || String(item.taskId || '').startsWith('meeting_')) { openMeetings(); return; }
     if (item.type === 'correction' || item.type === 'attendance') { openDiscipline(item.type === 'correction' ? 'team' : 'mine'); return; }
     if (item.type === 'missed_call') return;
+    if (openProjectRef(item.taskId)) return;
     if (item.type === 'new_target' || item.type === 'target_achieved') { setShowTargets(true); setTargetView(item.type === 'new_target' ? 'mine' : 'assigned'); loadTargets(); return; }
     if (item.taskId) navigateToTask(item.taskId);
   };
@@ -4161,6 +4206,7 @@ function App() {
                 <FiRepeat /><span className="icon-label">Routines</span>
                 {activeRoutineCount > 0 && <span className="badge-count badge-soft">{activeRoutineCount}</span>}
               </button>
+              <button className="icon-btn" onClick={() => openProjects()} title="Projects"><FiFolder /><span className="icon-label">Projects</span></button>
               <button className="icon-btn" onClick={() => { setShowTargets(true); setTargetView('mine'); loadTargets(); }} title="Targets">
                 <FiTarget /><span className="icon-label">Targets</span>
                 {myOpenTargets > 0 && <span className="badge-count badge-soft">{myOpenTargets}</span>}
@@ -6286,7 +6332,7 @@ function App() {
                     const canChangeStatus = isAdmin || !isCompleted;
                     const canEdit = isAdmin || !isCompleted;
                     const isRoutine = task.taskType === 'Routine' || task.taskType === 'Routine Instance';
-                    const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c);
+                    const channelList = String(task.channel).split(',').map(c => c.trim()).filter(c => c && !(task.projectId && c === 'Other'));
                     const bucket = bucketOf(task);
                     const reminder = isTaskAssignedToMe(task) && !isCompleted ? reminderByTask[String(task.id)] : null;
                     const justReminded = reminder && reminderFlash && reminderFlash.taskId === String(task.id) && Date.now() - reminderFlash.at < 15000;
@@ -6317,7 +6363,12 @@ function App() {
                           <div className="badges">
                             {channelList.map(ch => <ChannelBadge key={ch} channel={ch} />)}
                             <span className={`badge-priority ${String(task.priority || 'Medium').toLowerCase()}`}>{task.priority}</span>
-                            {task.category && <span className="badge-category">{task.category}</span>}
+                            {task.category && task.category !== 'Project' && <span className="badge-category">{task.category}</span>}
+                            {task.projectId && (
+                              <button type="button" className="badge-project" onClick={() => openProjects(task.projectId)} title="Open project">
+                                📁 {projectNames[task.projectId] || 'Project'}
+                              </button>
+                            )}
                           </div>
                           {task.remarks && <p className="task-remarks">{task.remarks}</p>}
                         </div>
@@ -6609,6 +6660,23 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {showProjects && currentUserInfo && (
+        <Suspense fallback={<div className="pm-lazy">Opening Projects…</div>}>
+        <Projects
+          apiUrl={API_URL}
+          me={{ id: currentUserInfo.id, name: currentUserInfo.name, role: currentUserInfo.role }}
+          team={team.filter(m => !DEPARTED_MEMBER_IDS.includes(String(m.id).toLowerCase()))}
+          holidays={holidays}
+          channels={{ groups: contentChannelGroups, groupOrder: Object.keys(contentChannelGroups) }}
+          allTasks={tasks}
+          initial={projectsInit}
+          notify={(m) => pushNotif(m)}
+          onChanged={() => setTimeout(loadTasksBackground, 1500)}
+          onClose={() => { setShowProjects(false); setProjectsInit(null); loadProjectNames(); }}
+        />
+        </Suspense>
       )}
 
       {/* ZORA */}

@@ -86,7 +86,8 @@ function doGetRouter_(e) {
   if (action === "markLeaveSync") { try { const d = JSON.parse(e.parameter.data || "{}"); return markLeave(d.userIds, d.fromDate, d.toDate, d.leaveType, d.note, d.markerId, d.markerName); } catch (err) { return jsonResponse({status: "error", message: String(err)}); } }
   if (action === "getAttendanceReport") return getAttendanceReport(e.parameter.viewerId, e.parameter.year, e.parameter.month);
   if (action === "updateAttendanceSync") return updateAttendance(e.parameter.userId, e.parameter.userName, e.parameter.status);
-  return jsonResponse({status: "ok", message: "WTC API v13 running"});
+  if (action === "getProjectsData") return getProjectsData(e.parameter.userId);
+  return jsonResponse({status: "ok", message: "WTC API v21 running"});
 }
 
 function doPost(e) {
@@ -133,6 +134,18 @@ function doPost(e) {
     if (action === "deleteTarget") return deleteTarget(data.id, data.userId);
     if (action === "markLeave") return markLeave(data.userIds, data.fromDate, data.toDate, data.leaveType, data.note, data.markerId, data.markerName);
     if (action === "cancelLeave") return cancelLeave(data.id, data.markerId);
+    if (action === "createProject") return createProject(data.project, data.tasks, data.userId, data.userName);
+    if (action === "updateProject") return updateProject(data.projectId, data.updates, data.userId, data.userName);
+    if (action === "addProjectTask") return addProjectTask(data.projectId, data.task, data.userId, data.userName);
+    if (action === "updateProjectTasks") return updateProjectTasks(data.projectId, data.items, data.userId, data.userName);
+    if (action === "deleteProjectTask") return deleteProjectTask(data.projectId, data.taskId, data.userId, data.userName);
+    if (action === "submitReview") return submitReview(data.projectId, data.taskId, data.link, data.note, data.userId, data.userName, data.reviewId);
+    if (action === "decideReview") return decideReview(data.reviewId, data.decision, data.comment, data.userId, data.userName);
+    if (action === "commentReview") return commentReview(data.reviewId, data.text, data.at, data.userId, data.userName);
+    if (action === "postProjectUpdate") return postProjectUpdate(data.projectId, data.health, data.note, data.snapshot, data.userId, data.userName);
+    if (action === "saveProjectTemplate") return saveProjectTemplate(data.template, data.userId, data.userName);
+    if (action === "deleteProjectTemplate") return deleteProjectTemplate(data.id, data.userId);
+    if (action === "closeProject") return closeProject(data.projectId, data.retro, data.userId, data.userName);
     return jsonResponse({status: "error", message: "Unknown action"});
   } catch (error) {
     return jsonResponse({status: "error", message: error.toString()});
@@ -215,7 +228,10 @@ function getTasks() {
         // FIX — Daily routine tasks that pile up unfinished for 14+ days get flagged so the
         // frontend can collapse them into a separate "Older Routine Tasks" section instead of
         // burying the rest of the board — still fully visible/counted, just out of the way.
-        isStale: (data[i][14] === "Routine Instance" && data[i][15] === "Daily" && delayDays > 14)
+        isStale: (data[i][14] === "Routine Instance" && data[i][15] === "Daily" && delayDays > 14),
+        // v21 — project link (empty for normal tasks)
+        projectId: data[i].length >= PROJECT_TASK_COL_ ? String(data[i][PROJECT_TASK_COL_ - 1] || "") : "",
+        projectInfo: data[i].length >= PROJECT_INFO_COL_ ? pj_(data[i][PROJECT_INFO_COL_ - 1], null) : null
       });
     }
   }
@@ -423,6 +439,10 @@ function updateStatus(taskId, newStatus, userName) {
         sheet.getRange(i + 1, 8).setValue("");
       }
       sheet.getRange(i + 1, 10).setValue(getIndiaTimeISO());
+      // v21 — project automations (activity log, "you can start", phase complete).
+      if (data[i].length >= PROJECT_TASK_COL_ && data[i][PROJECT_TASK_COL_ - 1] && newStatus !== currentStatus) {
+        try { projectOnStatus_(data[i], taskId, newStatus, userName); } catch (e) { Logger.log("projectOnStatus_ failed: " + e); }
+      }
       return jsonResponse({status: "ok"});
     }
   }
@@ -865,7 +885,9 @@ function nextIdFromTail_(sheet) {
 const INBOX_PUSH_TITLES_ = {
   new_task: "📋 New Task", new_routine: "🔄 Routine Task", task_completed: "✅ Task Completed",
   new_meeting: "🤝 New Meeting", task_reminder: "⏰ Reminder", missed_call: "📞 Missed call",
-  attendance: "🕘 Attendance", correction: "📝 Attendance correction"
+  attendance: "🕘 Attendance", correction: "📝 Attendance correction",
+  project_added: "📁 Project", review_request: "🧐 Review needed", review_decision: "📝 Review update",
+  project_alert: "⚠️ Project", project_status: "📊 Project status", project_ready: "▶️ You can start"
 };
 
 // options.noPush = true → write the inbox row only (used when the person was already
@@ -1942,6 +1964,7 @@ function updateContentEntry(id, updates, userName) {
   const row = range.getValues()[0];
   const linkedTaskId = row[13];
   const wasPublished = row[7] === "Published";
+  const beforeLive = String(row[21] || "").trim();
   const before = { title: row[4], date: formatDateSafe_(row[5]), assignedTo: row[6], priority: row[8], channels: row[2], contentType: row[3] };
   Object.keys(CONTENT_FIELD_COLS_).forEach(field => {
     if (updates[field] !== undefined) row[CONTENT_FIELD_COLS_[field] - 1] = updates[field];
@@ -1968,6 +1991,9 @@ function updateContentEntry(id, updates, userName) {
     // Status sync: becoming "Published" completes the linked task (only on the change,
     // so re-saving a published entry never re-sends "completed" notifications).
     if (row[7] === "Published" && !wasPublished) {
+      try { updateStatus(linkedTaskId, "Completed", userName || "Shivendra Singh"); } catch (e) {}
+    } else if (updates.liveLink && !beforeLive && row[7] !== "Published") {
+      // v21 — pasting the live post link also marks the linked task done.
       try { updateStatus(linkedTaskId, "Completed", userName || "Shivendra Singh"); } catch (e) {}
     }
   }
@@ -2602,6 +2628,7 @@ function attendanceWatchdog() {
     }
     ctx.pushes.forEach(p => { try { sendPushToUser_(p.name, p.title, p.body, "/", p.tag, { kind: "attendance" }); } catch (e) {} });
     try { sweepStaleCalls_(); } catch (e) { Logger.log("sweepStaleCalls_ failed: " + e); }
+    try { projectsWatchdog_(); } catch (e) { Logger.log("projectsWatchdog_ failed: " + e); }
   } finally {
     lock.releaseLock();
   }
@@ -2957,6 +2984,8 @@ function setupWtcTriggers() {
   getSettingsSheet_();
   getTargetsSheet_();
   getLeavesSheet_();
+  getProjectsSheet_(); getReviewsSheet_(); getPUpdatesSheet_(); getPTemplatesSheet_();
+  try { ensureTaskProjectCols_(SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks")); } catch (e) {}
   Logger.log("WTC triggers ready: " + ScriptApp.getProjectTriggers().map(t => t.getHandlerFunction()).join(", "));
 }
 
@@ -3289,4 +3318,700 @@ function getAttendanceReport(viewerId, year, month) {
   });
   return jsonResponse({ status: "ok", year: y, month: m, people: people, leaveTypes: LEAVE_TYPES_, reportStart: REPORT_START_,
     leaves: leaves.map(l => { delete l.row; return l; }), rules: attendanceRules_() });
+}
+
+// ============================================================
+// v21 — PROJECTS (end-to-end project management)
+//
+// Sheets (created automatically the first time they are needed):
+//   Projects         one row per project (members, brief, KPIs, phases, links as JSON)
+//   ProjectReviews   every submitted version of a deliverable + its approval trail
+//   ProjectUpdates   weekly status updates and the activity log
+//   ProjectTemplates templates saved from real projects ("Save as template")
+// Project tasks are ordinary rows in the Tasks sheet, so they show up in everyone's task
+// list, reminders and notifications exactly like any other task. Two columns are added at
+// the END of Tasks (X "Project ID", Y "Project Info (auto)") — nothing existing moves.
+//
+// Who can do what:
+//   PC / Shivendra (owners) — everything, see every project, create projects.
+//   Project Lead            — runs their project: people, tasks, dates, brief, reviews.
+//   Member                  — works on their tasks, submits versions, comments.
+//   Viewer                  — sees progress only.
+// ============================================================
+const PROJECT_HEADERS_ = ["ID", "Name", "Icon", "Color", "Brand", "Template", "Status", "Start", "Key Date",
+  "Lead ID", "Members (JSON)", "Brief (JSON)", "KPIs (JSON)", "Phases (JSON)", "Links (JSON)", "Settings (JSON)",
+  "Created By", "Created At", "Updated At", "Closed At", "Retro (JSON)", "Description", "Key Date Label"];
+const REVIEW_HEADERS_ = ["ID", "Project ID", "Task ID", "Version", "Link", "Note", "Submitted By", "Submitted At",
+  "Stage", "Status", "Comments (JSON)", "Decided By", "Decided At", "Task Title"];
+const PUPDATE_HEADERS_ = ["ID", "Project ID", "Type", "By", "At", "Health", "Note", "Snapshot (JSON)"];
+const PTEMPLATE_HEADERS_ = ["ID", "Name", "Icon", "Color", "Description", "Definition (JSON)", "Created By", "Created At", "Active"];
+const PROJECT_TASK_COL_ = 24;   // X — Project ID
+const PROJECT_INFO_COL_ = 25;   // Y — Project Info (auto)
+const EFFORT_HOURS_ = { S: 2, M: 4, L: 8, XL: 16 };
+
+function pmSheet_(name, headers, textCols) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+    (textCols || []).forEach(c => sheet.getRange(2, c, sheet.getMaxRows() - 1, 1).setNumberFormat('@'));
+  }
+  return sheet;
+}
+function getProjectsSheet_() { return pmSheet_("Projects", PROJECT_HEADERS_, [8, 9]); }
+function getReviewsSheet_() { return pmSheet_("ProjectReviews", REVIEW_HEADERS_, [3]); }
+function getPUpdatesSheet_() { return pmSheet_("ProjectUpdates", PUPDATE_HEADERS_, []); }
+function getPTemplatesSheet_() { return pmSheet_("ProjectTemplates", PTEMPLATE_HEADERS_, []); }
+
+// Adds the two project headers at the end of Tasks the first time (never moves data).
+function ensureTaskProjectCols_(sheet) {
+  const lastCol = sheet.getLastColumn();
+  const head = sheet.getRange(1, PROJECT_TASK_COL_, 1, 2).getValues()[0];
+  if (lastCol < PROJECT_INFO_COL_ || head[0] !== "Project ID" || head[1] !== "Project Info (auto)") {
+    sheet.getRange(1, PROJECT_TASK_COL_, 1, 2).setValues([["Project ID", "Project Info (auto)"]]);
+  }
+}
+
+function pj_(v, fallback) {
+  if (v === "" || v === null || v === undefined) return fallback;
+  if (typeof v !== "string") return v;
+  try { return JSON.parse(v); } catch (e) { return fallback; }
+}
+function pmStr_(v, max) { return String(v === undefined || v === null ? "" : v).slice(0, max || 500); }
+function pmDate_(v) {
+  if (!v) return "";
+  if (v instanceof Date) return formatDateSafe_(v);
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
+function readProjects_() {
+  const sheet = getProjectsSheet_();
+  const rows = sheet.getDataRange().getValues();
+  const out = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r[0]) continue;
+    out.push({
+      row: i + 1, id: String(r[0]), name: r[1], icon: r[2] || "📁", color: r[3] || "#2563eb", brand: r[4] || "",
+      template: r[5] || "", status: r[6] || "Active", start: pmDate_(r[7]), keyDate: pmDate_(r[8]), leadId: String(r[9] || ""),
+      members: pj_(r[10], []), brief: pj_(r[11], {}), kpis: pj_(r[12], []), phases: pj_(r[13], []), links: pj_(r[14], []),
+      settings: pj_(r[15], { qc: true, autoCalendar: true }), createdBy: r[16] || "", createdAt: String(r[17] || ""),
+      updatedAt: String(r[18] || ""), closedAt: String(r[19] || ""), retro: pj_(r[20], null), description: r[21] || "",
+      keyDateLabel: r[22] || "Key date"
+    });
+  }
+  return out;
+}
+
+function projectRowValues_(p) {
+  return [p.id, p.name, p.icon, p.color, p.brand, p.template, p.status, p.start, p.keyDate, p.leadId,
+    JSON.stringify(p.members || []), JSON.stringify(p.brief || {}), JSON.stringify(p.kpis || []),
+    JSON.stringify(p.phases || []), JSON.stringify(p.links || []), JSON.stringify(p.settings || {}),
+    p.createdBy, p.createdAt, p.updatedAt, p.closedAt || "", p.retro ? JSON.stringify(p.retro) : "", p.description || "",
+    p.keyDateLabel || "Key date"];
+}
+function writeProject_(p) {
+  const sheet = getProjectsSheet_();
+  p.updatedAt = getIndiaTimeISO();
+  sheet.getRange(p.row, 8, 1, 2).setNumberFormat('@');
+  sheet.getRange(p.row, 1, 1, PROJECT_HEADERS_.length).setValues([projectRowValues_(p)]);
+}
+
+function pmIsOwner_(userId) { return APP_ADMIN_IDS_.indexOf(String(userId)) !== -1; }
+function pmRole_(p, userId) {
+  if (pmIsOwner_(userId)) return "owner";
+  if (String(p.leadId) === String(userId)) return "lead";
+  const m = (p.members || []).find(x => String(x.id) === String(userId));
+  return m ? (m.role === "viewer" ? "viewer" : "member") : "";
+}
+function pmCanManage_(p, userId) { const r = pmRole_(p, userId); return r === "owner" || r === "lead"; }
+function pmTeamMap_() {
+  const map = {};
+  allTeam_().forEach(m => { map[String(m.id)] = m.name; });
+  return map;
+}
+function pmIdOfName_(name) {
+  const t = allTeam_().find(m => m.name === name);
+  return t ? String(t.id) : "";
+}
+// Names of the people a project notification should reach.
+function pmNames_(p, opts) {
+  const map = pmTeamMap_();
+  const names = {};
+  if (opts.lead && p.leadId && map[p.leadId]) names[map[p.leadId]] = true;
+  if (opts.owners) APP_ADMIN_IDS_.forEach(id => { if (map[id]) names[map[id]] = true; });
+  if (opts.creator && p.createdBy) names[p.createdBy] = true;
+  if (opts.members) (p.members || []).forEach(m => { if (map[m.id]) names[map[m.id]] = true; });
+  (opts.exclude || []).forEach(n => { delete names[n]; });
+  return Object.keys(names);
+}
+function pmNotify_(names, type, p, title, from, deep) {
+  (names || []).forEach(n => {
+    try { addToInbox(n, { type: type, taskId: "project_" + p.id + (deep ? "~" + deep : ""), from: from || "WTC Hub", title: title, priority: "Medium" }); } catch (e) {}
+  });
+}
+function logProject_(projectId, by, text) {
+  try {
+    const sheet = getPUpdatesSheet_();
+    sheet.appendRow([nextIdFromTail_(sheet), projectId, "activity", by || "", getIndiaTimeISO(), "", pmStr_(text, 500), ""]);
+  } catch (e) { Logger.log("logProject_ failed: " + e); }
+}
+
+function readProjectTasks_(projectIds) {
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks");
+  const data = sheet.getDataRange().getValues();
+  const want = {};
+  (projectIds || []).forEach(id => { want[String(id)] = true; });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const out = [];
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    if (!r[0] || r.length < PROJECT_TASK_COL_) continue;
+    const pid = String(r[PROJECT_TASK_COL_ - 1] || "");
+    if (!pid || !want[pid]) continue;
+    const info = pj_(r[PROJECT_INFO_COL_ - 1], {});
+    let delayDays = 0;
+    if (r[6] !== "Completed" && r[5]) {
+      const t = new Date(r[5]); t.setHours(0, 0, 0, 0);
+      const d = Math.floor((today - t) / 86400000);
+      if (d > 0) delayDays = d;
+    }
+    out.push({
+      id: r[0], projectId: pid, assignedTo: r[1], taskDetails: r[2], remarks: r[3], priority: r[4] || "Medium",
+      targetDate: pmDate_(r[5]), status: r[6] || "Not Started", completionDate: r[7] ? String(r[7]) : "",
+      delayDays: delayDays, assignedBy: r[10], assignedDate: pmDate_(r[11]), channel: r[12] || "Other",
+      archived: r[13] || "No", phase: info.phase || "", effort: info.effort || "M", deps: info.deps || [],
+      start: info.start || "", format: info.format || "", order: info.order || 0
+    });
+  }
+  return out;
+}
+
+// ONE call that loads everything the Projects screen needs for this person.
+function getProjectsData(userId) {
+  const isOwner = pmIsOwner_(userId);
+  const all = readProjects_().filter(p => p.status !== "Archived");
+  const visible = all.filter(p => isOwner || pmRole_(p, userId));
+  const ids = visible.map(p => p.id);
+  const idSet = {}; ids.forEach(id => { idSet[id] = true; });
+  const tasks = readProjectTasks_(ids);
+
+  const reviews = [];
+  const rv = getReviewsSheet_().getDataRange().getValues();
+  for (let i = 1; i < rv.length; i++) {
+    const r = rv[i];
+    if (!r[0] || !idSet[String(r[1])]) continue;
+    reviews.push({ id: String(r[0]), projectId: String(r[1]), taskId: String(r[2]), version: Number(r[3]) || 1, link: r[4], note: r[5],
+      submittedBy: r[6], submittedAt: String(r[7] || ""), stage: r[8], status: r[9], comments: pj_(r[10], []),
+      decidedBy: r[11], decidedAt: String(r[12] || ""), taskTitle: r[13] || "" });
+  }
+  const updates = [];
+  const up = getPUpdatesSheet_().getDataRange().getValues();
+  for (let i = up.length - 1; i >= 1; i--) {
+    const r = up[i];
+    if (!r[0] || !idSet[String(r[1])]) continue;
+    if (updates.length >= 1500) break;
+    updates.push({ id: String(r[0]), projectId: String(r[1]), type: r[2], by: r[3], at: String(r[4] || ""), health: r[5], note: r[6], snapshot: pj_(r[7], null) });
+  }
+  const templates = [];
+  const tp = getPTemplatesSheet_().getDataRange().getValues();
+  for (let i = 1; i < tp.length; i++) {
+    const r = tp[i];
+    if (!r[0] || r[8] === "No") continue;
+    templates.push({ id: String(r[0]), name: r[1], icon: r[2], color: r[3], description: r[4], definition: pj_(r[5], null), createdBy: r[6], createdAt: String(r[7] || ""), custom: true });
+  }
+  // Leaves (for the attendance-aware Workload view) — only for owners and leads.
+  let leaves = [];
+  const isLead = visible.some(p => String(p.leadId) === String(userId));
+  if (isOwner || isLead) {
+    const from = dateKey_(addDays_(new Date(), -14));
+    const to = dateKey_(addDays_(new Date(), 120));
+    leaves = readLeaves_().filter(l => l.status !== "Cancelled" && l.date >= from && l.date <= to)
+      .map(l => ({ date: l.date, userId: l.userId, type: l.type }));
+  }
+  const allNames = isOwner ? all.map(p => ({ id: p.id, name: p.name, icon: p.icon })) : [];
+  return jsonResponse({ status: "ok", projects: visible.map(p => { const c = Object.assign({}, p); delete c.row; return c; }),
+    tasks: tasks, reviews: reviews, updates: updates, templates: templates, leaves: leaves, isOwner: isOwner, allProjects: allNames });
+}
+
+function pmTaskRow_(t, projectId, assignedBy, info) {
+  return [
+    t.id, t.assignedTo, pmStr_(t.taskDetails, 500), pmStr_(t.remarks || "", 2000), t.priority || "Medium", t.targetDate,
+    t.status || "Not Started", "", 0, "", assignedBy, getIndiaDate(), t.channel || "Other", "No", "General", "",
+    "", "", "Project", "", "", "", "", projectId, JSON.stringify(info)
+  ];
+}
+function pmCleanInfo_(t) {
+  return { phase: pmStr_(t.phase, 40), effort: EFFORT_HOURS_[t.effort] ? t.effort : "M",
+    deps: (t.deps || []).map(String).slice(0, 20), start: pmDate_(t.start), format: pmStr_(t.format, 40), order: Number(t.order) || 0 };
+}
+function pmAssigneeList_(v) {
+  return (Array.isArray(v) ? v : String(v || "").split(",")).map(s => String(s).trim()).filter(Boolean);
+}
+
+// project: {id, name, icon, color, brand, template, start, keyDate, keyDateLabel, leadId, members, brief, kpis, phases, links, settings, description}
+// tasks:   [{key, taskDetails, assignedTo:[names], targetDate, start, phase, effort, deps:[keys], priority, channel, format, remarks}]
+function createProject(project, tasks, userId, userName) {
+  if (!pmIsOwner_(userId)) return jsonResponse({status: "error", message: "Only PC or Shivendra can create projects."});
+  if (!project || !project.name || !project.id) return jsonResponse({status: "error", message: "Project name is missing."});
+  return withScriptLock_(() => {
+    const existing = readProjects_().find(p => p.id === String(project.id));
+    if (existing) return jsonResponse({status: "ok", id: existing.id, duplicate: true});
+    const sheet = getProjectsSheet_();
+    const now = getIndiaTimeISO();
+    const members = (project.members || []).map(m => ({ id: String(m.id), role: ["member", "viewer"].indexOf(m.role) !== -1 ? m.role : "member" }))
+      .filter((m, i, a) => m.id && a.findIndex(x => x.id === m.id) === i && m.id !== String(project.leadId));
+    const p = {
+      id: pmStr_(project.id, 40), name: pmStr_(project.name, 120), icon: pmStr_(project.icon || "📁", 8), color: pmStr_(project.color || "#2563eb", 20),
+      brand: pmStr_(project.brand, 40), template: pmStr_(project.template, 60), status: "Active",
+      start: pmDate_(project.start) || getIndiaDate(), keyDate: pmDate_(project.keyDate), leadId: String(project.leadId || userId),
+      members: members, brief: project.brief || {}, kpis: (project.kpis || []).slice(0, 12), phases: (project.phases || []).slice(0, 20),
+      links: (project.links || []).slice(0, 100), settings: Object.assign({ qc: true, autoCalendar: true }, project.settings || {}),
+      createdBy: userName || "", createdAt: now, updatedAt: now, closedAt: "", retro: null,
+      description: pmStr_(project.description, 1000), keyDateLabel: pmStr_(project.keyDateLabel || "Key date", 40)
+    };
+    const row = sheet.getLastRow() + 1;
+    sheet.getRange(row, 8, 1, 2).setNumberFormat('@');
+    sheet.getRange(row, 1, 1, PROJECT_HEADERS_.length).setValues([projectRowValues_(p)]);
+
+    // Tasks — written in ONE batch, ids sequential, dependencies mapped from keys to ids.
+    const tSheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks");
+    ensureTaskProjectCols_(tSheet);
+    const ids = tSheet.getRange(1, 1, tSheet.getLastRow(), 1).getValues();
+    let maxId = 0; ids.forEach(r => { const n = parseInt(r[0], 10); if (!isNaN(n) && n > maxId) maxId = n; });
+    const keyToId = {};
+    const list = (tasks || []).slice(0, 200).filter(t => t && String(t.taskDetails || "").trim());
+    list.forEach((t, i) => { keyToId[String(t.key !== undefined ? t.key : i)] = maxId + 1 + i; });
+    const perPerson = {};
+    const rows = list.map((t, i) => {
+      const assignees = pmAssigneeList_(t.assignedTo);
+      assignees.forEach(a => { perPerson[a] = (perPerson[a] || 0) + 1; });
+      const info = pmCleanInfo_(Object.assign({}, t, { deps: (t.deps || []).map(k => keyToId[String(k)]).filter(Boolean), order: i }));
+      return pmTaskRow_({ id: maxId + 1 + i, assignedTo: assignees.join(", ") || userName, taskDetails: t.taskDetails, remarks: t.remarks,
+        priority: t.priority, targetDate: pmDate_(t.targetDate) || p.keyDate, channel: t.channel }, p.id, userName, info);
+    });
+    if (rows.length) {
+      const start = tSheet.getLastRow() + 1;
+      tSheet.getRange(start, 1, rows.length, rows[0].length).setValues(rows);
+    }
+    logProject_(p.id, userName, "created the project" + (p.template ? " from the " + p.template + " template" : "") + " with " + rows.length + " tasks");
+    // One notification per person (not one per task).
+    const map = pmTeamMap_();
+    const notified = {};
+    [p.leadId].concat(p.members.map(m => m.id)).forEach(id => {
+      const name = map[id];
+      if (!name || name === userName || notified[name]) return;
+      notified[name] = true;
+      const n = perPerson[name] || 0;
+      const role = id === p.leadId ? "Lead" : (p.members.find(m => m.id === id) || {}).role === "viewer" ? "Viewer" : "Member";
+      pmNotify_([name], "project_added", p, p.name + " — you're " + (role === "Lead" ? "the Lead" : "a " + role) + (n ? " · " + n + " task" + (n > 1 ? "s" : "") + " for you" : ""), userName);
+    });
+    Object.keys(perPerson).forEach(name => {
+      if (notified[name] || name === userName) return;
+      pmNotify_([name], "project_added", p, p.name + " · " + perPerson[name] + " task" + (perPerson[name] > 1 ? "s" : "") + " for you", userName);
+    });
+    return jsonResponse({status: "ok", id: p.id, tasks: rows.length});
+  });
+}
+
+const PROJECT_EDITABLE_ = ["name", "icon", "color", "brand", "status", "start", "keyDate", "keyDateLabel", "brief", "kpis", "phases", "links", "settings", "description", "members", "leadId"];
+function updateProject(projectId, updates, userId, userName) {
+  return withScriptLock_(() => {
+    const p = readProjects_().find(x => x.id === String(projectId));
+    if (!p) return jsonResponse({status: "error", message: "Project not found"});
+    const role = pmRole_(p, userId);
+    const canManage = role === "owner" || role === "lead";
+    // Members may update KPI numbers and add links; everything else needs the Lead/owner.
+    const keys = Object.keys(updates || {}).filter(k => PROJECT_EDITABLE_.indexOf(k) !== -1);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (k === "leadId" && role !== "owner") return jsonResponse({status: "error", message: "Only PC or Shivendra can change the Lead."});
+      if (!canManage && !(role === "member" && (k === "kpis" || k === "links"))) return jsonResponse({status: "error", message: "Only the project Lead can change this."});
+    }
+    const map = pmTeamMap_();
+    const beforeIds = {}; [p.leadId].concat((p.members || []).map(m => m.id)).forEach(id => { beforeIds[id] = true; });
+    keys.forEach(k => {
+      let v = updates[k];
+      if (k === "start" || k === "keyDate") v = pmDate_(v);
+      else if (k === "members") v = (v || []).map(m => ({ id: String(m.id), role: ["member", "viewer"].indexOf(m.role) !== -1 ? m.role : "member" }))
+        .filter((m, i, a) => m.id && map[m.id] && a.findIndex(x => x.id === m.id) === i);
+      else if (k === "status") v = ["Active", "On hold", "Completed", "Archived"].indexOf(v) !== -1 ? v : p.status;
+      else if (typeof v === "string") v = pmStr_(v, 1000);
+      p[k] = v;
+    });
+    if (p.members) p.members = p.members.filter(m => m.id !== String(p.leadId));
+    if (updates.status === "Archived" && role !== "owner") return jsonResponse({status: "error", message: "Only PC or Shivendra can archive a project."});
+    if (updates.status === "Active" && p.closedAt) p.closedAt = "";
+    writeProject_(p);
+    // Newly added people get told.
+    const added = [p.leadId].concat(p.members.map(m => m.id)).filter(id => !beforeIds[id] && map[id] && map[id] !== userName);
+    added.forEach(id => {
+      const r = id === p.leadId ? "the Lead" : ((p.members.find(m => m.id === id) || {}).role === "viewer" ? "a Viewer" : "a Member");
+      pmNotify_([map[id]], "project_added", p, userName + " added you to " + p.name + " as " + r, userName);
+    });
+    const what = keys.map(k => ({ name: "name", icon: "icon", color: "colour", brand: "brand", status: "status → " + p.status, start: "start date", keyDate: (p.keyDateLabel || "key date").toLowerCase(),
+      keyDateLabel: "key date label", brief: "brief", kpis: "KPIs", phases: "phases", links: "links", settings: "settings", description: "description", members: "team", leadId: "Lead → " + (map[p.leadId] || "") }[k])).join(", ");
+    if (what) logProject_(p.id, userName, "updated " + what);
+    return jsonResponse({status: "ok"});
+  });
+}
+
+function pmFindProjectTaskRows_(sheet, projectId) {
+  const data = sheet.getDataRange().getValues();
+  return { data: data, rows: data.map((r, i) => i).filter(i => i > 0 && String(data[i][PROJECT_TASK_COL_ - 1] || "") === String(projectId)) };
+}
+
+function addProjectTask(projectId, task, userId, userName) {
+  const p = readProjects_().find(x => x.id === String(projectId));
+  if (!p) return jsonResponse({status: "error", message: "Project not found"});
+  if (!pmCanManage_(p, userId)) return jsonResponse({status: "error", message: "Only the project Lead can add tasks."});
+  if (!task || !String(task.taskDetails || "").trim()) return jsonResponse({status: "error", message: "Task name is missing."});
+  return withScriptLock_(() => {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks");
+    ensureTaskProjectCols_(sheet);
+    const newId = nextIdFromTail_(sheet);
+    const ids = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
+    let maxId = newId - 1; ids.forEach(r => { const n = parseInt(r[0], 10); if (!isNaN(n) && n > maxId) maxId = n; });
+    const id = maxId + 1;
+    const assignees = pmAssigneeList_(task.assignedTo);
+    const info = pmCleanInfo_(Object.assign({}, task, { order: Date.now() % 100000000 }));
+    sheet.appendRow(pmTaskRow_({ id: id, assignedTo: assignees.join(", ") || userName, taskDetails: task.taskDetails, remarks: task.remarks,
+      priority: task.priority, targetDate: pmDate_(task.targetDate) || p.keyDate, channel: task.channel }, p.id, userName, info));
+    assignees.filter(a => a !== userName).forEach(a => {
+      addToInbox(a, { type: "new_task", taskId: id, from: userName, title: "[" + p.name + "] " + task.taskDetails, priority: task.priority || "Medium" });
+    });
+    logProject_(p.id, userName, "added task “" + pmStr_(task.taskDetails, 120) + "”");
+    return jsonResponse({status: "ok", id: id});
+  });
+}
+
+// items: [{taskId, updates:{taskDetails, assignedTo, targetDate, start, phase, effort, deps, priority, channel, format, remarks}}]
+function updateProjectTasks(projectId, items, userId, userName) {
+  const p = readProjects_().find(x => x.id === String(projectId));
+  if (!p) return jsonResponse({status: "error", message: "Project not found"});
+  if (!pmCanManage_(p, userId)) return jsonResponse({status: "error", message: "Only the project Lead can change project tasks."});
+  return withScriptLock_(() => {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks");
+    const found = pmFindProjectTaskRows_(sheet, p.id);
+    const byId = {}; found.rows.forEach(i => { byId[String(found.data[i][0])] = i; });
+    let changed = 0;
+    (items || []).slice(0, 200).forEach(it => {
+      const i = byId[String(it.taskId)];
+      if (i === undefined) return;
+      const r = found.data[i];
+      const u = it.updates || {};
+      const info = pj_(r[PROJECT_INFO_COL_ - 1], {});
+      const oldAssignees = pmAssigneeList_(r[1]);
+      if (u.taskDetails !== undefined) r[2] = pmStr_(u.taskDetails, 500);
+      if (u.remarks !== undefined) r[3] = pmStr_(u.remarks, 2000);
+      if (u.priority !== undefined) r[4] = u.priority;
+      if (u.targetDate !== undefined && pmDate_(u.targetDate)) r[5] = pmDate_(u.targetDate);
+      if (u.channel !== undefined) r[12] = u.channel || "Other";
+      if (u.assignedTo !== undefined) {
+        const list = pmAssigneeList_(u.assignedTo);
+        if (list.length) {
+          r[1] = list.join(", ");
+          list.filter(a => oldAssignees.indexOf(a) === -1 && a !== userName).forEach(a => {
+            addToInbox(a, { type: "new_task", taskId: r[0], from: userName, title: "[" + p.name + "] " + r[2], priority: r[4] || "Medium" });
+          });
+        }
+      }
+      ["phase", "effort", "deps", "start", "format"].forEach(k => { if (u[k] !== undefined) info[k] = u[k]; });
+      const clean = pmCleanInfo_(Object.assign({}, info, { order: info.order }));
+      r[PROJECT_INFO_COL_ - 1] = JSON.stringify(clean);
+      const rowRange = sheet.getRange(i + 1, 1, 1, PROJECT_INFO_COL_);
+      const vals = r.slice(0, PROJECT_INFO_COL_);
+      while (vals.length < PROJECT_INFO_COL_) vals.push("");
+      rowRange.setValues([vals]);
+      changed++;
+    });
+    if (changed) logProject_(p.id, userName, changed === 1 ? "updated a task" : "updated " + changed + " tasks");
+    return jsonResponse({status: "ok", changed: changed});
+  });
+}
+
+function deleteProjectTask(projectId, taskId, userId, userName) {
+  const p = readProjects_().find(x => x.id === String(projectId));
+  if (!p) return jsonResponse({status: "error", message: "Project not found"});
+  if (!pmCanManage_(p, userId)) return jsonResponse({status: "error", message: "Only the project Lead can remove tasks."});
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Tasks");
+  const found = pmFindProjectTaskRows_(sheet, p.id);
+  for (let k = 0; k < found.rows.length; k++) {
+    const i = found.rows[k];
+    if (String(found.data[i][0]) === String(taskId)) {
+      const title = found.data[i][2];
+      sheet.deleteRow(i + 1);
+      logProject_(p.id, userName, "removed task “" + pmStr_(title, 120) + "”");
+      return jsonResponse({status: "ok"});
+    }
+  }
+  return jsonResponse({status: "error", message: "Task not found"});
+}
+
+// Called from updateStatus() for every status change of a task that belongs to a project.
+function projectOnStatus_(row, taskId, newStatus, userName) {
+  const projectId = String(row[PROJECT_TASK_COL_ - 1] || "");
+  if (!projectId) return;
+  const p = readProjects_().find(x => x.id === projectId);
+  if (!p) return;
+  logProject_(p.id, userName, "moved “" + pmStr_(row[2], 120) + "” to " + newStatus);
+  if (newStatus !== "Completed") return;
+  const tasks = readProjectTasks_([p.id]);
+  const done = {}; tasks.forEach(t => { if (t.status === "Completed" || String(t.id) === String(taskId)) done[String(t.id)] = true; });
+  // Dependents whose every dependency is now done → tell their people they can start.
+  tasks.forEach(t => {
+    if (done[String(t.id)] || !(t.deps || []).length) return;
+    if ((t.deps || []).map(String).indexOf(String(taskId)) === -1) return;
+    if (!(t.deps || []).every(d => done[String(d)])) return;
+    pmAssigneeList_(t.assignedTo).filter(a => a !== userName).forEach(a => {
+      addToInbox(a, { type: "project_ready", taskId: t.id, from: userName, title: "[" + p.name + "] You can start: " + t.taskDetails, priority: t.priority });
+    });
+  });
+  // Phase finished → tell the people on the next phase.
+  const info = pj_(row[PROJECT_INFO_COL_ - 1], {});
+  const phaseId = info.phase;
+  if (!phaseId) return;
+  const inPhase = tasks.filter(t => t.phase === phaseId);
+  if (!inPhase.length || !inPhase.every(t => done[String(t.id)])) return;
+  const phases = p.phases || [];
+  const idx = phases.findIndex(ph => ph.id === phaseId);
+  const phaseName = idx >= 0 ? phases[idx].name : "A phase";
+  logProject_(p.id, "WTC Hub", "✓ Phase complete: " + phaseName);
+  const next = idx >= 0 ? phases[idx + 1] : null;
+  const notify = {};
+  pmNames_(p, { lead: true, creator: true }).forEach(n => { notify[n] = true; });
+  if (next) tasks.filter(t => t.phase === next.id && !done[String(t.id)]).forEach(t => pmAssigneeList_(t.assignedTo).forEach(a => { notify[a] = true; }));
+  delete notify[userName];
+  pmNotify_(Object.keys(notify), "project_alert", p, p.name + ": “" + phaseName + "” is complete" + (next ? " — “" + next.name + "” is up next" : ""), userName);
+}
+
+// ---------- Reviews (versions + approvals) ----------
+function readReviewRows_() {
+  const sheet = getReviewsSheet_();
+  return { sheet: sheet, rows: sheet.getDataRange().getValues() };
+}
+function submitReview(projectId, taskId, link, note, userId, userName, reviewId) {
+  const p = readProjects_().find(x => x.id === String(projectId));
+  if (!p) return jsonResponse({status: "error", message: "Project not found"});
+  const role = pmRole_(p, userId);
+  if (!role || role === "viewer") return jsonResponse({status: "error", message: "You are not on this project."});
+  const url = String(link || "").trim();
+  if (!/^https?:\/\//i.test(url)) return jsonResponse({status: "error", message: "Paste a full link (https://…)."});
+  return withScriptLock_(() => {
+    const task = readProjectTasks_([p.id]).find(t => String(t.id) === String(taskId));
+    if (!task) return jsonResponse({status: "error", message: "Task not found"});
+    const rr = readReviewRows_();
+    let version = 0;
+    for (let i = 1; i < rr.rows.length; i++) {
+      if (reviewId && String(rr.rows[i][0]) === String(reviewId)) return jsonResponse({status: "ok", id: reviewId, duplicate: true});
+      if (String(rr.rows[i][2]) === String(taskId)) {
+        version = Math.max(version, Number(rr.rows[i][3]) || 0);
+        // An older version still waiting is replaced by this one.
+        if (rr.rows[i][9] === "Pending") rr.sheet.getRange(i + 1, 10).setValue("Superseded");
+      }
+    }
+    version++;
+    const isLead = String(p.leadId) === String(userId) || role === "owner";
+    const qc = !(p.settings && p.settings.qc === false);
+    let stage = "lead";
+    if (isLead) stage = qc && role !== "owner" ? "qc" : "final";
+    const status = stage === "final" ? "Approved" : "Pending";
+    const id = reviewId || ("r" + Date.now().toString(36));
+    const row = rr.sheet.getLastRow() + 1;
+    rr.sheet.getRange(row, 3).setNumberFormat('@');
+    rr.sheet.getRange(row, 1, 1, REVIEW_HEADERS_.length).setValues([[id, p.id, String(taskId), version, url, pmStr_(note, 1000), userName,
+      getIndiaTimeISO(), stage, status, "[]", status === "Approved" ? userName : "", status === "Approved" ? getIndiaTimeISO() : "", pmStr_(task.taskDetails, 200)]]);
+    if (task.status === "Not Started") { try { updateStatus(task.id, "In Progress", userName); } catch (e) {} }
+    logProject_(p.id, userName, "submitted v" + version + " of “" + pmStr_(task.taskDetails, 120) + "” for review");
+    const title = p.name + " · v" + version + " of “" + task.taskDetails + "” needs your review";
+    if (stage === "lead") pmNotify_(pmNames_(p, { lead: true, exclude: [userName] }), "review_request", p, title, userName, "reviews");
+    else if (stage === "qc") pmNotify_(pmNames_(p, { owners: true, exclude: [userName] }), "review_request", p, title, userName, "reviews");
+    else pmOnApproved_(p, task, url, userName);
+    return jsonResponse({status: "ok", id: id, version: version, stage: stage});
+  });
+}
+
+function decideReview(reviewId, decision, comment, userId, userName) {
+  return withScriptLock_(() => {
+    const rr = readReviewRows_();
+    let i = -1;
+    for (let k = 1; k < rr.rows.length; k++) if (String(rr.rows[k][0]) === String(reviewId)) { i = k; break; }
+    if (i === -1) return jsonResponse({status: "error", message: "Review not found"});
+    const r = rr.rows[i];
+    if (r[9] !== "Pending") return jsonResponse({status: "error", message: "This version was already " + String(r[9]).toLowerCase() + "."});
+    const p = readProjects_().find(x => x.id === String(r[1]));
+    if (!p) return jsonResponse({status: "error", message: "Project not found"});
+    const role = pmRole_(p, userId);
+    const stage = r[8];
+    if (stage === "lead" && !(role === "owner" || role === "lead")) return jsonResponse({status: "error", message: "Only the project Lead can review this stage."});
+    if (stage === "qc" && role !== "owner") return jsonResponse({status: "error", message: "Final QC is done by PC or Shivendra."});
+    const comments = pj_(r[10], []);
+    if (String(comment || "").trim()) {
+      const tm = String(comment).trim().match(/^(\d{1,2}:\d{2})\s+([\s\S]*)$/);
+      comments.push({ by: userName, at: getIndiaTimeISO(), text: pmStr_(tm ? tm[2] : comment, 1000), ts: tm ? tm[1] : "", kind: decision });
+    }
+    const task = readProjectTasks_([p.id]).find(t => String(t.id) === String(r[2])) || { id: r[2], taskDetails: r[13], assignedTo: r[6] };
+    const qc = !(p.settings && p.settings.qc === false);
+    const submitter = r[6];
+    if (decision === "changes") {
+      rr.sheet.getRange(i + 1, 10, 1, 4).setValues([["Changes", JSON.stringify(comments), userName, getIndiaTimeISO()]]);
+      logProject_(p.id, userName, "asked for changes on v" + r[3] + " of “" + pmStr_(task.taskDetails, 120) + "”");
+      pmNotify_([submitter].filter(n => n && n !== userName), "review_decision", p, "✏️ Changes requested on “" + task.taskDetails + "” v" + r[3] + (comment ? ": " + pmStr_(comment, 140) : ""), userName, "reviews");
+      return jsonResponse({status: "ok", result: "Changes"});
+    }
+    if (stage === "lead" && qc && role !== "owner") {
+      rr.sheet.getRange(i + 1, 9, 1, 3).setValues([["qc", "Pending", JSON.stringify(comments)]]);
+      logProject_(p.id, userName, "approved v" + r[3] + " of “" + pmStr_(task.taskDetails, 120) + "” — sent for final QC");
+      pmNotify_(pmNames_(p, { owners: true, exclude: [userName] }), "review_request", p, p.name + " · “" + task.taskDetails + "” v" + r[3] + " is ready for final QC", userName, "reviews");
+      pmNotify_([submitter].filter(n => n && n !== userName), "review_decision", p, "👍 Lead approved “" + task.taskDetails + "” v" + r[3] + " — waiting for final QC", userName, "reviews");
+      return jsonResponse({status: "ok", result: "qc"});
+    }
+    rr.sheet.getRange(i + 1, 9, 1, 5).setValues([["final", "Approved", JSON.stringify(comments), userName, getIndiaTimeISO()]]);
+    logProject_(p.id, userName, "✅ approved v" + r[3] + " of “" + pmStr_(task.taskDetails, 120) + "”");
+    pmNotify_(pmNames_(p, { lead: true, exclude: [userName] }).concat(submitter && submitter !== userName ? [submitter] : []).filter((n, k, a) => a.indexOf(n) === k),
+      "review_decision", p, "✅ “" + task.taskDetails + "” v" + r[3] + " approved", userName, "reviews");
+    pmOnApproved_(p, task, r[4], userName);
+    return jsonResponse({status: "ok", result: "Approved"});
+  });
+}
+
+function commentReview(reviewId, text, at, userId, userName) {
+  if (!String(text || "").trim()) return jsonResponse({status: "error", message: "Write a comment."});
+  return withScriptLock_(() => {
+    const rr = readReviewRows_();
+    for (let k = 1; k < rr.rows.length; k++) {
+      if (String(rr.rows[k][0]) !== String(reviewId)) continue;
+      const p = readProjects_().find(x => x.id === String(rr.rows[k][1]));
+      if (!p || !pmRole_(p, userId)) return jsonResponse({status: "error", message: "You are not on this project."});
+      const comments = pj_(rr.rows[k][10], []);
+      comments.push({ by: userName, at: getIndiaTimeISO(), text: pmStr_(text, 1000), ts: pmStr_(at, 12) });
+      rr.sheet.getRange(k + 1, 11).setValue(JSON.stringify(comments.slice(-200)));
+      const submitter = rr.rows[k][6];
+      const to = submitter === userName ? pmNames_(p, { lead: true, exclude: [userName] }) : [submitter];
+      pmNotify_(to, "review_decision", p, "💬 " + userName + " on “" + rr.rows[k][13] + "” v" + rr.rows[k][3] + (at ? " @" + at : "") + ": " + pmStr_(text, 120), userName, "reviews");
+      return jsonResponse({status: "ok"});
+    }
+    return jsonResponse({status: "error", message: "Review not found"});
+  });
+}
+
+// Final approval → (automation) add it to the Content Calendar, linked to the same task,
+// so that marking it Published there also completes the task.
+function pmOnApproved_(p, task, link, userName) {
+  if (!(p.settings && p.settings.autoCalendar !== false)) return;
+  if (!task.channel || task.channel === "Other") return;
+  try {
+    const sheet = getContentSheet_();
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) if (String(data[i][13]) === String(task.id)) return; // already on the calendar
+    const groups = {};
+    const ch = getContentChannelsSheet_().getDataRange().getValues();
+    for (let i = 1; i < ch.length; i++) if (ch[i][2]) groups[String(ch[i][2])] = String(ch[i][1]);
+    const channels = String(task.channel).split(",").map(s => s.trim()).filter(Boolean);
+    const group = groups[channels[0]] || p.brand || "Other";
+    let maxId = 0;
+    for (let i = 1; i < data.length; i++) { const n = parseInt(String(data[i][0]).replace('c', ''), 10); if (!isNaN(n) && n > maxId) maxId = n; }
+    const row = sheet.getLastRow() + 1;
+    sheet.getRange(row, 6).setNumberFormat('@');
+    sheet.getRange(row, 20).setNumberFormat('@');
+    const vals = ["c" + (maxId + 1), group, channels.join(", "), task.format || "Post", String(task.taskDetails).replace(/^\[[^\]]*\]\s*/, ""),
+      task.targetDate || p.keyDate, task.assignedTo, "Scheduled", task.priority || "Medium", link || "", "", "From project: " + p.name, "",
+      task.id, userName, getIndiaDate(), "Final", "", "", "", "", ""];
+    vals.push(allLinksText_(vals));
+    sheet.getRange(row, 1, 1, 23).setValues([vals]);
+    refreshContentCache_();
+    logProject_(p.id, "WTC Hub", "📅 added “" + pmStr_(task.taskDetails, 120) + "” to the Content Calendar");
+  } catch (e) { Logger.log("pmOnApproved_ calendar failed: " + e); }
+}
+
+// ---------- Status updates, templates, closing ----------
+function postProjectUpdate(projectId, health, note, snapshot, userId, userName) {
+  const p = readProjects_().find(x => x.id === String(projectId));
+  if (!p) return jsonResponse({status: "error", message: "Project not found"});
+  if (!pmCanManage_(p, userId)) return jsonResponse({status: "error", message: "Only the project Lead can post status updates."});
+  const h = ["ok", "risk", "delayed"].indexOf(health) !== -1 ? health : "ok";
+  const sheet = getPUpdatesSheet_();
+  sheet.appendRow([nextIdFromTail_(sheet), p.id, "status", userName, getIndiaTimeISO(), h, pmStr_(note, 2000), JSON.stringify(snapshot || {}).slice(0, 5000)]);
+  const label = { ok: "🟢 On track", risk: "🟡 At risk", delayed: "🔴 Delayed" }[h];
+  pmNotify_(pmNames_(p, { owners: true, creator: true, members: true, exclude: [userName] }), "project_status", p,
+    p.name + " status: " + label + (note ? " — " + pmStr_(note, 120) : ""), userName, "updates");
+  return jsonResponse({status: "ok"});
+}
+
+function saveProjectTemplate(template, userId, userName) {
+  if (!template || !template.name || !template.definition) return jsonResponse({status: "error", message: "Template is empty."});
+  const ps = readProjects_();
+  const allowed = pmIsOwner_(userId) || ps.some(p => String(p.leadId) === String(userId));
+  if (!allowed) return jsonResponse({status: "error", message: "Only PC, Shivendra or a project Lead can save templates."});
+  const sheet = getPTemplatesSheet_();
+  const id = "t" + Date.now().toString(36);
+  sheet.appendRow([id, pmStr_(template.name, 80), pmStr_(template.icon || "📁", 8), pmStr_(template.color || "#2563eb", 20),
+    pmStr_(template.description, 300), JSON.stringify(template.definition).slice(0, 45000), userName, getIndiaTimeISO(), "Yes"]);
+  return jsonResponse({status: "ok", id: id});
+}
+function deleteProjectTemplate(id, userId) {
+  const sheet = getPTemplatesSheet_();
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) !== String(id)) continue;
+    if (!pmIsOwner_(userId) && rows[i][6] !== (allTeam_().find(m => String(m.id) === String(userId)) || {}).name) return jsonResponse({status: "error", message: "Not allowed"});
+    sheet.getRange(i + 1, 9).setValue("No");
+    return jsonResponse({status: "ok"});
+  }
+  return jsonResponse({status: "error", message: "Template not found"});
+}
+
+function closeProject(projectId, retro, userId, userName) {
+  return withScriptLock_(() => {
+    const p = readProjects_().find(x => x.id === String(projectId));
+    if (!p) return jsonResponse({status: "error", message: "Project not found"});
+    if (!pmCanManage_(p, userId)) return jsonResponse({status: "error", message: "Only the project Lead can close the project."});
+    p.status = "Completed";
+    p.closedAt = getIndiaTimeISO();
+    p.retro = { worked: pmStr_(retro && retro.worked, 2000), didnt: pmStr_(retro && retro.didnt, 2000), change: pmStr_(retro && retro.change, 2000),
+      rating: Math.max(0, Math.min(5, Number(retro && retro.rating) || 0)), by: userName, at: getIndiaTimeISO() };
+    writeProject_(p);
+    logProject_(p.id, userName, "🏁 closed the project");
+    pmNotify_(pmNames_(p, { owners: true, creator: true, members: true, lead: true, exclude: [userName] }), "project_status", p, "🏁 " + p.name + " is complete — see the final report", userName, "report");
+    return jsonResponse({status: "ok"});
+  });
+}
+
+// ---------- Daily automations (run from the 10-minute watchdog) ----------
+function projectsWatchdog_() {
+  const now = new Date();
+  const nowMin = istMinutes_(now);
+  if (nowMin < 10 * 60 + 30 || nowMin > 19 * 60) return;
+  const today = getIndiaDate();
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty("proj_daily_" + today) === "1") return;
+  props.setProperty("proj_daily_" + today, "1");
+  if (!isWorkingDay_(today)) return;
+  const projects = readProjects_().filter(p => p.status === "Active");
+  if (!projects.length) return;
+  const tasks = readProjectTasks_(projects.map(p => p.id));
+  const isMonday = new Date(today + "T12:00:00+05:30").getDay() === 1;
+  const map = pmTeamMap_();
+  projects.forEach(p => {
+    const mine = tasks.filter(t => t.projectId === p.id);
+    const late = mine.filter(t => t.status !== "Completed" && t.delayDays >= 2);
+    if (late.length) {
+      pmNotify_(pmNames_(p, { lead: true, creator: true }), "project_alert", p,
+        "⚠️ " + p.name + ": " + late.length + " task" + (late.length > 1 ? "s" : "") + " overdue 2+ days — " + late.slice(0, 3).map(t => t.taskDetails).join(", "), "WTC Hub", "list");
+    }
+    if (p.keyDate) {
+      const daysLeft = Math.round((new Date(p.keyDate + "T12:00:00+05:30") - new Date(today + "T12:00:00+05:30")) / 86400000);
+      const open = mine.filter(t => t.status !== "Completed").length;
+      if ((daysLeft === 3 || daysLeft === 7) && open) {
+        pmNotify_(pmNames_(p, { lead: true, creator: true }), "project_alert", p,
+          "⏳ " + p.name + ": " + (p.keyDateLabel || "key date") + " in " + daysLeft + " days — " + open + " task" + (open > 1 ? "s" : "") + " still open", "WTC Hub");
+      }
+    }
+    if (isMonday && map[p.leadId]) {
+      pmNotify_([map[p.leadId]], "project_alert", p, "📊 Monday check-in: post this week's status for " + p.name, "WTC Hub", "updates");
+    }
+  });
 }
